@@ -1,4 +1,7 @@
 {
   "project_name": "backend",
-  "created_at": "/Users/eduardoguruhotel/Library/Application Support/fastapi-gen"
+  "created_at": "/Users/eduardoguruhotel/Library/Application Support/fastapi-gen",
+  "services": [
+    "vercel"
+  ]
 }
