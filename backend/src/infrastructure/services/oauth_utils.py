@@ -9,7 +9,11 @@ class OAuth2Config:
     def __init__(self):
         self.google_client_id = os.getenv("GOOGLE_CLIENT_ID")
         self.google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-        self.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
+        self.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/v1/auth/google/callback")
+        
+        # Debug logs
+        print(f"GOOGLE_CLIENT_ID: {'***' if self.google_client_id else 'Not set'}")
+        print(f"GOOGLE_REDIRECT_URI: {self.redirect_uri}")
         
         # Google OAuth endpoints
         self.google_authorization_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"

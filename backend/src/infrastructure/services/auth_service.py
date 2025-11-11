@@ -4,7 +4,6 @@ import aiohttp
 import base64
 import json
 import secrets
-from urllib.parse import urlencode
 
 from .oauth_utils import OAuth2Config, GoogleOAuth2Handler
 

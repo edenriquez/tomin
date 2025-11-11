@@ -1,18 +1,25 @@
 """Authentication endpoints for OAuth2 flows."""
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import RedirectResponse
-from typing import Any, Dict, Optional
 
-from ....infrastructure.services.auth_service import AuthService
+from infrastructure.services.auth_service import AuthService
 
-router = APIRouter(prefix="/auth", tags=["authentication"])
+router = APIRouter()
 
 @router.get("/google")
 async def login_google():
     """Initiate Google OAuth flow."""
-    auth_service = AuthService()
-    auth_url = auth_service.get_google_auth_url()
-    return {"auth_url": auth_url}
+    try:
+        auth_service = AuthService()
+        auth_url = auth_service.get_google_auth_url()
+        print(f"Redirecting to Google OAuth URL: {auth_url}")  # Debug log
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        print(f"Error in login_google: {str(e)}")  # Debug log
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initiate Google OAuth: {str(e)}"
+        )
 
 @router.get("/google/callback")
 async def google_callback(code: str):
@@ -47,14 +54,17 @@ async def google_callback(code: str):
             "picture": user_info.get("picture")
         })
         
-        # In a real app, you might want to set this as an HTTP-only cookie
-        response = RedirectResponse(url="/")
+        # Set the token in an HTTP-only cookie
+        frontend_url = "http://localhost:3000"  # Your frontend URL
+        response = RedirectResponse(url=f"{frontend_url}/dashboard")
         response.set_cookie(
             key="access_token",
             value=f"Bearer {jwt_token}",
             httponly=True,
+            secure=False,  # Set to True in production with HTTPS
             max_age=3600,
-            samesite="lax"
+            samesite="lax",
+            domain="localhost"  # Remove or adjust for production
         )
         
         return response
