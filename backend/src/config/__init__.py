@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[AnyHttpUrl] = [
         "http://localhost:3000",  # React default port
         "http://localhost:8000",  # FastAPI default port
+        "http://127.0.0.1:3000",  # Alternative localhost
+        "http://127.0.0.1:8000",  # Alternative localhost
     ]
     
     # Database (example - customize as needed)

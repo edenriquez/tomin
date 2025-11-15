@@ -2,7 +2,7 @@
 import os
 from typing import Optional, Dict, Any
 from urllib.parse import urlencode
-
+import aiohttp
 class OAuth2Config:
     """Configuration for OAuth2 providers."""
     
@@ -45,7 +45,6 @@ class GoogleOAuth2Handler:
     async def get_user_info(self, access_token: str) -> Optional[Dict[str, Any]]:
         """Get user info from Google's userinfo endpoint."""
         try:
-            import aiohttp
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(

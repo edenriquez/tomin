@@ -1,10 +1,27 @@
 """Authentication endpoints for OAuth2 flows."""
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Cookie
 from fastapi.responses import RedirectResponse
+from typing import Optional
 
 from infrastructure.services.auth_service import AuthService
 
 router = APIRouter()
+
+@router.get("/me")
+async def get_me(access_token: Optional[str] = Cookie(None)):
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No access token provided"
+        )
+    try:
+        auth_service = AuthService()
+        return await auth_service.get_google_user_info(access_token)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 @router.get("/google")
 async def login_google():
@@ -46,20 +63,12 @@ async def google_callback(code: str):
         # Create or get user in your system
         # user = await user_service.get_or_create_user(user_info)
         
-        # Create JWT token
-        jwt_token = auth_service.create_jwt_token({
-            "sub": user_info.get("sub"),
-            "email": user_info.get("email"),
-            "name": user_info.get("name"),
-            "picture": user_info.get("picture")
-        })
-        
-        # Set the token in an HTTP-only cookie
+        # Set the Google access token in an HTTP-only cookie
         frontend_url = "http://localhost:3000"  # Your frontend URL
         response = RedirectResponse(url=f"{frontend_url}/dashboard")
         response.set_cookie(
             key="access_token",
-            value=f"Bearer {jwt_token}",
+            value=tokens["access_token"],  # Store Google access token, not JWT
             httponly=True,
             secure=False,  # Set to True in production with HTTPS
             max_age=3600,
