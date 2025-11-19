@@ -65,7 +65,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
   const logout = async () => {
     try {
-      await apiClient.post('/auth/logout');
+      const url = `${API_BASE_URL}/auth/logout`;
+      await apiClient.get(url);
       setUser(null);
       queryClient.clear();
       router.push('/login');

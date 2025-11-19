@@ -1,6 +1,6 @@
 """Authentication endpoints for OAuth2 flows."""
 from fastapi import APIRouter, HTTPException, status, Cookie
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from typing import Optional
 
 from infrastructure.services.auth_service import AuthService
@@ -87,6 +87,6 @@ async def google_callback(code: str):
 @router.get("/logout")
 async def logout():
     """Log out the current user."""
-    response = RedirectResponse(url="/")
+    response = JSONResponse(content={"message": "Logged out successfully"})
     response.delete_cookie("access_token")
     return response
