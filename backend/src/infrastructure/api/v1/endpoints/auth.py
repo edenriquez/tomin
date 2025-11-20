@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, status, Cookie
 from fastapi.responses import RedirectResponse, JSONResponse
 from typing import Optional
-
+import os
 from infrastructure.services.auth_service import AuthService
 
 router = APIRouter()
@@ -64,7 +64,7 @@ async def google_callback(code: str):
         # user = await user_service.get_or_create_user(user_info)
         
         # Set the Google access token in an HTTP-only cookie
-        frontend_url = "http://localhost:3000"  # Your frontend URL
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
         response = RedirectResponse(url=f"{frontend_url}/dashboard")
         response.set_cookie(
             key="access_token",
