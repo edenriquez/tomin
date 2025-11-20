@@ -1,42 +1,32 @@
-'use client';
-
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
-import { Inter } from 'next/font/google';
+import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
-import { QueryProvider } from '@/providers/QueryProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
+import Providers from './providers';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space-grotesk' });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
-
-const inter = Inter({ subsets: ['latin'] });
-
-const metadata: Metadata = {
-  title: 'Tomin - Your SaaS Starter',
-  description: 'A modern SaaS starter with Next.js and Google Auth',
+export const metadata: Metadata = {
+  title: 'Tomin - AI Financial Analysis',
+  description: 'Analyze your income, track spending, and forecast your financial future.',
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased`}>
-        <QueryProvider>
+      <body
+        className={`${inter.variable} ${spaceGrotesk.variable} antialiased bg-gray-50 text-gray-900`}
+      >
+        <Providers>
           <AuthProvider>
             {children}
           </AuthProvider>
-        </QueryProvider>
+        </Providers>
       </body>
     </html>
   );
