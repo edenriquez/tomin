@@ -23,7 +23,7 @@ export default function Hero() {
                             href="/login"
                             className="group inline-flex items-center px-8 py-3 border border-transparent text-base font-medium rounded-full text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 md:text-lg transition-all shadow-[0_4px_20px_0_rgba(147,51,234,0.3)] hover:shadow-[0_8px_30px_0_rgba(147,51,234,0.4)] hover:scale-105"
                         >
-                            Get Started
+                            Iniciar sesión
                             <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                         </Link>
                     </div>
