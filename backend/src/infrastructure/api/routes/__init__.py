@@ -14,11 +14,11 @@ api_router.include_router(
     tags=["health"]
 )
 
-# api_router.include_router(
-#     auth.router,
-#     prefix="/auth",
-#     tags=["auth"]
-# )
+api_router.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["auth"]
+)
 
 # You can include more versioned API routers here
 # Example:
