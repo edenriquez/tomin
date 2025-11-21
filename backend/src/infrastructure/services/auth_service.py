@@ -1,21 +1,26 @@
 """Authentication service for handling OAuth flows."""
 from typing import Optional, Dict, Any
 import aiohttp
-import base64
-import json
-import secrets
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .oauth_utils import OAuth2Config, GoogleOAuth2Handler
+from .jwt_service import JWTService
+from domain.entities.user import User
+from infrastructure.persistence.repositories.user_repository_impl import UserRepositoryImpl
+
 
 class AuthService:
     """Service for handling authentication operations."""
     
-    def __init__(self):
+    def __init__(self, db_session: Optional[AsyncSession] = None):
         self.oauth_config = OAuth2Config()
         self.google_oauth_handler = GoogleOAuth2Handler(self.oauth_config)
+        self.jwt_service = JWTService()
+        self.db_session = db_session
         
     def get_google_auth_url(self, state: Optional[str] = None) -> str:
         """Generate Google OAuth URL."""
+        import secrets
         if not state:
             state = secrets.token_urlsafe(16)
         return self.oauth_config.get_google_authorization_url(state)
@@ -42,25 +47,63 @@ class AuthService:
         """Get user info using access token."""
         return await self.google_oauth_handler.get_user_info(access_token)
     
-    def create_jwt_token(self, user_data: Dict[str, Any]) -> str:
-        """Create a JWT token for the authenticated user."""
-        # This is a simplified version. In production, use a proper JWT library
-        # like python-jose or PyJWT
-        header = {
-            "alg": "HS256",
-            "typ": "JWT"
-        }
+    async def get_or_create_user(self, google_user_info: Dict[str, Any]) -> User:
+        """
+        Get existing user or create new user from Google OAuth info.
         
-        # Encode header and payload
-        encoded_header = base64.urlsafe_b64encode(
-            json.dumps(header).encode()
-        ).decode().rstrip("=")
+        Args:
+            google_user_info: User information from Google OAuth
+            
+        Returns:
+            User entity (existing or newly created)
+        """
+        if not self.db_session:
+            raise ValueError("Database session is required for user operations")
         
-        encoded_payload = base64.urlsafe_b64encode(
-            json.dumps(user_data).encode()
-        ).decode().rstrip("=")
+        user_repo = UserRepositoryImpl(self.db_session)
         
-        # In a real app, you would sign the token with a secret key
-        signature = "signed_token_placeholder"
+        # Extract Google user data
+        google_id = google_user_info.get("sub")
+        email = google_user_info.get("email")
+        name = google_user_info.get("name", email)
+        picture = google_user_info.get("picture")
         
-        return f"{encoded_header}.{encoded_payload}.{signature}"
+        if not google_id or not email:
+            raise ValueError("Invalid Google user info: missing sub or email")
+        
+        # Check if user already exists
+        existing_user = await user_repo.get_by_google_id(google_id)
+        
+        if existing_user:
+            # Update user info if changed
+            if existing_user.name != name or existing_user.picture != picture:
+                existing_user.update_profile(name=name, picture=picture)
+                await user_repo.update(existing_user)
+            return existing_user
+        
+        # Create new user
+        new_user = User.create(
+            email=email,
+            google_id=google_id,
+            name=name,
+            picture=picture
+        )
+        
+        created_user = await user_repo.create(new_user)
+        return created_user
+    
+    def generate_user_token(self, user: User) -> str:
+        """
+        Generate JWT token for authenticated user.
+        
+        Args:
+            user: User entity
+            
+        Returns:
+            JWT token string
+        """
+        return self.jwt_service.create_access_token(
+            user_id=user.id,
+            email=user.email,
+            name=user.name
+        )

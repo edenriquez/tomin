@@ -1,27 +1,29 @@
 """Authentication endpoints for OAuth2 flows."""
-from fastapi import APIRouter, HTTPException, status, Cookie
+from fastapi import APIRouter, HTTPException, status, Cookie, Depends
 from fastapi.responses import RedirectResponse, JSONResponse
 from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 import os
+
 from infrastructure.services.auth_service import AuthService
+from infrastructure.persistence.database import get_db
+from infrastructure.api.dependencies.auth_dependencies import get_current_active_user
+from domain.entities.user import User
 
 router = APIRouter()
 
+
 @router.get("/me")
-async def get_me(access_token: Optional[str] = Cookie(None)):
-    if not access_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No access token provided"
-        )
-    try:
-        auth_service = AuthService()
-        return await auth_service.get_google_user_info(access_token)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+async def get_me(current_user: User = Depends(get_current_active_user)):
+    """Get current authenticated user information."""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "picture": current_user.picture,
+        "sub": current_user.google_id,  # For compatibility with frontend
+    }
+
 
 @router.get("/google")
 async def login_google():
@@ -29,20 +31,21 @@ async def login_google():
     try:
         auth_service = AuthService()
         auth_url = auth_service.get_google_auth_url()
-        print(f"Redirecting to Google OAuth URL: {auth_url}")  # Debug log
+        print(f"Redirecting to Google OAuth URL: {auth_url}")
         return RedirectResponse(url=auth_url)
     except Exception as e:
-        print(f"Error in login_google: {str(e)}")  # Debug log
+        print(f"Error in login_google: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to initiate Google OAuth: {str(e)}"
         )
 
+
 @router.get("/google/callback")
-async def google_callback(code: str):
-    """Handle Google OAuth callback."""
+async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
+    """Handle Google OAuth callback and create/login user."""
     try:
-        auth_service = AuthService()
+        auth_service = AuthService(db_session=db)
         
         # Exchange code for tokens
         tokens = await auth_service.get_google_tokens(code)
@@ -52,37 +55,48 @@ async def google_callback(code: str):
                 detail="Failed to get access token from Google"
             )
         
-        # Get user info
-        user_info = await auth_service.get_google_user_info(tokens["access_token"])
-        if not user_info:
+        # Get user info from Google
+        google_user_info = await auth_service.get_google_user_info(tokens["access_token"])
+        if not google_user_info:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to get user info from Google"
             )
         
-        # Create or get user in your system
-        # user = await user_service.get_or_create_user(user_info)
+        # Create or get user in database
+        user = await auth_service.get_or_create_user(google_user_info)
         
-        # Set the Google access token in an HTTP-only cookie
+        # Generate JWT token for the user
+        jwt_token = auth_service.generate_user_token(user)
+        
+        # Redirect to frontend with JWT token in cookie
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
         response = RedirectResponse(url=f"{frontend_url}/dashboard")
+        
+        # Set JWT token in HTTP-only cookie
+        is_production = os.getenv("ENVIRONMENT", "development") == "production"
         response.set_cookie(
             key="access_token",
-            value=tokens["access_token"],  # Store Google access token, not JWT
+            value=jwt_token,
             httponly=True,
-            secure=False,  # Set to True in production with HTTPS
-            max_age=3600,
+            secure=is_production,  # HTTPS only in production
+            max_age=86400,  # 24 hours
             samesite="lax",
-            domain="localhost"  # Remove or adjust for production
+            domain=None  # Let browser determine domain
         )
         
+        print(f"User authenticated: {user.email} (ID: {user.id})")
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"Error in google_callback: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Authentication failed: {str(e)}"
         )
+
 
 @router.get("/logout")
 async def logout():

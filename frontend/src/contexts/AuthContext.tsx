@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL, apiClient } from '@/lib/api-client';
 
 export interface User {
+  id: string;
   sub: string;
   email: string;
   name: string;
@@ -27,6 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
 
+  // Fetch current user from JWT token (stored in HTTP-only cookie)
   const { data: userData, isLoading: isUserLoading } = useQuery({
     queryKey: ['user'],
     queryFn: async () => {
@@ -34,6 +36,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const response = await apiClient.get('/auth/me');
         return response.data;
       } catch (error) {
+        console.log('Not authenticated or token expired');
         return null;
       }
     },
@@ -55,14 +58,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const url = `${API_BASE_URL}/auth/google`;
       console.log('Redirecting to:', url);
-      // Use window.location.assign instead of href to prevent potential issues
+      // Redirect to backend OAuth endpoint
       window.location.assign(url);
-      // Alternative: Use Next.js router for client-side navigation
-      // router.push(url);
     } catch (error) {
       console.error('Login failed:', error);
     }
   };
+
   const logout = async () => {
     try {
       const url = `${API_BASE_URL}/auth/logout`;
