@@ -17,13 +17,12 @@ class Settings(BaseSettings):
     PROJECT_DESCRIPTION: str = "A FastAPI application with clean architecture"
     VERSION: str = "1.0.0"
     
-    # CORS
-    ALLOWED_ORIGINS: List[AnyHttpUrl] = [
-        "http://localhost:3000",  # React default port
-        "http://localhost:8000",  # FastAPI default port
-        "http://127.0.0.1:3000",  # Alternative localhost
-        "http://127.0.0.1:8000",  # Alternative localhost
-    ]
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
+    
+    @property
+    def cors_origins(self) -> List[str]:
+        """Parse ALLOWED_ORIGINS string into list."""
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
     
     # Database (example - customize as needed)
     DATABASE_URL: str = "sqlite:///./sql_app.db"
