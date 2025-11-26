@@ -75,13 +75,16 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
         
         # Set JWT token in HTTP-only cookie
         is_production = os.getenv("ENVIRONMENT", "development") == "production"
+        
+        # For cross-domain cookies in production, we need SameSite=None and Secure=True
+        # For local development, use Lax
         response.set_cookie(
             key="access_token",
             value=jwt_token,
             httponly=True,
-            secure=is_production,  # HTTPS only in production
+            secure=True if is_production else False,  # Must be True for SameSite=None
             max_age=86400,  # 24 hours
-            samesite="lax",
+            samesite="none" if is_production else "lax",  # None allows cross-domain
             domain=None  # Let browser determine domain
         )
         
