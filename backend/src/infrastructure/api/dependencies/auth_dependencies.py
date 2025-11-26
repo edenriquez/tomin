@@ -1,6 +1,6 @@
 """FastAPI dependencies for authentication."""
 from typing import Optional
-from fastapi import Depends, HTTPException, status, Cookie
+from fastapi import Depends, HTTPException, status, Cookie, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from infrastructure.services.jwt_service import JWTService
 from infrastructure.persistence.database import get_db
@@ -13,13 +13,16 @@ jwt_service = JWTService()
 
 async def get_current_user(
     access_token: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """
     Dependency to get the current authenticated user from JWT token.
+    Supports both cookie and Authorization header (Bearer token).
     
     Args:
         access_token: JWT token from cookie
+        authorization: Authorization header (Bearer {token})
         db: Database session
         
     Returns:
@@ -28,7 +31,14 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
-    if not access_token:
+    # Try to get token from Authorization header first, then cookie
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "")
+    elif access_token:
+        token = access_token
+    
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -36,7 +46,7 @@ async def get_current_user(
         )
     
     # Verify and decode token
-    payload = jwt_service.verify_token(access_token)
+    payload = jwt_service.verify_token(token)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -92,22 +102,32 @@ async def get_current_active_user(
 
 async def get_optional_current_user(
     access_token: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> Optional[User]:
     """
     Dependency to optionally get the current user (doesn't raise if not authenticated).
+    Supports both cookie and Authorization header.
     
     Args:
         access_token: JWT token from cookie
+        authorization: Authorization header (Bearer {token})
         db: Database session
         
     Returns:
         Current user if authenticated, None otherwise
     """
-    if not access_token:
+    # Try to get token from either source
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "")
+    elif access_token:
+        token = access_token
+    
+    if not token:
         return None
     
     try:
-        return await get_current_user(access_token, db)
+        return await get_current_user(access_token, authorization, db)
     except HTTPException:
         return None
