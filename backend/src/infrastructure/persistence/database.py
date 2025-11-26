@@ -27,7 +27,7 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
 ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://") if DATABASE_URL else ""
 
 # Create async engine for Supabase PostgreSQL (for application use)
-# Using NullPool for serverless environments (Vercel)
+# Using small pool for better connection management
 if ASYNC_DATABASE_URL:
     # For PgBouncer compatibility, we need to disable prepared statements
     # This is done by adding query parameters to the connection URL
@@ -40,9 +40,10 @@ if ASYNC_DATABASE_URL:
     engine = create_async_engine(
         pgbouncer_url,
         echo=True,  # Set to False in production
-        poolclass=NullPool,  # Important for serverless
-        future=True,
+        pool_size=5,  # Small pool size
+        max_overflow=10,  # Allow some overflow
         pool_pre_ping=True,  # Verify connections before using
+        pool_recycle=3600,  # Recycle connections after 1 hour
     )
 
     # Create async session factory
