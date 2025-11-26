@@ -69,24 +69,12 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
         # Generate JWT token for the user
         jwt_token = auth_service.generate_user_token(user)
         
-        # Redirect to frontend with JWT token in cookie
+        # For cross-domain, pass token in URL - frontend will set it as cookie
+        # This is the ONLY way to handle cookies across different domains
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-        response = RedirectResponse(url=f"{frontend_url}/dashboard")
+        redirect_url = f"{frontend_url}/auth/callback?token={jwt_token}"
         
-        # Set JWT token in HTTP-only cookie
-        is_production = os.getenv("ENVIRONMENT", "development") == "production"
-        
-        # For cross-domain cookies in production, we need SameSite=None and Secure=True
-        # For local development, use Lax
-        response.set_cookie(
-            key="access_token",
-            value=jwt_token,
-            httponly=True,
-            secure=True if is_production else False,  # Must be True for SameSite=None
-            max_age=86400,  # 24 hours
-            samesite="none" if is_production else "lax",  # None allows cross-domain
-            domain=None  # Let browser determine domain
-        )
+        response = RedirectResponse(url=redirect_url)
         
         print(f"User authenticated: {user.email} (ID: {user.id})")
         return response
