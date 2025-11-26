@@ -4,11 +4,13 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const token = request.cookies.get('access_token');
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
+  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
   const isDashboardPage = request.nextUrl.pathname.startsWith('/dashboard');
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
   const isPublicFile = request.nextUrl.pathname.match(/\.(.*)$/);
 
-  if (isApiRoute || isPublicFile) {
+  // Allow auth callback and API routes without checks
+  if (isApiRoute || isPublicFile || isAuthCallback) {
     return NextResponse.next();
   }
 
