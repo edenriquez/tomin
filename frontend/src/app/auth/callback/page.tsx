@@ -19,11 +19,13 @@ function AuthCallbackContent() {
 
             console.log('Token set in cookie:', cookieString);
             console.log('Current cookies:', document.cookie);
+            console.log('Is production:', isProduction);
 
-            // Longer delay to ensure cookie is fully set before redirect
+            // Use window.location.href for full page reload to ensure cookie is sent
             setTimeout(() => {
-                router.push('/dashboard');
-            }, 100);
+                console.log('Redirecting to dashboard...');
+                window.location.href = '/dashboard';
+            }, 300);
         } else {
             console.error('No token found in URL');
             router.push('/login');

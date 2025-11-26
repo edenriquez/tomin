@@ -9,12 +9,21 @@ export function middleware(request: NextRequest) {
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
   const isPublicFile = request.nextUrl.pathname.match(/\.(.*)$/);
 
+  // Debug logging
+  console.log('Middleware:', {
+    path: request.nextUrl.pathname,
+    hasToken: !!token?.value,
+    isDashboard: isDashboardPage,
+    isCallback: isAuthCallback,
+  });
+
   // Allow auth callback and API routes without checks
   if (isApiRoute || isPublicFile || isAuthCallback) {
     return NextResponse.next();
   }
 
   if (!token?.value && !isAuthPage && isDashboardPage) {
+    console.log('No token, redirecting to login');
     const loginUrl = new URL('/login', request.url);
     return NextResponse.redirect(loginUrl);
   }
