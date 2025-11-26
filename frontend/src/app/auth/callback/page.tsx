@@ -22,10 +22,8 @@ function AuthCallbackContent() {
 
             // Longer delay to ensure cookie is fully set before redirect
             setTimeout(() => {
-                console.log('Redirecting to dashboard...');
-                // Use replace to avoid back button issues
-                window.location.href = '/dashboard';
-            }, 500);
+                router.push('/dashboard');
+            }, 100);
         } else {
             console.error('No token found in URL');
             router.push('/login');
