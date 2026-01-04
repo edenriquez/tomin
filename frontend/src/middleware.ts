@@ -1,43 +1,19 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server'
+import { updateSession } from '@/utils/supabase/middleware'
 
-export function middleware(request: NextRequest) {
-  const token = request.cookies.get('access_token');
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login');
-  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
-  const isDashboardPage = request.nextUrl.pathname.startsWith('/dashboard');
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api');
-  const isPublicFile = request.nextUrl.pathname.match(/\.(.*)$/);
-
-  // Debug logging
-  console.log('Middleware:', {
-    path: request.nextUrl.pathname,
-    hasToken: !!token?.value,
-    isDashboard: isDashboardPage,
-    isCallback: isAuthCallback,
-  });
-
-  // Allow auth callback and API routes without checks
-  if (isApiRoute || isPublicFile || isAuthCallback) {
-    return NextResponse.next();
-  }
-
-  if (!token?.value && !isAuthPage && isDashboardPage) {
-    console.log('No token, redirecting to login');
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  if (token?.value && isAuthPage) {
-    const dashboardUrl = new URL('/dashboard', request.url);
-    return NextResponse.redirect(dashboardUrl);
-  }
-
-  return NextResponse.next();
+export async function middleware(request: NextRequest) {
+    return await updateSession(request)
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
-};
+    matcher: [
+        /*
+         * Match all request paths except for the ones starting with:
+         * - _next/static (static files)
+         * - _next/image (image optimization files)
+         * - favicon.ico (favicon file)
+         * Feel free to modify this pattern to include more paths.
+         */
+        '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    ],
+}

@@ -1,33 +1,25 @@
-import type { Metadata } from 'next';
-import { Inter, Space_Grotesk } from 'next/font/google';
-import './globals.css';
-import { AuthProvider } from '@/contexts/AuthContext';
-import Providers from './providers';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { cn } from "@/lib/utils";
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space-grotesk' });
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Tomin - AI Financial Analysis',
-  description: 'Analyze your income, track spending, and forecast your financial future.',
+    title: "Tomin - Tu brújula financiera",
+    description: "Análisis financiero con IA para usuarios mexicanos",
 };
 
 export default function RootLayout({
-  children,
+    children,
 }: Readonly<{
-  children: React.ReactNode;
+    children: React.ReactNode;
 }>) {
-  return (
-    <html lang="en">
-      <body
-        className={`${inter.variable} ${spaceGrotesk.variable} antialiased bg-gray-50 text-gray-900`}
-      >
-        <Providers>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </Providers>
-      </body>
-    </html>
-  );
+    return (
+        <html lang="es" className="light">
+            <body className={cn(inter.className, "antialiased")}>
+                {children}
+            </body>
+        </html>
+    );
 }

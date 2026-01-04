@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gestión de Transacciones - Finanzas AI</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem", 
+                        "lg": "0.5rem", 
+                        "xl": "0.75rem", 
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-[#111318] dark:text-white transition-colors duration-200">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<!-- Top Navigation -->
+<header class="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-[#dbdfe6] dark:border-[#2a3441] bg-white dark:bg-[#1a202c] px-6 py-3 lg:px-10">
+<div class="flex items-center gap-4">
+<div class="size-8 text-primary">
+<svg fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 42.4379C4 42.4379 14.0962 36.0744 24 41.1692C35.0664 46.8624 44 42.2078 44 42.2078L44 7.01134C44 7.01134 35.068 11.6577 24.0031 5.96913C14.0971 0.876274 4 7.27094 4 7.27094L4 42.4379Z" fill="currentColor"></path>
+</svg>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em] hidden sm:block">Finanzas AI</h2>
+</div>
+<nav class="hidden md:flex items-center gap-8 flex-1 justify-center">
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="text-primary text-sm font-bold bg-primary/10 px-3 py-1.5 rounded-lg" href="#">Transacciones</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Presupuesto</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Reportes</a>
+</nav>
+<div class="flex items-center gap-4 justify-end">
+<div class="hidden sm:flex gap-2">
+<button class="flex items-center justify-center rounded-lg size-10 bg-background-light dark:bg-[#2a3441] hover:bg-[#e0e2e5] dark:hover:bg-[#374151] transition-colors">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<button class="flex items-center justify-center rounded-lg size-10 bg-background-light dark:bg-[#2a3441] hover:bg-[#e0e2e5] dark:hover:bg-[#374151] transition-colors relative">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2.5 right-2.5 size-2 rounded-full bg-red-500 border-2 border-white dark:border-[#2a3441]"></span>
+</button>
+</div>
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-10 ring-2 ring-white dark:ring-[#2a3441]" data-alt="User profile picture showing a smiling person" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBEaff-gcHQPEU5WJKn-TxROrzz9Et9yiK3vrIVE747Ny02IEVOGo7MUyEbPGlQA-qIM6xXfhqBA14RW7SURbZgAvoUnA5pb6QiS3OMKbm-L_DRWnsubuUZJJ5j2-bhCZVT6zhBaZ2HhPyrxMGtU2HXEQ-1o26zFeFQ0uiaRgzhZu9sl0R1cCNsnlddYwGCxWI08Z6xGs49Bs17I6wlW1UlDUCIS2p3d2P_h3GEO8L1I5BebnVEO-SIQaP-f-XL78XJXOehe3tPVUs");'></div>
+</div>
+</header>
+<main class="flex-1 flex flex-col items-center py-8 px-4 sm:px-8 lg:px-12 w-full max-w-[1400px] mx-auto gap-8">
+<!-- Heading & Date Selector -->
+<div class="w-full flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-[#dbdfe6] dark:border-[#2a3441] pb-6">
+<div class="flex flex-col gap-2">
+<h1 class="text-3xl md:text-4xl font-black tracking-tight text-[#111318] dark:text-white">
+                        Gestión de Transacciones
+                    </h1>
+<p class="text-[#616f89] dark:text-[#9ca3af] text-base">
+                        Analiza tus ingresos y gastos detallados por categoría y comercio.
+                    </p>
+</div>
+<div class="flex items-center bg-white dark:bg-[#1a202c] rounded-lg border border-[#dbdfe6] dark:border-[#2a3441] p-1 shadow-sm">
+<button class="px-4 py-1.5 text-sm font-medium rounded text-[#616f89] dark:text-[#9ca3af] hover:bg-background-light dark:hover:bg-[#2d3748]">Semanal</button>
+<button class="px-4 py-1.5 text-sm font-medium rounded text-[#616f89] dark:text-[#9ca3af] hover:bg-background-light dark:hover:bg-[#2d3748]">Quincenal</button>
+<button class="px-4 py-1.5 text-sm font-bold rounded bg-primary text-white shadow-sm">Mensual</button>
+</div>
+</div>
+<!-- Top Grid: Chart & AI Insight -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+<!-- Spending Chart -->
+<div class="lg:col-span-2 flex flex-col rounded-xl border border-[#dbdfe6] dark:border-[#2a3441] bg-white dark:bg-[#1a202c] p-6 shadow-sm">
+<div class="flex justify-between items-start mb-6">
+<div>
+<p class="text-sm font-medium text-[#616f89] dark:text-[#9ca3af]">Gasto Total (Noviembre)</p>
+<div class="flex items-baseline gap-2">
+<h3 class="text-3xl font-bold tracking-tight text-[#111318] dark:text-white">$24,500 MXN</h3>
+<span class="text-sm font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded">+5% vs mes anterior</span>
+</div>
+</div>
+<button class="text-primary text-sm font-bold hover:underline">Ver Reporte</button>
+</div>
+<!-- Stacked Bar Chart Simulation -->
+<div class="h-48 w-full flex items-end justify-between gap-2 sm:gap-4 px-2">
+<!-- Week 1 -->
+<div class="flex flex-col items-center gap-2 flex-1 h-full justify-end group cursor-pointer">
+<div class="w-full max-w-[40px] rounded-t-sm flex flex-col-reverse overflow-hidden h-[60%] bg-[#f0f2f4] dark:bg-[#2d3748] relative">
+<div class="w-full h-[40%] bg-primary"></div>
+<div class="w-full h-[30%] bg-[#4fa3d1]"></div>
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$4,200</div>
+</div>
+<span class="text-xs font-bold text-[#616f89] dark:text-[#9ca3af]">Sem 1</span>
+</div>
+<!-- Week 2 -->
+<div class="flex flex-col items-center gap-2 flex-1 h-full justify-end group cursor-pointer">
+<div class="w-full max-w-[40px] rounded-t-sm flex flex-col-reverse overflow-hidden h-[85%] bg-[#f0f2f4] dark:bg-[#2d3748] relative">
+<div class="w-full h-[50%] bg-primary"></div>
+<div class="w-full h-[20%] bg-[#4fa3d1]"></div>
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$8,100</div>
+</div>
+<span class="text-xs font-bold text-[#616f89] dark:text-[#9ca3af]">Sem 2</span>
+</div>
+<!-- Week 3 -->
+<div class="flex flex-col items-center gap-2 flex-1 h-full justify-end group cursor-pointer">
+<div class="w-full max-w-[40px] rounded-t-sm flex flex-col-reverse overflow-hidden h-[45%] bg-[#f0f2f4] dark:bg-[#2d3748] relative">
+<div class="w-full h-[60%] bg-primary"></div>
+<div class="w-full h-[10%] bg-[#4fa3d1]"></div>
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$3,800</div>
+</div>
+<span class="text-xs font-bold text-[#616f89] dark:text-[#9ca3af]">Sem 3</span>
+</div>
+<!-- Week 4 -->
+<div class="flex flex-col items-center gap-2 flex-1 h-full justify-end group cursor-pointer">
+<div class="w-full max-w-[40px] rounded-t-sm flex flex-col-reverse overflow-hidden h-[95%] bg-[#f0f2f4] dark:bg-[#2d3748] relative">
+<div class="w-full h-[30%] bg-primary"></div>
+<div class="w-full h-[50%] bg-[#4fa3d1]"></div>
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">$8,400</div>
+</div>
+<span class="text-xs font-bold text-[#616f89] dark:text-[#9ca3af]">Sem 4</span>
+</div>
+</div>
+<div class="flex items-center justify-center gap-6 mt-4">
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-full bg-primary"></div>
+<span class="text-xs text-[#616f89] dark:text-[#9ca3af]">Gastos Fijos</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-full bg-[#4fa3d1]"></div>
+<span class="text-xs text-[#616f89] dark:text-[#9ca3af]">Entretenimiento</span>
+</div>
+</div>
+</div>
+<!-- AI Insight Card -->
+<div class="lg:col-span-1 flex flex-col gap-4">
+<div class="rounded-xl border border-indigo-100 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-900/20 p-6 relative overflow-hidden">
+<div class="absolute -right-4 -top-4 text-indigo-200 dark:text-indigo-800 opacity-20 transform rotate-12">
+<span class="material-symbols-outlined text-[120px]">psychology</span>
+</div>
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-3 text-indigo-700 dark:text-indigo-300">
+<span class="material-symbols-outlined text-[24px]">auto_awesome</span>
+<h3 class="font-bold text-sm uppercase tracking-wider">AI Insight</h3>
+</div>
+<p class="text-[#111318] dark:text-white font-medium text-lg leading-snug mb-4">
+                                Has gastado un <span class="text-red-600 dark:text-red-400 font-bold">15% más</span> en comida a domicilio esta semana comparado con tu promedio.
+                            </p>
+<button class="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center gap-1">
+                                Ver detalles <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Quick Stats Mini Cards -->
+<div class="grid grid-cols-2 gap-4 flex-1">
+<div class="bg-white dark:bg-[#1a202c] rounded-xl border border-[#dbdfe6] dark:border-[#2a3441] p-4 flex flex-col justify-center">
+<span class="material-symbols-outlined text-orange-500 mb-2">trending_down</span>
+<span class="text-xs text-[#616f89] dark:text-[#9ca3af]">Ahorro Est.</span>
+<span class="font-bold text-lg text-[#111318] dark:text-white">$1,250</span>
+</div>
+<div class="bg-white dark:bg-[#1a202c] rounded-xl border border-[#dbdfe6] dark:border-[#2a3441] p-4 flex flex-col justify-center">
+<span class="material-symbols-outlined text-blue-500 mb-2">account_balance</span>
+<span class="text-xs text-[#616f89] dark:text-[#9ca3af]">Balance</span>
+<span class="font-bold text-lg text-[#111318] dark:text-white">$14,800</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Content: Filters & Table -->
+<div class="w-full flex flex-col gap-6">
+<!-- Filter Toolbar -->
+<div class="flex flex-col gap-4 bg-white dark:bg-[#1a202c] p-4 rounded-xl border border-[#dbdfe6] dark:border-[#2a3441] shadow-sm">
+<div class="flex flex-col md:flex-row gap-4 justify-between items-center">
+<div class="w-full md:max-w-md relative">
+<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-[#616f89]">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="block w-full rounded-lg border-0 py-2.5 pl-10 pr-4 text-[#111318] dark:text-white bg-background-light dark:bg-[#2d3748] ring-1 ring-inset ring-[#dbdfe6] dark:ring-[#4a5568] placeholder:text-[#616f89] focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" placeholder="Buscar comercio (ej. OXXO, Uber)..." type="text"/>
+</div>
+<div class="flex w-full md:w-auto gap-3 overflow-x-auto pb-1 md:pb-0">
+<button class="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#dbdfe6] dark:border-[#4a5568] bg-white dark:bg-[#2d3748] text-sm font-medium text-[#111318] dark:text-white hover:bg-background-light dark:hover:bg-[#4a5568] whitespace-nowrap">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span>1 Nov - 30 Nov</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#dbdfe6] dark:border-[#4a5568] bg-white dark:bg-[#2d3748] text-sm font-medium text-[#111318] dark:text-white hover:bg-background-light dark:hover:bg-[#4a5568] whitespace-nowrap">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+<span>Más filtros</span>
+</button>
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-sm font-bold text-white hover:bg-blue-700 shadow-sm whitespace-nowrap ml-auto md:ml-0">
+                                Exportar CSV
+                            </button>
+</div>
+</div>
+<!-- Chips -->
+<div class="flex flex-wrap gap-2 pt-2 border-t border-[#f0f2f4] dark:border-[#2d3748]">
+<span class="text-xs font-semibold text-[#616f89] dark:text-[#9ca3af] self-center mr-2 uppercase tracking-wide">Categorías:</span>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-white text-xs font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">check</span>
+                            Todas
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background-light dark:bg-[#2d3748] text-[#111318] dark:text-white hover:bg-[#e0e2e5] dark:hover:bg-[#4a5568] text-xs font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">restaurant</span>
+                            Comida
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background-light dark:bg-[#2d3748] text-[#111318] dark:text-white hover:bg-[#e0e2e5] dark:hover:bg-[#4a5568] text-xs font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">directions_car</span>
+                            Transporte
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background-light dark:bg-[#2d3748] text-[#111318] dark:text-white hover:bg-[#e0e2e5] dark:hover:bg-[#4a5568] text-xs font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">movie</span>
+                            Entretenimiento
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background-light dark:bg-[#2d3748] text-[#111318] dark:text-white hover:bg-[#e0e2e5] dark:hover:bg-[#4a5568] text-xs font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">bolt</span>
+                            Servicios
+                        </button>
+</div>
+</div>
+<!-- Transactions Table -->
+<div class="w-full overflow-hidden rounded-xl border border-[#dbdfe6] dark:border-[#2a3441] bg-white dark:bg-[#1a202c] shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-[#dbdfe6] dark:border-[#2a3441] bg-background-light dark:bg-[#2d3748]">
+<th class="p-4 text-xs font-bold uppercase tracking-wider text-[#616f89] dark:text-[#9ca3af]">Fecha</th>
+<th class="p-4 text-xs font-bold uppercase tracking-wider text-[#616f89] dark:text-[#9ca3af]">Concepto</th>
+<th class="p-4 text-xs font-bold uppercase tracking-wider text-[#616f89] dark:text-[#9ca3af]">Categoría</th>
+<th class="p-4 text-xs font-bold uppercase tracking-wider text-[#616f89] dark:text-[#9ca3af] text-right">Monto (MXN)</th>
+<th class="p-4 text-xs font-bold uppercase tracking-wider text-[#616f89] dark:text-[#9ca3af] text-center">Estado</th>
+<th class="p-4 text-xs font-bold uppercase tracking-wider text-[#616f89] dark:text-[#9ca3af]"></th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<!-- Group: Entretenimiento -->
+<tr class="bg-gray-50/50 dark:bg-[#2a3441]/50">
+<td class="px-4 py-2 font-bold text-xs text-[#616f89] dark:text-[#9ca3af] uppercase tracking-wide border-b border-[#f0f2f4] dark:border-[#2d3748]" colspan="6">
+                                        Entretenimiento
+                                    </td>
+</tr>
+<tr class="border-b border-[#f0f2f4] dark:border-[#2d3748] hover:bg-gray-50 dark:hover:bg-[#2d3748] transition-colors group">
+<td class="p-4 text-[#111318] dark:text-white">15 Nov 2023</td>
+<td class="p-4 font-medium text-[#111318] dark:text-white flex items-center gap-2">
+<div class="size-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-red-600">N</div>
+                                        Netflix
+                                    </td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-md bg-purple-50 dark:bg-purple-900/20 px-2 py-1 text-xs font-medium text-purple-700 dark:text-purple-300 ring-1 ring-inset ring-purple-700/10">
+                                            Streaming
+                                            <!-- AI Categorization Badge -->
+<span class="material-symbols-outlined text-[10px]" title="Categorizado por IA">auto_awesome</span>
+</span>
+</td>
+<td class="p-4 text-right font-medium text-[#111318] dark:text-white">$299.00</td>
+<td class="p-4 text-center">
+<div class="inline-flex items-center rounded-full bg-green-50 dark:bg-green-900/20 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20">Completado</div>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#616f89] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="border-b border-[#f0f2f4] dark:border-[#2d3748] hover:bg-gray-50 dark:hover:bg-[#2d3748] transition-colors">
+<td class="p-4 text-[#111318] dark:text-white">12 Nov 2023</td>
+<td class="p-4 font-medium text-[#111318] dark:text-white flex items-center gap-2">
+<div class="size-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-blue-600">C</div>
+                                        Cinépolis
+                                    </td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-md bg-purple-50 dark:bg-purple-900/20 px-2 py-1 text-xs font-medium text-purple-700 dark:text-purple-300 ring-1 ring-inset ring-purple-700/10">
+                                            Cine
+                                        </span>
+</td>
+<td class="p-4 text-right font-medium text-[#111318] dark:text-white">$450.00</td>
+<td class="p-4 text-center">
+<div class="inline-flex items-center rounded-full bg-green-50 dark:bg-green-900/20 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20">Completado</div>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#616f89] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Group: Comida -->
+<tr class="bg-gray-50/50 dark:bg-[#2a3441]/50">
+<td class="px-4 py-2 font-bold text-xs text-[#616f89] dark:text-[#9ca3af] uppercase tracking-wide border-b border-[#f0f2f4] dark:border-[#2d3748]" colspan="6">
+                                        Comida
+                                    </td>
+</tr>
+<tr class="border-b border-[#f0f2f4] dark:border-[#2d3748] hover:bg-gray-50 dark:hover:bg-[#2d3748] transition-colors">
+<td class="p-4 text-[#111318] dark:text-white">14 Nov 2023</td>
+<td class="p-4 font-medium text-[#111318] dark:text-white flex items-center gap-2">
+<div class="size-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-green-600">U</div>
+                                        Uber Eats
+                                    </td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-md bg-yellow-50 dark:bg-yellow-900/20 px-2 py-1 text-xs font-medium text-yellow-800 dark:text-yellow-300 ring-1 ring-inset ring-yellow-600/20">
+                                            Delivery
+                                            <span class="material-symbols-outlined text-[10px]" title="Categorizado por IA">auto_awesome</span>
+</span>
+</td>
+<td class="p-4 text-right font-medium text-[#111318] dark:text-white">$315.50</td>
+<td class="p-4 text-center">
+<div class="inline-flex items-center rounded-full bg-green-50 dark:bg-green-900/20 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20">Completado</div>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#616f89] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="border-b border-[#f0f2f4] dark:border-[#2d3748] hover:bg-gray-50 dark:hover:bg-[#2d3748] transition-colors">
+<td class="p-4 text-[#111318] dark:text-white">10 Nov 2023</td>
+<td class="p-4 font-medium text-[#111318] dark:text-white flex items-center gap-2">
+<div class="size-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-red-500">O</div>
+                                        OXXO
+                                    </td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-md bg-yellow-50 dark:bg-yellow-900/20 px-2 py-1 text-xs font-medium text-yellow-800 dark:text-yellow-300 ring-1 ring-inset ring-yellow-600/20">
+                                            Tienda
+                                        </span>
+</td>
+<td class="p-4 text-right font-medium text-[#111318] dark:text-white">$85.00</td>
+<td class="p-4 text-center">
+<div class="inline-flex items-center rounded-full bg-green-50 dark:bg-green-900/20 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20">Completado</div>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#616f89] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Group: Servicios -->
+<tr class="bg-gray-50/50 dark:bg-[#2a3441]/50">
+<td class="px-4 py-2 font-bold text-xs text-[#616f89] dark:text-[#9ca3af] uppercase tracking-wide border-b border-[#f0f2f4] dark:border-[#2d3748]" colspan="6">
+                                        Servicios
+                                    </td>
+</tr>
+<tr class="hover:bg-gray-50 dark:hover:bg-[#2d3748] transition-colors">
+<td class="p-4 text-[#111318] dark:text-white">05 Nov 2023</td>
+<td class="p-4 font-medium text-[#111318] dark:text-white flex items-center gap-2">
+<div class="size-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-green-700">C</div>
+                                        CFE
+                                    </td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-900/20 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-700/10">
+                                            Electricidad
+                                            <span class="material-symbols-outlined text-[10px]" title="Categorizado por IA">auto_awesome</span>
+</span>
+</td>
+<td class="p-4 text-right font-medium text-[#111318] dark:text-white">$1,240.00</td>
+<td class="p-4 text-center">
+<div class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 ring-1 ring-inset ring-gray-500/10">Pendiente</div>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#616f89] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="flex items-center justify-between border-t border-[#dbdfe6] dark:border-[#2a3441] bg-white dark:bg-[#1a202c] px-4 py-3 sm:px-6">
+<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+<div>
+<p class="text-sm text-[#616f89] dark:text-[#9ca3af]">
+                                    Mostrando <span class="font-medium text-[#111318] dark:text-white">1</span> a <span class="font-medium text-[#111318] dark:text-white">5</span> de <span class="font-medium text-[#111318] dark:text-white">42</span> resultados
+                                </p>
+</div>
+<div>
+<nav aria-label="Pagination" class="isolate inline-flex -space-x-px rounded-md shadow-sm">
+<a class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-[#dbdfe6] dark:ring-[#4a5568] hover:bg-gray-50 dark:hover:bg-[#2d3748] focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Anterior</span>
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</a>
+<a aria-current="page" class="relative z-10 inline-flex items-center bg-primary px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" href="#">1</a>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-[#111318] dark:text-white ring-1 ring-inset ring-[#dbdfe6] dark:ring-[#4a5568] hover:bg-gray-50 dark:hover:bg-[#2d3748] focus:z-20 focus:outline-offset-0" href="#">2</a>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-[#111318] dark:text-white ring-1 ring-inset ring-[#dbdfe6] dark:ring-[#4a5568] hover:bg-gray-50 dark:hover:bg-[#2d3748] focus:z-20 focus:outline-offset-0" href="#">3</a>
+<a class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-[#dbdfe6] dark:ring-[#4a5568] hover:bg-gray-50 dark:hover:bg-[#2d3748] focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Siguiente</span>
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</a>
+</nav>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

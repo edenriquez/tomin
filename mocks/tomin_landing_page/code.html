@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tomin - Intelligent Financial Analysis</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "body": ["Noto Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100 font-display transition-colors duration-200">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+<!-- Top Navigation -->
+<header class="sticky top-0 z-50 w-full border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md">
+<div class="px-4 md:px-10 py-3 max-w-7xl mx-auto flex items-center justify-between">
+<div class="flex items-center gap-2 text-primary">
+<div class="size-8 rounded bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">account_balance_wallet</span>
+</div>
+<h2 class="text-gray-900 dark:text-white text-xl font-bold tracking-tight">Tomin</h2>
+</div>
+<div class="hidden md:flex items-center gap-8">
+<nav class="flex gap-6">
+<a class="text-sm font-medium hover:text-primary transition-colors text-gray-700 dark:text-gray-300" href="#">Features</a>
+<a class="text-sm font-medium hover:text-primary transition-colors text-gray-700 dark:text-gray-300" href="#">Pricing</a>
+<a class="text-sm font-medium hover:text-primary transition-colors text-gray-700 dark:text-gray-300" href="#">About</a>
+</nav>
+<button class="bg-primary hover:bg-blue-700 text-white text-sm font-bold h-10 px-5 rounded-lg transition-colors">
+                        Get Started
+                    </button>
+</div>
+<!-- Mobile Menu Button -->
+<button class="md:hidden text-gray-700 dark:text-gray-300">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</div>
+</header>
+<!-- Hero Section -->
+<div class="w-full px-4 md:px-10 py-12 md:py-20 max-w-7xl mx-auto">
+<div class="@container">
+<div class="flex flex-col-reverse lg:flex-row gap-12 items-center">
+<!-- Content -->
+<div class="flex flex-col gap-6 flex-1 max-w-2xl">
+<div class="flex flex-col gap-4 text-left">
+<h1 class="text-4xl md:text-5xl lg:text-6xl font-black leading-tight tracking-tight text-gray-900 dark:text-white">
+                                Take Control of Your Peso. <span class="text-primary">Analyze, Forecast, and Grow</span> with AI.
+                            </h1>
+<h2 class="text-lg text-gray-600 dark:text-gray-400 font-normal leading-relaxed max-w-xl">
+                                Tomin connects to your accounts to provide automated insights, helping you spot spending habits and predict your financial future without the spreadsheet headache.
+                            </h2>
+</div>
+<label class="flex flex-col sm:flex-row gap-2 w-full max-w-lg mt-2">
+<div class="relative flex-1">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
+<span class="material-symbols-outlined text-[20px]">mail</span>
+</div>
+<input class="w-full h-12 rounded-lg bg-gray-100 dark:bg-gray-800 border-none text-gray-900 dark:text-white placeholder-gray-500 pl-10 pr-4 focus:ring-2 focus:ring-primary" placeholder="Enter your email address" type="email"/>
+</div>
+<button class="h-12 px-6 bg-primary hover:bg-blue-700 text-white text-base font-bold rounded-lg whitespace-nowrap transition-colors">
+                                Start Analyzing for Free
+                            </button>
+</label>
+<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mt-2">
+<span class="material-symbols-outlined text-[18px] text-green-500">check_circle</span>
+<span>No credit card required</span>
+<span class="mx-2">•</span>
+<span class="material-symbols-outlined text-[18px] text-green-500">lock</span>
+<span>Bank-level security</span>
+</div>
+</div>
+<!-- Hero Image -->
+<div class="w-full lg:w-1/2 flex justify-center">
+<div class="relative w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl bg-gray-200 dark:bg-gray-800 border border-gray-200 dark:border-gray-700" data-alt="Dashboard interface displaying financial graphs and peso currency metrics" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDVId_zatZHnDtSyosJqUv431iNf8I3CtjJn2m2IfgwfR4xRO-lRt4eLNUXRqQNUGjL2oMzi6q0NHzdTieHNOFp6-5r_j7wAg2RjEsJ1olA69WFN99OQMkYN1ObAQfp4ShhuQOm3BX2wFGCGLrFv2YtNkefe_uo8N60ovlQqCn9xHCya63qYRb8sziJCGk84vjhrVcPS-HctkpludB3dX19CeoHwciwOO3LV1Lkhudf00n_owoDZ17xDdjQeAVn7RrGiTCwgOuk2gg'); background-size: cover; background-position: center;">
+<div class="absolute inset-0 bg-gradient-to-tr from-primary/20 to-transparent mix-blend-overlay"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Features Section -->
+<section class="w-full bg-white dark:bg-gray-900 py-20 border-y border-gray-100 dark:border-gray-800">
+<div class="px-4 md:px-10 max-w-7xl mx-auto flex flex-col gap-12">
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+<div class="max-w-2xl">
+<h2 class="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">Intelligent Finance</h2>
+<p class="text-lg text-gray-600 dark:text-gray-400">Everything you need to reduce anxiety and grow your wealth, powered by local Mexican banking integrations.</p>
+</div>
+<a class="text-primary font-bold hover:underline flex items-center gap-1" href="#">
+                        View all features 
+                        <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Feature 1 -->
+<div class="group p-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 hover:border-primary/50 transition-all duration-300">
+<div class="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-primary flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">pie_chart</span>
+</div>
+<h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">AI Income Analysis</h3>
+<p class="text-gray-600 dark:text-gray-400">Understand exactly where your income goes with automated categorization tailored for Mexican lifestyles.</p>
+</div>
+<!-- Feature 2 -->
+<div class="group p-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 hover:border-primary/50 transition-all duration-300">
+<div class="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">trending_up</span>
+</div>
+<h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Smart Forecasts</h3>
+<p class="text-gray-600 dark:text-gray-400">See your balance 30 days into the future based on your spending history and recurring bills.</p>
+</div>
+<!-- Feature 3 -->
+<div class="group p-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 hover:border-primary/50 transition-all duration-300">
+<div class="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">query_stats</span>
+</div>
+<h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Habit Tracking</h3>
+<p class="text-gray-600 dark:text-gray-400">Identify the small "ant expenses" eating your wallet and set smart limits to stop them early.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Visualization Section -->
+<section class="py-20 px-4 md:px-10 max-w-5xl mx-auto w-full">
+<div class="text-center mb-12">
+<h2 class="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">Visualizing Your Financial Future</h2>
+<p class="mt-4 text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">No more guessing. See exactly how your savings will grow over the next month with our predictive engine.</p>
+</div>
+<!-- Chart Component -->
+<div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-6 md:p-8">
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
+<div>
+<p class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase tracking-wider">Projected Savings Growth (MXN)</p>
+<div class="flex items-baseline gap-3 mt-1">
+<p class="text-4xl font-bold text-gray-900 dark:text-white tracking-tight">$45,200</p>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+<span class="material-symbols-outlined text-sm mr-1">arrow_upward</span> 12%
+                            </span>
+</div>
+<p class="text-sm text-gray-500 mt-2">Forecast for Next 30 Days</p>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1 text-sm font-medium rounded-full bg-primary text-white">Monthly</button>
+<button class="px-3 py-1 text-sm font-medium rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Yearly</button>
+</div>
+</div>
+<div class="relative h-64 w-full">
+<!-- Custom Chart SVG -->
+<svg class="w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 472 149">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#135bec" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#135bec" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<!-- Area Fill -->
+<path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25V149H0V109Z" fill="url(#chartGradient)"></path>
+<!-- Line -->
+<path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25" fill="none" stroke="#135bec" stroke-linecap="round" stroke-width="3"></path>
+<!-- Tooltip Point (Mock) -->
+<circle class="fill-white stroke-primary stroke-2" cx="363.077" cy="1" r="6"></circle>
+</svg>
+</div>
+<div class="flex justify-between mt-4 px-2">
+<p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Week 1</p>
+<p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Week 2</p>
+<p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Week 3</p>
+<p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Week 4</p>
+</div>
+</div>
+</section>
+<!-- CTA Section -->
+<section class="w-full bg-primary text-white py-20 px-4">
+<div class="max-w-4xl mx-auto text-center flex flex-col gap-8 items-center">
+<h2 class="text-3xl md:text-5xl font-bold tracking-tight">Ready to stop worrying about money?</h2>
+<p class="text-lg md:text-xl text-blue-100 max-w-2xl">Join thousands of Mexicans who are taking control of their finances with Tomin's AI-powered insights.</p>
+<button class="bg-white text-primary hover:bg-gray-100 text-lg font-bold h-14 px-8 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">
+                    Create Your Free Account
+                </button>
+<p class="text-sm text-blue-200">Free forever for basic features. No credit card required.</p>
+</div>
+</section>
+<!-- Footer -->
+<footer class="bg-white dark:bg-background-dark border-t border-gray-200 dark:border-gray-800 pt-16 pb-8">
+<div class="px-4 md:px-10 max-w-7xl mx-auto">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+<div class="col-span-2 md:col-span-1 flex flex-col gap-4">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-primary" style="font-size: 24px;">account_balance_wallet</span>
+<span class="text-xl font-bold text-gray-900 dark:text-white">Tomin</span>
+</div>
+<p class="text-sm text-gray-500 dark:text-gray-400">Making financial freedom accessible to everyone in Mexico through artificial intelligence.</p>
+</div>
+<div class="flex flex-col gap-4">
+<h4 class="font-bold text-gray-900 dark:text-white">Product</h4>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Features</a>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Pricing</a>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Security</a>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Integrations</a>
+</div>
+<div class="flex flex-col gap-4">
+<h4 class="font-bold text-gray-900 dark:text-white">Company</h4>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">About Us</a>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Careers</a>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Blog</a>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Contact</a>
+</div>
+<div class="flex flex-col gap-4">
+<h4 class="font-bold text-gray-900 dark:text-white">Legal</h4>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Privacy Policy</a>
+<a class="text-sm text-gray-600 dark:text-gray-400 hover:text-primary" href="#">Terms of Service</a>
+</div>
+</div>
+<div class="pt-8 border-t border-gray-100 dark:border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4">
+<p class="text-sm text-gray-400">© 2023 Tomin Inc. All rights reserved.</p>
+<div class="flex gap-4">
+<a class="text-gray-400 hover:text-primary transition-colors" href="#">
+<span class="sr-only">Twitter</span>
+<svg class="h-5 w-5" fill="currentColor" viewbox="0 0 24 24"><path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84"></path></svg>
+</a>
+<a class="text-gray-400 hover:text-primary transition-colors" href="#">
+<span class="sr-only">Instagram</span>
+<svg class="h-5 w-5" fill="currentColor" viewbox="0 0 24 24"><path clip-rule="evenodd" d="M12.315 2c2.43 0 2.784.013 3.808.06 1.064.049 1.791.218 2.427.465a4.902 4.902 0 011.772 1.153 4.902 4.902 0 011.153 1.772c.247.636.416 1.363.465 2.427.048 1.067.06 1.407.06 4.123v.08c0 2.643-.012 2.987-.06 4.043-.049 1.064-.218 1.791-.465 2.427a4.902 4.902 0 01-1.153 1.772 4.902 4.902 0 01-1.772 1.153c-.636.247-1.363.416-2.427.465-1.067.048-1.407.06-4.123.06h-.08c-2.643 0-2.987-.012-4.043-.06-1.064-.049-1.791-.218-2.427-.465a4.902 4.902 0 01-1.772-1.153 4.902 4.902 0 01-1.153-1.772c-.247-.636-.416-1.363-.465-2.427-.047-1.024-.06-1.379-.06-3.808v-.63c0-2.43.013-2.784.06-3.808.049-1.064.218-1.791.465-2.427a4.902 4.902 0 011.153-1.772 4.902 4.902 0 011.772-1.153c.636-.247 1.363-.416 2.427-.465 1.067-.047 1.407-.06 3.808-.06h.63zm1.51 1.565c-2.645 0-2.97.01-4.023.057-1.052.049-1.609.219-1.99.367a3.323 3.323 0 00-1.206.786 3.323 3.323 0 00-.786 1.206c-.149.381-.318.938-.367 1.99-.048 1.054-.057 1.38-.057 4.023v.442c0 2.645.01 2.97.057 4.023.049 1.052.219 1.609.367 1.99.231.595.542 1.036.996 1.454.458.423.958.694 1.558.885.38.148.937.317 1.99.366 1.054.048 1.38.058 4.023.058h.442c2.645 0 2.97-.01 4.023-.058 1.052-.049 1.609-.219 1.99-.366.583-.227 1.063-.526 1.493-1.002.424-.469.673-.996.85-1.637.148-.381.317-.938.366-1.99.048-1.054.058-1.38.058-4.023v-.442c0-2.645-.01-2.97-.058-4.023-.049-1.052-.219-1.609-.366-1.99a3.293 3.293 0 00-1.002-1.493 3.332 3.332 0 00-1.637-.85c-.381-.148-.938-.317-1.99-.367-1.054-.047-1.38-.057-4.023-.057h-.442zM12 7.027a4.973 4.973 0 110 9.947 4.973 4.973 0 010-9.947zm0 1.565a3.408 3.408 0 100 6.816 3.408 3.408 0 000-6.816zm5.338-3.205a1.057 1.057 0 110 2.114 1.057 1.057 0 010-2.114z" fill-rule="evenodd"></path></svg>
+</a>
+</div>
+</div>
+</div>
+</footer>
+</div>
+</body></html>
