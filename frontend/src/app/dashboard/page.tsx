@@ -5,14 +5,21 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { DistributionChart } from '@/components/charts/DistributionChart';
 import { Wallet, Receipt, Plane, Search, Bell, Plus, Upload, MessageSquare, Sparkles } from 'lucide-react';
-
+import UploadFile from '@/components/upload/UploadFile';
 import { financialService } from '@/services/api';
+import { NotificationToast } from '@/components/ui/NotificationToast';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 export default function DashboardPage() {
     const [spendingData, setSpendingData] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [notification, setNotification] = React.useState<{ message: string; visible: boolean }>({
+        message: '',
+        visible: false
+    });
 
-    React.useEffect(() => {
+    const fetchSpendingData = () => {
+        setLoading(true);
         financialService.getSpendingDistribution()
             .then(data => {
                 const mappedData = data.map((item: any) => ({
@@ -28,6 +35,37 @@ export default function DashboardPage() {
                 console.error(err);
                 setLoading(false);
             });
+    };
+
+    React.useEffect(() => {
+        fetchSpendingData();
+    }, []);
+
+    // SSE Notifications
+    React.useEffect(() => {
+        const userId = '00000000-0000-0000-0000-000000000000'; // Demo user ID
+        const eventSource = new EventSource(`http://localhost:8000/api/notifications/${userId}`);
+
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Notification received:', data);
+
+            if (data.type === 'UPLOAD_COMPLETE') {
+                setNotification({
+                    message: data.message,
+                    visible: true
+                });
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error('SSE Error:', error);
+            eventSource.close();
+        };
+
+        return () => {
+            eventSource.close();
+        };
     }, []);
 
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando datos financieros...</div>;
@@ -41,17 +79,10 @@ export default function DashboardPage() {
                 <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-gray-200 bg-white/80 px-6 backdrop-blur dark:border-gray-800 dark:bg-[#101622]/80">
                     <div className="flex flex-col">
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Hola, Alejandro 👋</h2>
-                        <p className="text-xs text-gray-500">Hoy es 2 de Enero de 2026</p>
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <button className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
-                            <Search size={20} />
-                        </button>
-                        <button className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full relative">
-                            <Bell size={20} />
-                            <span className="absolute top-2 right-2 size-2 rounded-full bg-red-500 border border-white dark:border-[#101622]" />
-                        </button>
+                        <ThemeToggle />
                     </div>
                 </header>
 
@@ -116,7 +147,7 @@ export default function DashboardPage() {
                                             <Sparkles size={20} />
                                             <h3>Tomin AI Insight</h3>
                                         </div>
-                                        <p className="text-sm leading-relaxed">
+                                        <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
                                             ¡Estás gastando un <strong>15% menos</strong> en restaurantes este mes! Sigue así para alcanzar tu meta de viaje a Cancún más rápido.
                                         </p>
                                         <button className="w-full btn-primary py-2 text-sm">
@@ -129,18 +160,7 @@ export default function DashboardPage() {
                                 <div className="card">
                                     <h3 className="mb-4 text-sm font-bold uppercase text-gray-500 tracking-wider">Acciones Rápidas</h3>
                                     <div className="flex flex-col gap-3">
-                                        <button className="flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-black">
-                                            <Plus size={18} />
-                                            Agregar Transacción
-                                        </button>
-                                        <button className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:bg-[#1a2332] dark:border-gray-800">
-                                            <Upload size={18} />
-                                            Subir Estado de Cuenta
-                                        </button>
-                                        <button className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium hover:bg-gray-50 dark:bg-[#1a2332] dark:border-gray-800">
-                                            <MessageSquare size={18} />
-                                            Consultar Asistente
-                                        </button>
+                                        <UploadFile />
                                     </div>
                                 </div>
                             </div>
@@ -148,6 +168,17 @@ export default function DashboardPage() {
                     </div>
                 </div>
             </main>
+
+            {notification.visible && (
+                <NotificationToast
+                    message={notification.message}
+                    onRefresh={() => {
+                        fetchSpendingData();
+                        setNotification(prev => ({ ...prev, visible: false }));
+                    }}
+                    onClose={() => setNotification(prev => ({ ...prev, visible: false }))}
+                />
+            )}
         </div>
     );
 }

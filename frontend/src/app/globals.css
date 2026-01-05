@@ -34,3 +34,18 @@
     @apply bg-[var(--primary)] text-white hover:opacity-90 px-4 py-2 rounded-lg font-medium transition-all;
   }
 }
+@layer utilities {
+  .animate-spin-slow {
+    animation: spin 3s linear infinite;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Glassmorphism utility */
+.glass {
+  @apply bg-white/70 backdrop-blur-md dark:bg-black/40;
+}
