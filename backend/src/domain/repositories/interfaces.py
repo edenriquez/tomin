@@ -2,7 +2,16 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
-from ..entities.models import Transaction, Category, Forecast
+from ..entities.models import Transaction, Category, Forecast, ProcessedFile, SavingsMovement
+
+class SavingsMovementRepository(ABC):
+    @abstractmethod
+    def save_all(self, movements: List[SavingsMovement]) -> None:
+        pass
+
+    @abstractmethod
+    def get_by_user(self, user_id: UUID) -> List[SavingsMovement]:
+        pass
 
 class TransactionRepository(ABC):
     @abstractmethod
@@ -37,4 +46,13 @@ class ForecastRepository(ABC):
 
     @abstractmethod
     def get_latest_by_user(self, user_id: UUID) -> Optional[Forecast]:
+        pass
+
+class ProcessedFileRepository(ABC):
+    @abstractmethod
+    def save(self, processed_file: ProcessedFile) -> None:
+        pass
+
+    @abstractmethod
+    def exists(self, user_id: UUID, file_hash: str) -> bool:
         pass

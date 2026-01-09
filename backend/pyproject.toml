@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv",
     "pandas",
     "httpx",
+    "pypdf",
 ]
 
 [tool.pytest.ini_options]

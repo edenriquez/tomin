@@ -1,8 +1,8 @@
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
-from ..domain.entities.models import Transaction, Category, Forecast
-from ..domain.repositories.interfaces import TransactionRepository, CategoryRepository, ForecastRepository
+from ..domain.entities.models import Transaction, Category, Forecast, ProcessedFile
+from ..domain.repositories.interfaces import TransactionRepository, CategoryRepository, ForecastRepository, ProcessedFileRepository
 
 class InMemoryTransactionRepository(TransactionRepository):
     def __init__(self):
@@ -44,3 +44,13 @@ class InMemoryForecastRepository(ForecastRepository):
 
     def get_latest_by_user(self, user_id: UUID) -> Optional[Forecast]:
         return self.forecasts[-1] if self.forecasts else None
+
+class InMemoryProcessedFileRepository(ProcessedFileRepository):
+    def __init__(self):
+        self.processed_files: List[ProcessedFile] = []
+
+    def save(self, processed_file: ProcessedFile) -> None:
+        self.processed_files.append(processed_file)
+
+    def exists(self, user_id: UUID, file_hash: str) -> bool:
+        return any(f.user_id == user_id and f.file_hash == file_hash for f in self.processed_files)

@@ -4,9 +4,9 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
     { icon: LayoutDashboard, label: 'Resumen', href: '/dashboard' },
-    { icon: TrendingUp, label: 'Pronósticos', href: '/forecasts' },
-    { icon: CreditCard, label: 'Gastos', href: '#' },
-    { icon: Target, label: 'Metas', href: '#' },
+    // { icon: TrendingUp, label: 'Pronósticos', href: '/forecasts' },
+    // { icon: CreditCard, label: 'Gastos', href: '#' },
+    // { icon: Target, label: 'Metas', href: '#' },
 ];
 
 export const Sidebar = () => {
@@ -37,16 +37,6 @@ export const Sidebar = () => {
                         </a>
                     ))}
                 </nav>
-
-                <div className="my-2 border-t border-gray-100 dark:border-gray-800" />
-
-                <div className="px-3 py-2">
-                    <p className="text-xs font-semibold uppercase text-gray-400 mb-2 tracking-wider">Inteligencia</p>
-                    <a href="#" className="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-gray-500 hover:bg-gradient-to-r hover:from-[#135bec]/10 hover:to-transparent dark:text-gray-400">
-                        <Sparkles size={18} className="text-[#135bec] group-hover:animate-pulse" />
-                        <span className="text-sm font-medium">Tomin AI</span>
-                    </a>
-                </div>
 
                 <div className="mt-auto">
                     <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
