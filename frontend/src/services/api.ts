@@ -2,13 +2,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 export const financialService = {
     async getSpendingDistribution() {
-        const response = await fetch(`${API_URL}/spending-distribution`);
+        const response = await fetch(`${API_URL}/transactions/spending-distribution`);
         if (!response.ok) throw new Error('Failed to fetch spending distribution');
         return response.json();
     },
 
+    async getTransactions() {
+        const response = await fetch(`${API_URL}/transactions/`);
+        if (!response.ok) throw new Error('Failed to fetch transactions');
+        return response.json();
+    },
+
+    async getRecurringTransactions() {
+        const response = await fetch(`${API_URL}/transactions/recurring`);
+        if (!response.ok) throw new Error('Failed to fetch recurring transactions');
+        return response.json();
+    },
+
     async getForecast() {
-        const response = await fetch(`${API_URL}/forecast`);
+        const response = await fetch(`${API_URL}/forecast/`);
         if (!response.ok) throw new Error('Failed to fetch forecast');
         return response.json();
     },
@@ -16,7 +28,7 @@ export const financialService = {
     async uploadBankStatement(file: File) {
         const formData = new FormData();
         formData.append('file', file);
-        const response = await fetch(`${API_URL}/upload-bank-statement`, {
+        const response = await fetch(`${API_URL}/transactions/upload-bank-statement`, {
             method: 'POST',
             body: formData,
         });

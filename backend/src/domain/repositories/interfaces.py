@@ -30,9 +30,13 @@ class TransactionRepository(ABC):
     def get_recurrent_by_user(self, user_id: UUID) -> List[Transaction]:
         pass
 
+    @abstractmethod
+    def get_all(self, user_id: UUID, limit: int = 20) -> List[Transaction]:
+        pass
+
 class CategoryRepository(ABC):
     @abstractmethod
-    def get_all(self) -> List[Category]:
+    def get_all(self, user_id: Optional[UUID] = None) -> List[Category]:
         pass
 
     @abstractmethod

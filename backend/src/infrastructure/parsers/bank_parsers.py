@@ -6,10 +6,15 @@ import re
 import logging
 logger = logging.getLogger(__name__)
 
+NUBANK_MERCHANT_NAME = "NuBank"
+BBVA_MERCHANT_NAME = "BBVA"
+BANAMEX_MERCHANT_NAME = "Banamex"
+SANTANDER_MERCHANT_NAME = "Santander"
+
 class BanamexParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return "Banamex"
+        return BANAMEX_MERCHANT_NAME
 
     def can_parse(self, text: str) -> bool:
         # Detection points for Banamex
@@ -50,7 +55,8 @@ class BanamexParser(BankParser):
                 amount=amount,
                 description=description,
                 date=date_obj,
-                user_id=user_id
+                user_id=user_id,
+                merchant_name=BANAMEX_MERCHANT_NAME
             ))
             
         return ParsedStatement(transactions=transactions)
@@ -58,7 +64,7 @@ class BanamexParser(BankParser):
 class BBVAParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return "BBVA"
+        return BBVA_MERCHANT_NAME
 
     def can_parse(self, text: str) -> bool:
         # Detection points for BBVA
@@ -72,7 +78,7 @@ class BBVAParser(BankParser):
 class SantanderParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return "Santander"
+        return SANTANDER_MERCHANT_NAME
 
     def can_parse(self, text: str) -> bool:
         # Detection points for Santander
@@ -86,7 +92,7 @@ class SantanderParser(BankParser):
 class NuParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return "Nu"
+        return NUBANK_MERCHANT_NAME
 
     def can_parse(self, text: str) -> bool:
         # Detection points for Nu
@@ -100,6 +106,20 @@ class NuParser(BankParser):
         return any(sig.upper() in text.upper() for sig in signatures)
 
     def parse(self, text: str, user_id: UUID) -> ParsedStatement:
+    # def parse(self, text: str, user_id: UUID, categories: List[Category]) -> ParsedStatement:
+        # TODO: Implement categorization
+        # strategy:
+        # Categories will match the description of the transaction
+        # If the description matches a category, the category will be assigned to the transaction
+        # If the description does not match any category, the transaction will be assigned to the default category
+        # default category will be unknown 
+        # later in the flow the user will be able to categorize the transactions using PATCH /transaction/{transaction_id}/category/{category_id}
+        # only the admin will be able to create new categories using POST /category
+        # only the admin will be able to delete categories using DELETE /category/{category_id}
+        # categories will have a GET /categories/{category_id}/categorization-labels
+        # categorization-labels will have a POST /categories/{category_id}/categorization-labels which will accept a array of strings which will be used to match the description of the transaction
+        # this will be stored in the database and used to match the description of the transaction
+        
         transactions = []
         savings_movements = []
         month_map = {
@@ -140,7 +160,8 @@ class NuParser(BankParser):
                     amount=amount,
                     description=description,
                     date=date_obj,
-                    user_id=user_id
+                    user_id=user_id,
+                    merchant_name=NUBANK_MERCHANT_NAME
                 ))
             
         return ParsedStatement(transactions=transactions, savings_movements=savings_movements)

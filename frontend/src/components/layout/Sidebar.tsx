@@ -1,15 +1,21 @@
+"use client";
+
 import React from 'react';
 import { LayoutDashboard, TrendingUp, CreditCard, Target, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 const navItems = [
     { icon: LayoutDashboard, label: 'Resumen', href: '/dashboard' },
     // { icon: TrendingUp, label: 'Pronósticos', href: '/forecasts' },
-    // { icon: CreditCard, label: 'Gastos', href: '#' },
+    { icon: CreditCard, label: 'Gastos', href: '/spending' },
     // { icon: Target, label: 'Metas', href: '#' },
 ];
 
 export const Sidebar = () => {
+    const pathname = usePathname();
+
     return (
         <aside className="hidden w-64 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-[#1a2332] md:flex h-screen sticky top-0">
             <div className="flex h-16 items-center gap-3 px-6 border-b border-gray-100 dark:border-gray-800">
@@ -22,19 +28,19 @@ export const Sidebar = () => {
             <div className="flex flex-1 flex-col gap-2 p-4">
                 <nav className="flex flex-col gap-1">
                     {navItems.map((item) => (
-                        <a
+                        <Link
                             key={item.label}
                             href={item.href}
                             className={cn(
                                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                                item.label === 'Resumen' // Simplified check
+                                pathname === item.href
                                     ? "bg-[#135bec]/10 text-[#135bec]"
                                     : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                             )}
                         >
                             <item.icon size={18} />
                             {item.label}
-                        </a>
+                        </Link>
                     ))}
                 </nav>
 

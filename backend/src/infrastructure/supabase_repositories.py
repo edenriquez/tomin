@@ -94,11 +94,31 @@ class SupabaseTransactionRepository(TransactionRepository):
             ) for r in results
         ]
 
+    def get_all(self, user_id: UUID, limit: int = 20) -> List[Transaction]:
+        results = self.db.query(TransactionModel).filter(
+            TransactionModel.user_id == user_id
+        ).order_by(TransactionModel.date.desc()).limit(limit).all()
+        return [
+            Transaction(
+                amount=r.amount,
+                description=r.description,
+                date=r.date,
+                user_id=r.user_id,
+                id=r.id,
+                category_id=r.category_id,
+                file_id=r.file_id,
+                merchant_name=r.merchant_name,
+                is_recurrent=r.is_recurrent,
+                metadata=r.metadata_json
+            ) for r in results
+        ]
+
 class SupabaseCategoryRepository(CategoryRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all(self) -> List[Category]:
+    def get_all(self, user_id: Optional[UUID] = None) -> List[Category]:
+        # Currently categories are global, so user_id is ignored
         results = self.db.query(CategoryModel).all()
         return [
             Category(
