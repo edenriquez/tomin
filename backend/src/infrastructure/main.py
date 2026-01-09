@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from uuid import UUID
-
+from src.domain.entities.models import Category
 from src.infrastructure.database import SessionLocal, engine, Base
 from src.infrastructure.supabase_repositories import (
     SupabaseTransactionRepository, 
@@ -29,17 +29,41 @@ def seed_data():
         existing_cats = cat_repo.get_all()
         if not existing_cats:
             # Seed default categories if none exist
-            from src.domain.entities.models import Category
             new_cats = [
-                Category(name="Vivienda & Servicios", color="#3b82f6", icon="home"),
-                Category(name="Comida & Supermerk", color="#a855f7", icon="shopping_cart"),
-                Category(name="Transporte", color="#eab308", icon="commute"),
-                Category(name="Entretenimiento", color="#ec4899", icon="movie"),
-                Category(name="Transferencias & Ajustes", color="#64748b", icon="payments"),
+                Category(
+                    name="Vivienda & Servicios", 
+                    color="#3b82f6", 
+                    icon="home", 
+                    categorization_labels=["CFE", "AGUA", "RENTA", "IZZI", "TELMEX", "SKY", "TOTALPLAY", "INTERNET", "LUZ", "GAS"]
+                ),
+                Category(
+                    name="Comida & Supermerk", 
+                    color="#a855f7", 
+                    icon="shopping_cart",
+                    categorization_labels=["OXXO", "UBER EATS", "WALMART", "SORIANA", "CHEDRAUI", "COSTCO", "RAPPI", "RESTAURANTE", "STARBUCKS", "VIPS", "TOKS", "BURGER"]
+                ),
+                Category(
+                    name="Transporte", 
+                    color="#eab308", 
+                    icon="commute",
+                    categorization_labels=["UBER", "DIDI", "GASOLINA", "SHELL", "MOBIL", "BP", "G500", "TAXI", "ADO", "AEROMEXICO", "VOLARIS"]
+                ),
+                Category(
+                    name="Entretenimiento", 
+                    color="#ec4899", 
+                    icon="movie",
+                    categorization_labels=["NETFLIX", "SPOTIFY", "CINEPOLIS", "CINEMEX", "PRIME", "AMAZON VIDEO", "DISNEY", "HBO", "APPLE TV", "YOUTUBE", "GAMEPASS"]
+                ),
+                Category(
+                    name="Transferencias & Ajustes", 
+                    color="#64748b", 
+                    icon="payments",
+                    categorization_labels=["TRANSFERENCIA", "SPEI", "PAGO TC", "ABONO", "DEPOSITO", "RETIRO", "CAJERO"]
+                ),
             ]
             # Manual save since we want to ensure they are in DB
             from src.infrastructure.models import CategoryModel
-            db.add_all([CategoryModel(id=c.id, name=c.name, color=c.color, icon=c.icon) for c in new_cats])
+            db.add_all([CategoryModel(id=c.id, name=c.name, color=c.color, icon=c.icon, categorization_labels=c.categorization_labels) for c in new_cats])
             db.commit()
     finally:
         db.close()

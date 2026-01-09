@@ -14,7 +14,6 @@ class BankParser(ABC):
         pass
 
     @abstractmethod
-    def parse(self, text: str, user_id) -> ParsedStatement:
-    # def parse(self, text: str, user_id, categories) -> ParsedStatement:
+    def parse(self, text: str, user_id, categories: List = []) -> ParsedStatement:
         """Extracts transactions and savings movements from the text."""
         pass

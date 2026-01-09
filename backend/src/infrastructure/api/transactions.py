@@ -39,6 +39,7 @@ def get_recurring_transactions(
     use_case = GetRecurringTransactions(tx_repo)
     return use_case.execute(UUID(user_id), month, year, period)
 
+
 @router.get("/spending-distribution")
 def get_distribution(
     user_id: str = '00000000-0000-0000-0000-000000000000',

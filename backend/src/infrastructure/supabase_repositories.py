@@ -126,7 +126,8 @@ class SupabaseCategoryRepository(CategoryRepository):
                 color=r.color,
                 icon=r.icon,
                 id=r.id,
-                parent_category_id=r.parent_category_id
+                parent_category_id=r.parent_category_id,
+                categorization_labels=r.categorization_labels or []
             ) for r in results
         ]
 
@@ -138,7 +139,8 @@ class SupabaseCategoryRepository(CategoryRepository):
             color=r.color,
             icon=r.icon,
             id=r.id,
-            parent_category_id=r.parent_category_id
+            parent_category_id=r.parent_category_id,
+            categorization_labels=r.categorization_labels or []
         )
 
 class SupabaseProcessedFileRepository(ProcessedFileRepository):

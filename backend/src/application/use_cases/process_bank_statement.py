@@ -44,10 +44,9 @@ class ProcessBankStatement:
             parser = self.parser_factory.get_parser(text)
             logger.info(f"Identified bank: {parser.bank_name}")
 
-            # categories = self.cat_repo.get_all(user_id)
+            categories = self.cat_repo.get_all(user_id)
             
-            # parsed_data = parser.parse(text, user_id, categories)
-            parsed_data = parser.parse(text, user_id)
+            parsed_data = parser.parse(text, user_id, categories)
             
             # 4. Save Record
             self.file_repo.save(ProcessedFile(

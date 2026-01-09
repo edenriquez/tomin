@@ -1,6 +1,7 @@
 from .base import BankParser
-from ...domain.entities.models import Transaction, ParsedStatement, SavingsMovement
+from ...domain.entities.models import Transaction, ParsedStatement, SavingsMovement, Category
 from uuid import UUID
+from typing import List
 from datetime import datetime
 import re
 import logging
@@ -26,7 +27,7 @@ class BanamexParser(BankParser):
         ]
         return any(sig.upper() in text.upper() for sig in signatures)
 
-    def parse(self, text: str, user_id: UUID) -> ParsedStatement:
+    def parse(self, text: str, user_id: UUID, categories: List[Category] = []) -> ParsedStatement:
         transactions = []
         month_map = {
             'ene': 1, 'feb': 2, 'mar': 3, 'abr': 4, 'may': 5, 'jun': 6,
@@ -50,13 +51,25 @@ class BanamexParser(BankParser):
             
             if sign == '-':
                 amount = -amount
+
+            # Categorization logic
+            category_id = None
+            for category in categories:
+                if category.categorization_labels:
+                    for label in category.categorization_labels:
+                        if label.upper() in description.upper():
+                            category_id = category.id
+                            break
+                if category_id:
+                    break
                 
             transactions.append(Transaction(
                 amount=amount,
                 description=description,
                 date=date_obj,
                 user_id=user_id,
-                merchant_name=BANAMEX_MERCHANT_NAME
+                merchant_name=BANAMEX_MERCHANT_NAME,
+                category_id=category_id
             ))
             
         return ParsedStatement(transactions=transactions)
@@ -84,7 +97,7 @@ class SantanderParser(BankParser):
         # Detection points for Santander
         return "SANTANDER" in text.upper()
 
-    def parse(self, text: str, user_id: UUID) -> ParsedStatement:
+    def parse(self, text: str, user_id: UUID, categories: List[Category] = []) -> ParsedStatement:
         # Placeholder for specific Santander logic
         logger.info(f"SantanderParser statement text: {text}")
         return ParsedStatement()
@@ -105,21 +118,7 @@ class NuParser(BankParser):
         ]
         return any(sig.upper() in text.upper() for sig in signatures)
 
-    def parse(self, text: str, user_id: UUID) -> ParsedStatement:
-    # def parse(self, text: str, user_id: UUID, categories: List[Category]) -> ParsedStatement:
-        # TODO: Implement categorization
-        # strategy:
-        # Categories will match the description of the transaction
-        # If the description matches a category, the category will be assigned to the transaction
-        # If the description does not match any category, the transaction will be assigned to the default category
-        # default category will be unknown 
-        # later in the flow the user will be able to categorize the transactions using PATCH /transaction/{transaction_id}/category/{category_id}
-        # only the admin will be able to create new categories using POST /category
-        # only the admin will be able to delete categories using DELETE /category/{category_id}
-        # categories will have a GET /categories/{category_id}/categorization-labels
-        # categorization-labels will have a POST /categories/{category_id}/categorization-labels which will accept a array of strings which will be used to match the description of the transaction
-        # this will be stored in the database and used to match the description of the transaction
-        
+    def parse(self, text: str, user_id: UUID, categories: List[Category] = []) -> ParsedStatement:
         transactions = []
         savings_movements = []
         month_map = {
@@ -156,12 +155,24 @@ class NuParser(BankParser):
                     goal_name=description.split(":")[-1].strip() if ":" in description else "Cajita"
                 ))
             else:
+                # Categorization logic
+                category_id = None
+                for category in categories:
+                    if category.categorization_labels:
+                        for label in category.categorization_labels:
+                            if label.upper() in description.upper():
+                                category_id = category.id
+                                break
+                    if category_id:
+                        break
+
                 transactions.append(Transaction(
                     amount=amount,
                     description=description,
                     date=date_obj,
                     user_id=user_id,
-                    merchant_name=NUBANK_MERCHANT_NAME
+                    merchant_name=NUBANK_MERCHANT_NAME,
+                    category_id=category_id
                 ))
             
         return ParsedStatement(transactions=transactions, savings_movements=savings_movements)
@@ -174,7 +185,7 @@ class GenericBankParser(BankParser):
     def can_parse(self, text: str) -> bool:
         return True # Fallback
 
-    def parse(self, text: str, user_id: UUID) -> ParsedStatement:
+    def parse(self, text: str, user_id: UUID, categories: List[Category] = []) -> ParsedStatement:
         # This is where LLM logic would go
         logger.info(f"GenericBankParser statement text: {text}")
         return ParsedStatement()

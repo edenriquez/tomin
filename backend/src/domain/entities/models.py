@@ -40,6 +40,7 @@ class Category:
     icon: str # Icon identifier (e.g. 'home', 'shopping-cart')
     id: UUID = field(default_factory=uuid4)
     parent_category_id: Optional[UUID] = None # For hierarchy if needed
+    categorization_labels: List[str] = field(default_factory=list)
 
 @dataclass
 class ForecastAdjustment:

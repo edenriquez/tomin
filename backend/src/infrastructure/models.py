@@ -12,6 +12,7 @@ class CategoryModel(Base):
     color = Column(String)
     icon = Column(String)
     parent_category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)
+    categorization_labels = Column(JSON, default=[])
 
 class TransactionModel(Base):
     __tablename__ = "transactions"
