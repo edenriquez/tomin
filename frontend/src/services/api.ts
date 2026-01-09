@@ -13,8 +13,9 @@ export const financialService = {
         return response.json();
     },
 
-    async getRecurringTransactions() {
-        const response = await fetch(`${API_URL}/transactions/recurring`);
+    async getRecurringTransactions(period?: string) {
+        const query = period ? `?period=${period}` : '';
+        const response = await fetch(`${API_URL}/transactions/recurring${query}`);
         if (!response.ok) throw new Error('Failed to fetch recurring transactions');
         return response.json();
     },

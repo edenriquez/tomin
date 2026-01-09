@@ -33,6 +33,7 @@ export default function SpendingPage() {
     const [spendingData, setSpendingData] = useState<any[]>([]);
     const [recurringTxs, setRecurringTxs] = useState<any[]>([]);
     const [totalOutflow, setTotalOutflow] = useState(0);
+    const [period, setPeriod] = useState('weekly'); // Default period
 
     useEffect(() => {
         const fetchSpendingData = async () => {
@@ -40,7 +41,7 @@ export default function SpendingPage() {
             try {
                 const [distribution, recurring] = await Promise.all([
                     financialService.getSpendingDistribution(),
-                    financialService.getRecurringTransactions()
+                    financialService.getRecurringTransactions(period)
                 ]);
 
                 // Calculate total outflow
@@ -65,7 +66,7 @@ export default function SpendingPage() {
         };
 
         fetchSpendingData();
-    }, []);
+    }, [period]);
 
     const topCategory = spendingData.length > 0 ? spendingData[0] : null;
 
@@ -102,15 +103,29 @@ export default function SpendingPage() {
 
                     {/* Filters */}
                     <div className="flex flex-wrap gap-2 items-center">
-                        <button className="h-8 px-4 rounded-full bg-[#135bec] text-white text-sm font-medium border border-[#135bec] transition-colors">
-                            Últimos 30 días
+                        <button
+                            onClick={() => setPeriod('weekly')}
+                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'weekly' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
+                        >
+                            Semanal (7d)
                         </button>
-                        <button className="h-8 px-4 rounded-full bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec] text-sm font-medium transition-colors">
-                            Este Trimestre
+                        <button
+                            onClick={() => setPeriod('biweekly')}
+                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'biweekly' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
+                        >
+                            Quincenal
                         </button>
-                        <div className="w-px h-6 bg-[#dbdfe6] dark:bg-gray-600 mx-2"></div>
-                        <button className="h-8 px-4 rounded-full bg-white dark:bg-gray-800 text-[#111318] dark:text-white border border-[#dbdfe6] dark:border-gray-600 text-sm font-medium transition-colors flex items-center gap-1">
-                            MXN <ChevronDown size={14} />
+                        <button
+                            onClick={() => setPeriod('last_month')}
+                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'last_month' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
+                        >
+                            Mes Anterior
+                        </button>
+                        <button
+                            onClick={() => setPeriod('last_3_months')}
+                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'last_3_months' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
+                        >
+                            Últimos 3 Meses
                         </button>
                     </div>
 

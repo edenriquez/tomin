@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from datetime import datetime, timedelta
 import logging
-
+from src.application.use_cases.get_recurring_transactions import GetRecurringTransactions
 from src.application.use_cases.get_spending_distribution import GetSpendingDistribution
 from src.application.use_cases.process_bank_statement import ProcessBankStatement
 from src.infrastructure.database import SessionLocal, get_db
@@ -30,10 +30,14 @@ def get_transactions(
 @router.get("/recurring")
 def get_recurring_transactions(
     user_id: str = '00000000-0000-0000-0000-000000000000',
+    month: int = None,
+    year: int = None,
+    period: str = None,
     db: Session = Depends(get_db)
-):
+):    
     tx_repo = SupabaseTransactionRepository(db)
-    return tx_repo.get_recurrent_by_user(UUID(user_id))
+    use_case = GetRecurringTransactions(tx_repo)
+    return use_case.execute(UUID(user_id), month, year, period)
 
 @router.get("/spending-distribution")
 def get_distribution(
