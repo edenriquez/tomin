@@ -18,6 +18,7 @@ import {
     MoreVertical
 } from 'lucide-react';
 import { financialService } from '@/services/api';
+import { TimePeriodFilter } from '@/components/dashboard/TimePeriodFilter';
 
 // Helper for formatting currency
 const formatCurrency = (amount: number) => {
@@ -102,32 +103,7 @@ export default function SpendingPage() {
                     </header>
 
                     {/* Filters */}
-                    <div className="flex flex-wrap gap-2 items-center">
-                        <button
-                            onClick={() => setPeriod('weekly')}
-                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'weekly' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
-                        >
-                            Semanal (7d)
-                        </button>
-                        <button
-                            onClick={() => setPeriod('biweekly')}
-                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'biweekly' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
-                        >
-                            Quincenal
-                        </button>
-                        <button
-                            onClick={() => setPeriod('last_month')}
-                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'last_month' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
-                        >
-                            Mes Anterior
-                        </button>
-                        <button
-                            onClick={() => setPeriod('last_3_months')}
-                            className={`h-8 px-4 rounded-full text-sm font-medium transition-colors ${period === 'last_3_months' ? 'bg-[#135bec] text-white border border-[#135bec]' : 'bg-white dark:bg-gray-800 text-[#616f89] dark:text-gray-300 border border-[#dbdfe6] dark:border-gray-600 hover:border-[#135bec] hover:text-[#135bec]'}`}
-                        >
-                            Últimos 3 Meses
-                        </button>
-                    </div>
+                    <TimePeriodFilter value={period} onChange={setPeriod} />
 
                     {/* KPI Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

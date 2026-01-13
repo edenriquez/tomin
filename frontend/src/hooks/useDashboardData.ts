@@ -3,7 +3,7 @@ import { financialService } from '@/services/api';
 import { createClient } from '@/utils/supabase/client';
 import { API_URL } from '@/services/api';
 
-export const useDashboardData = () => {
+export const useDashboardData = (period: string = 'weekly') => {
     const [spendingData, setSpendingData] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -28,7 +28,7 @@ export const useDashboardData = () => {
         setLoading(true);
         try {
             const [distribution, txs] = await Promise.all([
-                financialService.getSpendingDistribution(),
+                financialService.getSpendingDistribution(period),
                 financialService.getTransactions()
             ]);
 
@@ -46,12 +46,9 @@ export const useDashboardData = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [period]);
 
     useEffect(() => {
-        // Only fetch data once we have a user (or at least attempted to auth) 
-        // Although financialService handles auth internally, so we can probably just fetch.
-        // But let's fetch immediately as token handling is inside api.ts
         fetchData();
     }, [fetchData]);
 
