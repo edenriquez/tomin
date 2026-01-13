@@ -40,7 +40,7 @@ export default function SpendingPage() {
             setLoading(true);
             try {
                 const [distribution, recurring] = await Promise.all([
-                    financialService.getSpendingDistribution(),
+                    financialService.getSpendingDistribution(period),
                     financialService.getRecurringTransactions(period)
                 ]);
 
@@ -198,23 +198,78 @@ export default function SpendingPage() {
                                 <button className="text-[#135bec] text-sm font-medium hover:underline">Ver detalles completos</button>
                             </div>
 
-                            {/* Simple Visual Representation replacing CSS Grid Treemap for simplicity and responsiveness */}
-                            <div className="flex flex-col gap-2 h-64 overflow-y-auto">
-                                {spendingData.map((item, index) => (
-                                    <div key={index} className="relative w-full h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex items-center px-4">
-                                        <div
-                                            className="absolute left-0 top-0 bottom-0 h-full opacity-20"
-                                            style={{ width: `${item.percentage}%`, backgroundColor: item.color || '#135bec' }}
-                                        />
-                                        <div className="absolute left-0 top-0 bottom-0 w-1 h-full" style={{ backgroundColor: item.color || '#135bec' }} />
+                            {/* Visual Treemap Mockup using CSS Grid */}
+                            <div className="w-full aspect-[4/3] sm:aspect-[2/1] lg:aspect-[16/9] grid grid-cols-4 grid-rows-4 gap-1 rounded-lg overflow-hidden font-display text-white">
+                                {spendingData.slice(0, 5).map((item, index) => {
+                                    let gridClasses = "";
+                                    let contentLayout = "";
 
-                                        <div className="flex justify-between w-full relative z-10">
-                                            <span className="font-medium text-[#111318] dark:text-white">{item.category}</span>
-                                            <div className="flex gap-4">
-                                                <span className="font-bold text-[#111318] dark:text-white">{formatCurrency(item.amount)}</span>
-                                                <span className="text-gray-500 w-12 text-right">{item.percentage}%</span>
-                                            </div>
+                                    if (index === 0) {
+                                        gridClasses = "col-span-2 row-span-4";
+                                        contentLayout = "flex flex-col justify-between";
+                                    } else if (index === 1) {
+                                        gridClasses = "col-span-2 row-span-2";
+                                        contentLayout = "flex flex-col justify-between";
+                                    } else if (index === 2) {
+                                        gridClasses = "col-span-1 row-span-2";
+                                        contentLayout = "flex flex-col justify-between";
+                                    } else {
+                                        gridClasses = "col-span-1 row-span-1";
+                                        contentLayout = "flex flex-col justify-center";
+                                    }
+
+                                    return (
+                                        <div
+                                            key={index}
+                                            className={`${gridClasses} ${contentLayout} p-3 transition-colors cursor-pointer group relative hover:opacity-90`}
+                                            style={{ backgroundColor: item.color || '#135bec' }}
+                                        >
+                                            {index === 0 && (
+                                                <>
+                                                    <div className="flex justify-between items-start">
+                                                        <span className="font-bold text-sm md:text-base truncate pr-2">{item.category}</span>
+                                                        <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded ml-auto whitespace-nowrap">{item.percentage}%</span>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-lg md:text-2xl font-bold">{formatCurrency(item.amount)}</p>
+                                                        <p className="text-xs text-white/70 group-hover:text-white truncate">&nbsp;</p>
+                                                    </div>
+                                                </>
+                                            )}
+                                            {index === 1 && (
+                                                <>
+                                                    <div className="flex justify-between items-start">
+                                                        <span className="font-bold text-sm md:text-base truncate pr-2">{item.category}</span>
+                                                        <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded ml-auto whitespace-nowrap">{item.percentage}%</span>
+                                                    </div>
+                                                    <p className="text-lg md:text-xl font-bold">{formatCurrency(item.amount)}</p>
+                                                </>
+                                            )}
+                                            {index === 2 && (
+                                                <>
+                                                    <span className="font-bold text-xs md:text-sm truncate">{item.category}</span>
+                                                    <p className="text-sm md:text-lg font-bold">{formatCurrency(item.amount)}</p>
+                                                </>
+                                            )}
+                                            {(index === 3 || index === 4) && (
+                                                <>
+                                                    <span className="font-bold text-xs truncate">{item.category}</span>
+                                                    <p className="text-sm font-bold">{formatCurrency(item.amount)}</p>
+                                                </>
+                                            )}
                                         </div>
+                                    );
+                                })}
+                                {/* Fill empty slots if less than 5 items to maintain grid structure visuals or just leave empty? Mock is fixed. 
+                                    If we have fewer items, the grid will just be empty. That is fine. */}
+                            </div>
+
+                            {/* Legend */}
+                            <div className="flex flex-wrap gap-4 mt-4 text-xs text-[#616f89] dark:text-gray-400">
+                                {spendingData.slice(0, 5).map((item, index) => (
+                                    <div key={index} className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: item.color || '#135bec' }}></div>
+                                        {item.category}
                                     </div>
                                 ))}
                             </div>
