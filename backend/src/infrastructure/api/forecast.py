@@ -9,12 +9,13 @@ from src.infrastructure.supabase_repositories import (
     SupabaseTransactionRepository, 
     SupabaseCategoryRepository
 )
+from src.infrastructure.auth import get_current_user
 
 router = APIRouter(prefix="/api/forecast", tags=["forecast"])
 
 @router.get("/")
 def get_forecast(
-    user_id: str = '00000000-0000-0000-0000-000000000000',
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     tx_repo = SupabaseTransactionRepository(db)

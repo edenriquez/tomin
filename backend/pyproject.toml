@@ -13,6 +13,8 @@ dependencies = [
     "pandas",
     "httpx",
     "pypdf",
+    "supabase",
+    "pywt",
 ]
 
 [tool.pytest.ini_options]

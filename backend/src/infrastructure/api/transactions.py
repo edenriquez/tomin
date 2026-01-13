@@ -14,14 +14,15 @@ from src.infrastructure.supabase_repositories import (
     SupabaseSavingsMovementRepository
 )
 from src.infrastructure.notifications import notification_manager
+from src.infrastructure.auth import get_current_user
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 logger = logging.getLogger(__name__)
 
 @router.get("/")
 def get_transactions(
-    user_id: str = '00000000-0000-0000-0000-000000000000',
     limit: int = 10,
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     tx_repo = SupabaseTransactionRepository(db)
@@ -29,10 +30,10 @@ def get_transactions(
 
 @router.get("/recurring")
 def get_recurring_transactions(
-    user_id: str = '00000000-0000-0000-0000-000000000000',
     month: int = None,
     year: int = None,
     period: str = None,
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):    
     tx_repo = SupabaseTransactionRepository(db)
@@ -42,8 +43,8 @@ def get_recurring_transactions(
 
 @router.get("/spending-distribution")
 def get_distribution(
-    user_id: str = '00000000-0000-0000-0000-000000000000',
     period: str = None,
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     tx_repo = SupabaseTransactionRepository(db)
@@ -55,7 +56,7 @@ def get_distribution(
 async def upload_bank_statement(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    user_id: str = '00000000-0000-0000-0000-000000000000',
+    user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     tx_repo = SupabaseTransactionRepository(db)

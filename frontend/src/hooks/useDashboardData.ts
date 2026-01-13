@@ -1,14 +1,28 @@
 import { useState, useEffect, useCallback } from 'react';
 import { financialService } from '@/services/api';
+import { createClient } from '@/utils/supabase/client';
+import { API_URL } from '@/services/api';
 
-export const useDashboardData = (userId: string = '00000000-0000-0000-0000-000000000000') => {
+export const useDashboardData = () => {
     const [spendingData, setSpendingData] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userId, setUserId] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ message: string; visible: boolean }>({
         message: '',
         visible: false
     });
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserId(user.id);
+            }
+        }
+        fetchUser();
+    }, []);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -35,11 +49,17 @@ export const useDashboardData = (userId: string = '00000000-0000-0000-0000-00000
     }, []);
 
     useEffect(() => {
+        // Only fetch data once we have a user (or at least attempted to auth) 
+        // Although financialService handles auth internally, so we can probably just fetch.
+        // But let's fetch immediately as token handling is inside api.ts
         fetchData();
     }, [fetchData]);
 
     useEffect(() => {
-        const eventSource = new EventSource(`http://localhost:8000/api/notifications/${userId}`);
+        if (!userId) return;
+
+        // Note: SSE endpoint still requires userId in path for now, need to ensure backend permits this
+        const eventSource = new EventSource(`${API_URL}/notifications/${userId}`);
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
