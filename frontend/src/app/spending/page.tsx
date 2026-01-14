@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { financialService } from '@/services/api';
 import { TimePeriodFilter } from '@/components/dashboard/TimePeriodFilter';
+import { useFilters } from '@/contexts/FilterContext';
 
 // Helper for formatting currency
 const formatCurrency = (amount: number) => {
@@ -30,11 +31,11 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function SpendingPage() {
+    const { period } = useFilters();
     const [loading, setLoading] = useState(true);
     const [spendingData, setSpendingData] = useState<any[]>([]);
     const [recurringTxs, setRecurringTxs] = useState<any[]>([]);
     const [totalOutflow, setTotalOutflow] = useState(0);
-    const [period, setPeriod] = useState('weekly'); // Default period
     const [expandedMerchant, setExpandedMerchant] = useState<string | null>(null);
 
     useEffect(() => {
@@ -104,7 +105,7 @@ export default function SpendingPage() {
                     </header>
 
                     {/* Filters */}
-                    <TimePeriodFilter value={period} onChange={setPeriod} />
+                    <TimePeriodFilter />
 
                     {/* KPI Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

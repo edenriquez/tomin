@@ -13,9 +13,10 @@ import { AIInsightCard } from '@/components/dashboard/AIInsightCard';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { useRouter } from 'next/navigation';
 import { TimePeriodFilter } from '@/components/dashboard/TimePeriodFilter';
+import { useFilters } from '@/contexts/FilterContext';
 
 export default function DashboardPage() {
-    const [period, setPeriod] = useState('weekly');
+    const { period } = useFilters();
     const router = useRouter();
 
     const {
@@ -51,7 +52,7 @@ export default function DashboardPage() {
                     </header>
 
                     {/* Filters */}
-                    <TimePeriodFilter value={period} onChange={setPeriod} />
+                    <TimePeriodFilter />
 
                     {/* Top Metrics */}
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
