@@ -14,6 +14,7 @@ import { QuickActions } from '@/components/dashboard/QuickActions';
 import { useRouter } from 'next/navigation';
 import { TimePeriodFilter } from '@/components/dashboard/TimePeriodFilter';
 import { useFilters } from '@/contexts/FilterContext';
+import { Spinner } from '@/components/ui/Spinner';
 
 export default function DashboardPage() {
     const { period } = useFilters();
@@ -27,8 +28,6 @@ export default function DashboardPage() {
         fetchData,
         hideNotification
     } = useDashboardData(period);
-
-    if (loading) return <div className="flex min-h-screen items-center justify-center bg-[#f6f6f8] dark:bg-[#101622] text-gray-500">Cargando datos financieros...</div>;
 
     return (
         <div className="flex min-h-screen bg-[#f6f6f8] dark:bg-[#101622]">
@@ -54,61 +53,69 @@ export default function DashboardPage() {
                     {/* Filters */}
                     <TimePeriodFilter />
 
-                    {/* Top Metrics */}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <MetricCard
-                            title="Balance Total"
-                            value="$45,200.00"
-                            trend="+12% vs mes pasado"
-                            icon={<Wallet size={20} />}
-                            iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/30"
-                        />
-                        <MetricCard
-                            title="Gastos del Mes"
-                            value="$12,450.00"
-                            trend="5% bajo presupuesto"
-                            icon={<Receipt size={20} />}
-                            iconBg="bg-orange-100 text-orange-600 dark:bg-orange-900/30"
-                        />
-                        <MetricCard
-                            title="Meta: Viaje a Cancún"
-                            value="$15,000"
-                            trend="65% completado"
-                            icon={<Plane size={20} />}
-                            iconBg="bg-green-100 text-green-600 dark:bg-green-900/30"
-                        />
-                    </div>
-
-                    {/* Main Content Grid */}
-                    <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-                        <div className="lg:col-span-8 space-y-8">
-                            {/* Distribution Chart */}
-                            <div className="card bg-white dark:bg-[#1a202c] p-6 rounded-xl border border-[#dbdfe6] dark:border-gray-700 shadow-sm">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-bold text-[#111318] dark:text-white">Distribución de Gastos</h3>
-                                    <button
-                                        onClick={() => router.push('/spending')}
-                                        className="text-sm font-medium text-[#135bec] hover:underline"
-                                    >
-                                        Ver reporte completo
-                                    </button>
-                                </div>
-                                <DistributionChart data={spendingData} />
+                    {loading ? (
+                        <div className="flex-1 flex items-center justify-center min-h-[400px]">
+                            <Spinner />
+                        </div>
+                    ) : (
+                        <>
+                            {/* Top Metrics */}
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                <MetricCard
+                                    title="Balance Total"
+                                    value="$45,200.00"
+                                    trend="+12% vs mes pasado"
+                                    icon={<Wallet size={20} />}
+                                    iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/30"
+                                />
+                                <MetricCard
+                                    title="Gastos del Mes"
+                                    value="$12,450.00"
+                                    trend="5% bajo presupuesto"
+                                    icon={<Receipt size={20} />}
+                                    iconBg="bg-orange-100 text-orange-600 dark:bg-orange-900/30"
+                                />
+                                <MetricCard
+                                    title="Meta: Viaje a Cancún"
+                                    value="$15,000"
+                                    trend="65% completado"
+                                    icon={<Plane size={20} />}
+                                    iconBg="bg-green-100 text-green-600 dark:bg-green-900/30"
+                                />
                             </div>
 
-                            {/* Recent Transactions */}
-                            <TransactionList
-                                transactions={transactions}
-                                onViewAll={() => router.push('/spending')}
-                            />
-                        </div>
+                            {/* Main Content Grid */}
+                            <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+                                <div className="lg:col-span-8 space-y-8">
+                                    {/* Distribution Chart */}
+                                    <div className="card bg-white dark:bg-[#1a202c] p-6 rounded-xl border border-[#dbdfe6] dark:border-gray-700 shadow-sm">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-lg font-bold text-[#111318] dark:text-white">Distribución de Gastos</h3>
+                                            <button
+                                                onClick={() => router.push('/spending')}
+                                                className="text-sm font-medium text-[#135bec] hover:underline"
+                                            >
+                                                Ver reporte completo
+                                            </button>
+                                        </div>
+                                        <DistributionChart data={spendingData} />
+                                    </div>
 
-                        {/* Sidebar Actions */}
-                        <div className="lg:col-span-4 space-y-6">
-                            <AIInsightCard />
-                            <QuickActions />
-                        </div>
-                    </div>
+                                    {/* Recent Transactions */}
+                                    <TransactionList
+                                        transactions={transactions}
+                                        onViewAll={() => router.push('/spending')}
+                                    />
+                                </div>
+
+                                {/* Sidebar Actions */}
+                                <div className="lg:col-span-4 space-y-6">
+                                    <AIInsightCard />
+                                    <QuickActions />
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
             </main>
 
