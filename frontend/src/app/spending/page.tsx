@@ -315,10 +315,10 @@ export default function SpendingPage() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs uppercase">
-                                                        {(tx.description).substring(0, 1)}
+                                                        {(tx.merchant_name).substring(0, 1)}
                                                     </div>
                                                     <span className="text-sm font-medium text-[#111318] dark:text-white capitalize">
-                                                        {tx.description.toLowerCase()}
+                                                        {tx.merchant_name.toLowerCase()}
                                                     </span>
                                                 </div>
                                             </td>

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
-from ..entities.models import Transaction, Category, Forecast, ProcessedFile, SavingsMovement
+from ..entities.models import Transaction, Category, Forecast, ProcessedFile, SavingsMovement, Merchant, MerchantLabel
 
 class SavingsMovementRepository(ABC):
     @abstractmethod
@@ -58,6 +58,35 @@ class ForecastRepository(ABC):
 
     @abstractmethod
     def get_latest_by_user(self, user_id: UUID) -> Optional[Forecast]:
+        pass
+
+class MerchantRepository(ABC):
+    @abstractmethod
+    def save(self, merchant: Merchant) -> None:
+        pass
+
+    @abstractmethod
+    def get_all(self) -> List[Merchant]:
+        pass
+
+    @abstractmethod
+    def get_by_id(self, merchant_id: UUID) -> Optional[Merchant]:
+        pass
+
+    @abstractmethod
+    def add_label(self, label: MerchantLabel) -> None:
+        pass
+
+    @abstractmethod
+    def get_labels(self) -> List[MerchantLabel]:
+        pass
+
+    @abstractmethod
+    def update_transaction_merchant(self, transaction_id: UUID, merchant_id: UUID) -> None:
+        pass
+    
+    @abstractmethod
+    def update_transaction_merchant_and_name(self, transaction_id: UUID, merchant_id: UUID, merchant_name: str) -> None:
         pass
 
 class ProcessedFileRepository(ABC):

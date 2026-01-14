@@ -2,14 +2,22 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 from sqlalchemy.orm import Session
-from ..domain.entities.models import Transaction, Category, ProcessedFile, SavingsMovement
+from ..domain.entities.models import Transaction, Category, ProcessedFile, SavingsMovement, Merchant, MerchantLabel
 from ..domain.repositories.interfaces import (
     TransactionRepository, 
     CategoryRepository, 
     ProcessedFileRepository,
-    SavingsMovementRepository
+    SavingsMovementRepository,
+    MerchantRepository
 )
-from .models import TransactionModel, CategoryModel, ProcessedFileModel, SavingsMovementModel
+from .models import (
+    TransactionModel, 
+    CategoryModel, 
+    ProcessedFileModel, 
+    SavingsMovementModel,
+    MerchantModel,
+    MerchantLabelModel
+)
 
 class SupabaseTransactionRepository(TransactionRepository):
     def __init__(self, db: Session):
@@ -24,6 +32,7 @@ class SupabaseTransactionRepository(TransactionRepository):
             user_id=transaction.user_id,
             category_id=transaction.category_id,
             file_id=transaction.file_id,
+            merchant_id=transaction.merchant_id,
             merchant_name=transaction.merchant_name,
             is_recurrent=transaction.is_recurrent,
             metadata_json=transaction.metadata,
@@ -43,6 +52,7 @@ class SupabaseTransactionRepository(TransactionRepository):
                 user_id=tx.user_id,
                 category_id=tx.category_id,
                 file_id=tx.file_id,
+                merchant_id=tx.merchant_id,
                 merchant_name=tx.merchant_name,
                 is_recurrent=tx.is_recurrent,
                 metadata_json=tx.metadata,
@@ -68,6 +78,7 @@ class SupabaseTransactionRepository(TransactionRepository):
                 id=r.id,
                 category_id=r.category_id,
                 file_id=r.file_id,
+                merchant_id=r.merchant_id,
                 merchant_name=r.merchant_name,
                 is_recurrent=r.is_recurrent,
                 metadata=r.metadata_json
@@ -90,6 +101,7 @@ class SupabaseTransactionRepository(TransactionRepository):
                 id=r.id,
                 category_id=r.category_id,
                 file_id=r.file_id,
+                merchant_id=r.merchant_id,
                 merchant_name=r.merchant_name,
                 is_recurrent=r.is_recurrent,
                 metadata=r.metadata_json
@@ -110,6 +122,7 @@ class SupabaseTransactionRepository(TransactionRepository):
                 id=r.id,
                 category_id=r.category_id,
                 file_id=r.file_id,
+                merchant_id=r.merchant_id,
                 merchant_name=r.merchant_name,
                 is_recurrent=r.is_recurrent,
                 metadata=r.metadata_json
@@ -129,6 +142,7 @@ class SupabaseTransactionRepository(TransactionRepository):
                 id=r.id,
                 category_id=r.category_id,
                 file_id=r.file_id,
+                merchant_id=r.merchant_id,
                 merchant_name=r.merchant_name,
                 is_recurrent=r.is_recurrent,
                 metadata=r.metadata_json
@@ -229,3 +243,76 @@ class SupabaseSavingsMovementRepository(SavingsMovementRepository):
                 metadata=r.metadata_json
             ) for r in results
         ]
+
+class SupabaseMerchantRepository(MerchantRepository):
+    def __init__(self, db: Session):
+        self.db = db
+
+    def save(self, merchant: Merchant) -> None:
+        db_merchant = MerchantModel(
+            id=merchant.id,
+            name=merchant.name,
+            icon=merchant.icon,
+            default_category_id=merchant.default_category_id,
+            created_at=merchant.created_at
+        )
+        self.db.add(db_merchant)
+        self.db.commit()
+
+    def get_all(self) -> List[Merchant]:
+        results = self.db.query(MerchantModel).all()
+        return [
+            Merchant(
+                name=r.name,
+                id=r.id,
+                icon=r.icon,
+                default_category_id=r.default_category_id,
+                created_at=r.created_at
+            ) for r in results
+        ]
+
+    def get_by_id(self, merchant_id: UUID) -> Optional[Merchant]:
+        r = self.db.query(MerchantModel).filter(MerchantModel.id == merchant_id).first()
+        if not r: return None
+        return Merchant(
+            name=r.name,
+            id=r.id,
+            icon=r.icon,
+            default_category_id=r.default_category_id,
+            created_at=r.created_at
+        )
+
+    def add_label(self, label: MerchantLabel) -> None:
+        db_label = MerchantLabelModel(
+            id=label.id,
+            merchant_id=label.merchant_id,
+            label=label.label,
+            is_active=label.is_active,
+            created_at=label.created_at
+        )
+        self.db.add(db_label)
+        self.db.commit()
+
+    def get_labels(self) -> List[MerchantLabel]:
+        results = self.db.query(MerchantLabelModel).all()
+        return [
+            MerchantLabel(
+                merchant_id=r.merchant_id,
+                label=r.label,
+                id=r.id,
+                is_active=r.is_active,
+                created_at=r.created_at
+            ) for r in results
+        ]
+
+    def update_transaction_merchant(self, transaction_id: UUID, merchant_id: UUID) -> None:
+        self.db.query(TransactionModel).filter(
+            TransactionModel.id == transaction_id
+        ).update({"merchant_id": merchant_id}, synchronize_session=False)
+        self.db.commit()
+ 
+    def update_transaction_merchant_and_name(self, transaction_id: UUID, merchant_id: UUID, merchant_name: str) -> None:
+        self.db.query(TransactionModel).filter(
+            TransactionModel.id == transaction_id
+        ).update({"merchant_id": merchant_id, "merchant_name": merchant_name}, synchronize_session=False)
+        self.db.commit()

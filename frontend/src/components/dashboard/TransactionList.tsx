@@ -37,7 +37,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
                                 </div>
                                 <div>
                                     <p className="font-medium text-gray-900 dark:text-white capitalize">
-                                        {tx.description.toLowerCase()}
+                                        {tx.merchant_name}
                                     </p>
                                     <div className="flex items-center gap-2">
                                         <p className="text-xs text-gray-500">
@@ -46,11 +46,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions, 
                                                 month: 'short'
                                             })}
                                         </p>
-                                        {tx.merchant_name && (
+                                        {tx.description && (
                                             <>
                                                 <span className="text-[10px] text-gray-300">•</span>
                                                 <p className="text-xs text-gray-500 font-bold">
-                                                    {tx.merchant_name}
+                                                    {tx.description.toLowerCase()}
                                                 </p>
                                             </>
                                         )}

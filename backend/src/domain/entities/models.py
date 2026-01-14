@@ -4,6 +4,22 @@ from uuid import UUID, uuid4
 from typing import Optional, List
 
 @dataclass
+class Merchant:
+    name: str
+    id: UUID = field(default_factory=uuid4)
+    icon: Optional[str] = None
+    default_category_id: Optional[UUID] = None
+    created_at: datetime = field(default_factory=datetime.now)
+
+@dataclass
+class MerchantLabel:
+    merchant_id: UUID
+    label: str # The normalized pattern to match
+    id: UUID = field(default_factory=uuid4)
+    is_active: bool = True
+    created_at: datetime = field(default_factory=datetime.now)
+
+@dataclass
 class Transaction:
     amount: float
     description: str
@@ -11,10 +27,11 @@ class Transaction:
     user_id: UUID
     id: UUID = field(default_factory=uuid4)
     category_id: Optional[UUID] = None
-    merchant_name: Optional[str] = None
+    merchant_id: Optional[UUID] = None # Link to the verified Merchant entity
+    merchant_name: Optional[str] = None # The human-readable name (either from Merchant or manual)
     is_recurrent: bool = False
     file_id: Optional[str] = None
-    metadata: dict = field(default_factory=dict) # For bank-specific data or AI confidence scores
+    metadata: dict = field(default_factory=dict)
 
 @dataclass
 class SavingsMovement:

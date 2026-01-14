@@ -11,7 +11,8 @@ from src.infrastructure.supabase_repositories import (
     SupabaseTransactionRepository, 
     SupabaseCategoryRepository, 
     SupabaseProcessedFileRepository,
-    SupabaseSavingsMovementRepository
+    SupabaseSavingsMovementRepository,
+    SupabaseMerchantRepository
 )
 from src.infrastructure.notifications import notification_manager
 from src.infrastructure.auth import get_current_user
@@ -74,11 +75,13 @@ async def upload_bank_statement(
             cat_repo_bg = SupabaseCategoryRepository(db_bg)
             file_repo_bg = SupabaseProcessedFileRepository(db_bg)
             savings_repo_bg = SupabaseSavingsMovementRepository(db_bg)
+            merchant_repo_bg = SupabaseMerchantRepository(db_bg)
             use_case_bg = ProcessBankStatement(
                 tx_repo_bg, 
                 cat_repo_bg, 
                 file_repo_bg, 
                 savings_repo_bg, 
+                merchant_repo_bg,
                 notification_manager
             )
             await use_case_bg.execute(u_id, content)

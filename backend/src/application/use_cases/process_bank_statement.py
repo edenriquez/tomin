@@ -10,11 +10,12 @@ from ...infrastructure.parsers.factory import BankParserFactory
 logger = logging.getLogger(__name__)
 
 class ProcessBankStatement:
-    def __init__(self, tx_repo, cat_repo, file_repo, savings_repo, notification_manager=None):
+    def __init__(self, tx_repo, cat_repo, file_repo, savings_repo, merchant_repo=None, notification_manager=None):
         self.tx_repo = tx_repo
         self.cat_repo = cat_repo
         self.file_repo = file_repo
         self.savings_repo = savings_repo
+        self.merchant_repo = merchant_repo
         self.notification_manager = notification_manager
         self.parser_factory = BankParserFactory()
 
@@ -72,7 +73,19 @@ class ProcessBankStatement:
             # 6. Notify Success
             await self._notify(user_id, "UPLOAD_COMPLETE", f"Estado de cuenta de {parser.bank_name} procesado exitosamente.")
 
-            # 7. Detect recurring transactions (Advanced analysis)
+
+            # 7. Identify Merchants
+            if self.merchant_repo:
+                try:
+                    from .identify_merchants import IdentifyMerchants
+                    identifier = IdentifyMerchants(self.tx_repo, self.merchant_repo)
+                    merchant_count = await identifier.execute(user_id)
+                    if merchant_count:
+                        logger.info(f"Identified {merchant_count} merchants for user {user_id}")
+                except Exception as e:
+                    logger.error(f"Error identifying merchants: {str(e)}")
+            
+            # 8. Detect recurring transactions (Advanced analysis) when merchant identification is finished
             try:
                 from .detect_recurring_transactions import DetectRecurringTransactions
                 detector = DetectRecurringTransactions(self.tx_repo)
@@ -81,7 +94,6 @@ class ProcessBankStatement:
                     logger.info(f"Detected {recurrent_count} recurring transactions for user {user_id}")
             except Exception as e:
                 logger.error(f"Error detecting recurring transactions: {str(e)}")
-            
             return True
 
         except Exception as e:
