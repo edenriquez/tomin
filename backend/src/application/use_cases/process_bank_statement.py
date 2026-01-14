@@ -68,9 +68,20 @@ class ProcessBankStatement:
             
             if parsed_data.savings_movements:
                 self.savings_repo.save_all(parsed_data.savings_movements)
-
+            
             # 6. Notify Success
             await self._notify(user_id, "UPLOAD_COMPLETE", f"Estado de cuenta de {parser.bank_name} procesado exitosamente.")
+
+            # 7. Detect recurring transactions (Advanced analysis)
+            try:
+                from .detect_recurring_transactions import DetectRecurringTransactions
+                detector = DetectRecurringTransactions(self.tx_repo)
+                recurrent_count = await detector.execute(user_id, file_hash)
+                if recurrent_count:
+                    logger.info(f"Detected {recurrent_count} recurring transactions for user {user_id}")
+            except Exception as e:
+                logger.error(f"Error detecting recurring transactions: {str(e)}")
+            
             return True
 
         except Exception as e:

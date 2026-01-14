@@ -73,6 +73,28 @@ class SupabaseTransactionRepository(TransactionRepository):
                 metadata=r.metadata_json
             ) for r in results
         ]
+    
+    def get_by_user_and_file_hash(self, user_id: UUID, file_hash: str, start_date: datetime, end_date: datetime) -> List[Transaction]:
+        results = self.db.query(TransactionModel).filter(
+            TransactionModel.user_id == user_id,
+            TransactionModel.file_id == file_hash,
+            TransactionModel.date >= start_date,
+            TransactionModel.date <= end_date
+        ).all()
+        return [
+            Transaction(
+                amount=r.amount,
+                description=r.description,
+                date=r.date,
+                user_id=r.user_id,
+                id=r.id,
+                category_id=r.category_id,
+                file_id=r.file_id,
+                merchant_name=r.merchant_name,
+                is_recurrent=r.is_recurrent,
+                metadata=r.metadata_json
+            ) for r in results
+        ]
 
     def get_recurrent_by_user(self, user_id: UUID) -> List[Transaction]:
         results = self.db.query(TransactionModel).filter(
@@ -112,6 +134,12 @@ class SupabaseTransactionRepository(TransactionRepository):
                 metadata=r.metadata_json
             ) for r in results
         ]
+
+    def update_recurrent_status(self, transaction_ids: List[UUID], is_recurrent: bool) -> None:
+        self.db.query(TransactionModel).filter(
+            TransactionModel.id.in_(transaction_ids)
+        ).update({"is_recurrent": is_recurrent}, synchronize_session=False)
+        self.db.commit()
 
 class SupabaseCategoryRepository(CategoryRepository):
     def __init__(self, db: Session):

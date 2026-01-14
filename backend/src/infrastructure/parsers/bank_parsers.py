@@ -5,17 +5,18 @@ from typing import List
 from datetime import datetime
 import re
 import logging
+from ...application.use_cases.detect_recurring_transactions import normalize_merchant
 logger = logging.getLogger(__name__)
 
-NUBANK_MERCHANT_NAME = "NuBank"
-BBVA_MERCHANT_NAME = "BBVA"
-BANAMEX_MERCHANT_NAME = "Banamex"
-SANTANDER_MERCHANT_NAME = "Santander"
+NUBANK = "NuBank"
+BBVA = "BBVA"
+BANAMEX = "Banamex"
+SANTANDER = "Santander"
 
 class BanamexParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return BANAMEX_MERCHANT_NAME
+        return BANAMEX
 
     def can_parse(self, text: str) -> bool:
         # Detection points for Banamex
@@ -68,7 +69,7 @@ class BanamexParser(BankParser):
                 description=description,
                 date=date_obj,
                 user_id=user_id,
-                merchant_name=BANAMEX_MERCHANT_NAME,
+                merchant_name=normalize_merchant(description),
                 category_id=category_id
             ))
             
@@ -77,13 +78,13 @@ class BanamexParser(BankParser):
 class BBVAParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return BBVA_MERCHANT_NAME
+        return BBVA
 
     def can_parse(self, text: str) -> bool:
         # Detection points for BBVA
-        return "BBVA" in text.upper() or "BANCOMER" in text.upper()
+        return BBVA in text.upper() or "BANCOMER" in text.upper()
 
-    def parse(self, text: str, user_id: UUID) -> ParsedStatement:
+    def parse(self, text: str, user_id: UUID, categories: List[Category] = []) -> ParsedStatement:
         # Placeholder for specific BBVA logic
         logger.info(f"BBVAParser statement text: {text}")
         return ParsedStatement()
@@ -91,11 +92,11 @@ class BBVAParser(BankParser):
 class SantanderParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return SANTANDER_MERCHANT_NAME
+        return SANTANDER
 
     def can_parse(self, text: str) -> bool:
         # Detection points for Santander
-        return "SANTANDER" in text.upper()
+        return SANTANDER in text.upper()
 
     def parse(self, text: str, user_id: UUID, categories: List[Category] = []) -> ParsedStatement:
         # Placeholder for specific Santander logic
@@ -105,7 +106,7 @@ class SantanderParser(BankParser):
 class NuParser(BankParser):
     @property
     def bank_name(self) -> str:
-        return NUBANK_MERCHANT_NAME
+        return NUBANK
 
     def can_parse(self, text: str) -> bool:
         # Detection points for Nu
@@ -171,7 +172,7 @@ class NuParser(BankParser):
                     description=description,
                     date=date_obj,
                     user_id=user_id,
-                    merchant_name=NUBANK_MERCHANT_NAME,
+                    merchant_name=normalize_merchant(description),
                     category_id=category_id
                 ))
             

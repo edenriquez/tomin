@@ -25,6 +25,10 @@ class TransactionRepository(ABC):
     @abstractmethod
     def get_by_user(self, user_id: UUID, start_date: datetime, end_date: datetime) -> List[Transaction]:
         pass
+    
+    @abstractmethod
+    def get_by_user_and_file_hash(self, user_id: UUID, file_hash: str, start_date: datetime, end_date: datetime) -> List[Transaction]:
+        pass
 
     @abstractmethod
     def get_recurrent_by_user(self, user_id: UUID) -> List[Transaction]:
@@ -32,6 +36,10 @@ class TransactionRepository(ABC):
 
     @abstractmethod
     def get_all(self, user_id: UUID, limit: int = 20) -> List[Transaction]:
+        pass
+
+    @abstractmethod
+    def update_recurrent_status(self, transaction_ids: List[UUID], is_recurrent: bool) -> None:
         pass
 
 class CategoryRepository(ABC):
