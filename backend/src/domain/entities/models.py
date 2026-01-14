@@ -90,3 +90,18 @@ class ProcessedFile:
     bank_name: str
     created_at: datetime = field(default_factory=datetime.now)
     id: Optional[UUID] = None # Deprecated in favor of hash if used as ID
+
+@dataclass
+class RecurringBill:
+    merchant_name: str
+    avg_amount: float
+    last_amount: float
+    total_period_amount: float
+    frequency: str
+    occurrences_in_period: int
+    next_expected_date: Optional[datetime]
+    transactions: List[Transaction]
+    status: str = "active" # active, potential_churn, cancelled
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
+    category_icon: Optional[str] = None

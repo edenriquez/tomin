@@ -35,6 +35,7 @@ export default function SpendingPage() {
     const [recurringTxs, setRecurringTxs] = useState<any[]>([]);
     const [totalOutflow, setTotalOutflow] = useState(0);
     const [period, setPeriod] = useState('weekly'); // Default period
+    const [expandedMerchant, setExpandedMerchant] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchSpendingData = async () => {
@@ -52,7 +53,7 @@ export default function SpendingPage() {
                 // Map distribution for treemap (simplified)
                 const mappedDistribution = distribution.map((item: any) => ({
                     category: item.category_name,
-                    amount: item.total_amount,
+                    amount: Math.abs(Number(item.total_amount)),
                     percentage: Math.round(item.percentage),
                     color: item.color
                 })).sort((a: any, b: any) => b.amount - a.amount);
@@ -303,45 +304,80 @@ export default function SpendingPage() {
                                 <thead>
                                     <tr className="bg-[#f9fafb] dark:bg-gray-800 border-b border-[#dbdfe6] dark:border-gray-700">
                                         <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Comercio</th>
-                                        <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Fecha</th>
-                                        <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider text-right">Monto</th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider">Frecuencia</th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider text-right">Promedio</th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider text-center">Sig. Pago</th>
                                         <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider text-center">Estado</th>
                                         <th className="px-6 py-4 text-xs font-semibold text-[#616f89] dark:text-gray-400 uppercase tracking-wider"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#dbdfe6] dark:divide-gray-700">
-                                    {recurringTxs.length > 0 ? recurringTxs.map((tx: any) => (
-                                        <tr key={tx.id} className="hover:bg-[#f0f2f4] dark:hover:bg-gray-700/50 transition-colors">
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs uppercase">
-                                                        {(tx.merchant_name).substring(0, 1)}
+                                    {recurringTxs.length > 0 ? recurringTxs.map((bill: any) => (
+                                        <React.Fragment key={bill.merchant_name}>
+                                            <tr
+                                                className={`${expandedMerchant === bill.merchant_name ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-[#f0f2f4] dark:hover:bg-gray-700/50'} transition-colors cursor-pointer`}
+                                                onClick={() => setExpandedMerchant(expandedMerchant === bill.merchant_name ? null : bill.merchant_name)}
+                                            >
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs uppercase">
+                                                            {(bill.merchant_name).substring(0, 1)}
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-sm font-medium text-[#111318] dark:text-white capitalize block">
+                                                                {bill.merchant_name.toLowerCase()}
+                                                            </span>
+                                                            <span className="text-[10px] text-gray-400 uppercase tracking-tight">
+                                                                {bill.occurrences_in_period} cargos
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                    <span className="text-sm font-medium text-[#111318] dark:text-white capitalize">
-                                                        {tx.merchant_name.toLowerCase()}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#111318] dark:text-white capitalize">
+                                                    {bill.frequency}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#111318] dark:text-white text-right">
+                                                    {formatCurrency(bill.avg_amount)}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-[#616f89] dark:text-gray-400">
+                                                    {bill.next_expected_date ? new Date(bill.next_expected_date).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bill.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                                        bill.status === 'potential_churn' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' :
+                                                            'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                                                        }`}>
+                                                        {bill.status === 'active' ? 'Activo' : bill.status === 'potential_churn' ? 'En riesgo' : 'Cancelado'}
                                                     </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[#111318] dark:text-white">
-                                                {new Date(tx.date).toLocaleDateString()}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#111318] dark:text-white text-right">
-                                                {formatCurrency(tx.amount)}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                                                    Activo
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                <button className="text-[#616f89] hover:text-[#135bec] dark:text-gray-400 dark:hover:text-white">
-                                                    <MoreVertical size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-400">
+                                                    <ChevronDown size={16} className={`transition-transform duration-200 ${expandedMerchant === bill.merchant_name ? 'rotate-180' : ''}`} />
+                                                </td>
+                                            </tr>
+                                            {expandedMerchant === bill.merchant_name && (
+                                                <tr>
+                                                    <td colSpan={6} className="px-6 py-0 bg-gray-50/50 dark:bg-gray-800/20">
+                                                        <div className="py-4 space-y-2">
+                                                            <p className="text-[10px] font-bold text-gray-400 uppercase px-4 mb-2">Detalle de movimientos</p>
+                                                            {bill.transactions.map((tx: any) => (
+                                                                <div key={tx.id} className="flex items-center justify-between px-4 py-2 rounded-lg bg-white dark:bg-gray-800/40 border border-[#dbdfe6] dark:border-gray-700/50 shadow-sm mx-4">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase">{tx.description}</span>
+                                                                        <span className="text-[10px] text-gray-500">{new Date(tx.date).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                                    </div>
+                                                                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                                                        {formatCurrency(tx.amount)}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
                                     )) : (
                                         <tr>
-                                            <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                            <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                                                 No se encontraron gastos recurrentes.
                                             </td>
                                         </tr>

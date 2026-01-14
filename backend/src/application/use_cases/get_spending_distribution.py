@@ -63,5 +63,5 @@ class GetSpendingDistribution:
                     color=category.color
                 ))
                 
-        # Sort by weight descending
-        return sorted(results, key=lambda x: x.total_amount, reverse=True)
+        # Sort by weight (absolute magnitude) descending
+        return sorted(results, key=lambda x: abs(x.total_amount), reverse=True)
