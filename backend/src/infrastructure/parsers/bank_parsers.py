@@ -35,6 +35,13 @@ class BanamexParser(BankParser):
             'jul': 7, 'ago': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dic': 12
         }
         
+        # Get default category ID once
+        uncategorized_id = None
+        for cat in categories:
+            if cat.name == "Sin Categoría":
+                uncategorized_id = cat.id
+                break
+
         # Regex to match Banamex transactions
         pattern = r"(\d{1,2})-([a-z]{3})-(\d{4})\s+\d{1,2}-[a-z]{3}-\d{4}\s+(.*?)\s+([+-])\s+\$([\d,]+\.\d{2})"
         
@@ -63,6 +70,10 @@ class BanamexParser(BankParser):
                             break
                 if category_id:
                     break
+            
+            # Use pre-calculated default if no match found
+            if not category_id:
+                category_id = uncategorized_id
                 
             transactions.append(Transaction(
                 amount=amount,
@@ -127,6 +138,13 @@ class NuParser(BankParser):
             'JUL': 7, 'AGO': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DIC': 12
         }
         
+        # Get default category ID once
+        uncategorized_id = None
+        for cat in categories:
+            if cat.name == "Sin Categoría":
+                uncategorized_id = cat.id
+                break
+        
         # Regex for Nu transactions
         pattern = r"(\d{1,2})\s+([A-Z]{3})\s+(\d{4})\s+(.*?)\s+([+-])\$([\d,]+\.\d{2})"
         
@@ -166,6 +184,10 @@ class NuParser(BankParser):
                                 break
                     if category_id:
                         break
+                
+                # Use pre-calculated default if no match found
+                if not category_id:
+                    category_id = uncategorized_id
 
                 transactions.append(Transaction(
                     amount=amount,

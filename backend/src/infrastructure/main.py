@@ -34,13 +34,19 @@ def seed_data():
             # Seed default categories if none exist
             new_cats = [
                 Category(
+                    name="Sin Categoría", 
+                    color="#94a3b8", 
+                    icon="", 
+                    categorization_labels=[]
+                ),
+                Category(
                     name="Vivienda & Servicios", 
                     color="#3b82f6", 
                     icon="home", 
                     categorization_labels=["CFE", "AGUA", "RENTA", "IZZI", "TELMEX", "SKY", "TOTALPLAY", "INTERNET", "LUZ", "GAS"]
                 ),
                 Category(
-                    name="Comida & Supermerk", 
+                    name="Comida & Supermercados", 
                     color="#a855f7", 
                     icon="shopping_cart",
                     categorization_labels=["OXXO", "UBER EATS", "WALMART", "SORIANA", "CHEDRAUI", "COSTCO", "RAPPI", "RESTAURANTE", "STARBUCKS", "VIPS", "TOKS", "BURGER"]

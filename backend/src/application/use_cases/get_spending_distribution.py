@@ -46,6 +46,11 @@ class GetSpendingDistribution:
         grand_total = 0.0
         
         for tx in transactions:
+            # Only count positive amounts as spending 
+            # (negative amounts in this bank system are usually payments/abonos to the card)
+            if tx.amount <= 0:
+                continue
+
             if tx.category_id not in totals:
                 totals[tx.category_id] = 0.0
             totals[tx.category_id] += tx.amount
@@ -54,14 +59,14 @@ class GetSpendingDistribution:
         results = []
         for cat_id, amount in totals.items():
             category = categories.get(cat_id)
-            if category:
-                results.append(SpendingByCategoryDTO(
-                    category_id=cat_id,
-                    category_name=category.name,
-                    total_amount=amount,
-                    percentage=(amount / grand_total * 100) if grand_total > 0 else 0,
-                    color=category.color
-                ))
+
+            results.append(SpendingByCategoryDTO(
+                category_id=cat_id,
+                category_name=category.name,
+                total_amount=amount,
+                percentage=(amount / grand_total * 100) if grand_total > 0 else 0,
+                color=category.color
+            ))
                 
         # Sort by weight (absolute magnitude) descending
         return sorted(results, key=lambda x: abs(x.total_amount), reverse=True)
