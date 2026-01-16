@@ -69,4 +69,6 @@ class ProcessedFileModel(Base):
     id = Column(String, primary_key=True)
     user_id = Column(UUID(as_uuid=True), nullable=False)
     bank_name = Column(String, nullable=False)
+    account_type = Column(String, nullable=True)
+    file_name = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False)

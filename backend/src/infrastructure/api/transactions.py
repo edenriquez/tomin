@@ -79,7 +79,7 @@ async def upload_bank_statement(
     # Read file content safely
     file_content = await file.read()
     
-    async def run_process_use_case(u_id: UUID, content: bytes):
+    async def run_process_use_case(u_id: UUID, content: bytes, filename: str):
         db_bg = SessionLocal()
         try:
             tx_repo_bg = SupabaseTransactionRepository(db_bg)
@@ -95,11 +95,11 @@ async def upload_bank_statement(
                 merchant_repo_bg,
                 notification_manager
             )
-            await use_case_bg.execute(u_id, content)
+            await use_case_bg.execute(u_id, content, file_name=filename)
         finally:
             db_bg.close()
 
-    background_tasks.add_task(run_process_use_case, UUID(user_id), file_content)
+    background_tasks.add_task(run_process_use_case, UUID(user_id), file_content, file.filename)
     
     return {
         "message": "Bank statement upload received and processing started.",

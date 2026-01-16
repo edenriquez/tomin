@@ -12,7 +12,8 @@ from src.infrastructure.api import (
     transactions_router,
     forecast_router,
     notifications_router,
-    merchants_router
+    merchants_router,
+    statements_router
 )
 from src.infrastructure.models import MerchantModel, MerchantLabelModel
 from src.application.use_cases.detect_recurring_transactions import normalize_merchant
@@ -175,6 +176,7 @@ app.include_router(transactions_router)
 app.include_router(forecast_router)
 app.include_router(notifications_router)
 app.include_router(merchants_router)
+app.include_router(statements_router)
 
 if __name__ == "__main__":
     import uvicorn

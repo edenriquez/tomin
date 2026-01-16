@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { LayoutDashboard, TrendingUp, CreditCard, Target, Sparkles } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, CreditCard, Target, Sparkles, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -10,6 +10,7 @@ const navItems = [
     { icon: LayoutDashboard, label: 'Resumen', href: '/dashboard' },
     // { icon: TrendingUp, label: 'Pronósticos', href: '/forecasts' },
     { icon: CreditCard, label: 'Gastos', href: '/spending' },
+    { icon: File, label: 'Estados de Cuenta', href: '/files' },
     // { icon: Target, label: 'Metas', href: '#' },
 ];
 

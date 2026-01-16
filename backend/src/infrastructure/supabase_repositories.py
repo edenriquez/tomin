@@ -194,6 +194,8 @@ class SupabaseProcessedFileRepository(ProcessedFileRepository):
             id=processed_file.hash,
             user_id=processed_file.user_id,
             bank_name=processed_file.bank_name,
+            account_type=processed_file.account_type,
+            file_name=processed_file.file_name,
             created_at=processed_file.created_at
         )
         self.db.add(db_file)
@@ -204,6 +206,38 @@ class SupabaseProcessedFileRepository(ProcessedFileRepository):
             ProcessedFileModel.user_id == user_id,
             ProcessedFileModel.id == file_hash
         ).first() is not None
+
+    def get_all_by_user(self, user_id: UUID) -> List[ProcessedFile]:
+        results = self.db.query(ProcessedFileModel).filter(
+            ProcessedFileModel.user_id == user_id
+        ).order_by(ProcessedFileModel.created_at.desc()).all()
+        return [
+            ProcessedFile(
+                user_id=r.user_id,
+                hash=r.id,
+                bank_name=r.bank_name,
+                account_type=r.account_type,
+                file_name=r.file_name,
+                created_at=r.created_at
+            ) for r in results
+        ]
+
+    def count_by_user(self, user_id: UUID) -> int:
+        return self.db.query(ProcessedFileModel).filter(
+            ProcessedFileModel.user_id == user_id
+        ).count()
+
+    def delete_by_id(self, user_id: UUID, file_id: str) -> bool:
+        db_file = self.db.query(ProcessedFileModel).filter(
+            ProcessedFileModel.user_id == user_id,
+            ProcessedFileModel.id == file_id
+        ).first()
+        
+        if db_file:
+            self.db.delete(db_file)
+            self.db.commit()
+            return True
+        return False
 
 class SupabaseSavingsMovementRepository(SavingsMovementRepository):
     def __init__(self, db: Session):

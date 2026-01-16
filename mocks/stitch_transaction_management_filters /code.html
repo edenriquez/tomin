@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tomin - Gestión de Estados de Cuenta</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "primary-light": "#e0eaff",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                        "card-light": "#ffffff",
+                        "card-dark": "#1a2332",
+                        "text-main": "#111318",
+                        "text-secondary": "#616f89",
+                        "success": "#07883b",
+                        "danger": "#d32f2f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        details[open] .expand-icon {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main dark:text-white transition-colors duration-200">
+<div class="flex h-screen w-full overflow-hidden">
+<aside class="hidden w-64 flex-col border-r border-gray-200 bg-card-light dark:border-gray-800 dark:bg-card-dark md:flex">
+<div class="flex h-16 items-center gap-3 px-6 border-b border-gray-100 dark:border-gray-800">
+<div class="flex size-8 items-center justify-center rounded-lg bg-primary text-white">
+<span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight text-text-main dark:text-white">Tomin</h1>
+</div>
+<div class="flex flex-1 flex-col gap-2 p-4 overflow-y-auto">
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-text-secondary hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-medium">Resumen</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-text-secondary hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" href="#">
+<span class="material-symbols-outlined">trending_up</span>
+<span class="text-sm font-medium">Ingresos</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-text-secondary hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" href="#">
+<span class="material-symbols-outlined">credit_card</span>
+<span class="text-sm font-medium">Gastos</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg bg-primary/10 px-3 py-2.5 text-primary" href="#">
+<span class="material-symbols-outlined fill-1">description</span>
+<span class="text-sm font-medium">Estados de Cuenta</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-text-secondary hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" href="#">
+<span class="material-symbols-outlined">target</span>
+<span class="text-sm font-medium">Metas</span>
+</a>
+</nav>
+<div class="my-2 border-t border-gray-100 dark:border-gray-800"></div>
+<div class="px-3 py-2">
+<p class="text-xs font-semibold uppercase text-text-secondary dark:text-gray-500 mb-2">Inteligencia</p>
+<a class="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-text-secondary hover:bg-gradient-to-r hover:from-primary/10 hover:to-transparent dark:text-gray-400" href="#">
+<span class="material-symbols-outlined text-primary group-hover:animate-pulse">spark</span>
+<span class="text-sm font-medium">Tomin AI</span>
+</a>
+</div>
+<div class="mt-auto">
+<div class="flex items-center gap-3 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
+<div class="size-10 rounded-full bg-cover bg-center" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBnHYRFfUaiB0HSsFEZ-D0ovizzTCB4tmk5BAzakyUiOntWCFV4yKoADoV5GdP7vEb2zwHKpRz_Gx-jm-zWUBODOVB-xMV78_wSa0o-8pUXyD0cGvYV8YPPvbcVeCVXhxTt4Fg8uEmmbKZPhEQv_hAdEFty2C0iqTMtlqW-Gd3ol4CL-0B3a1lmHrSLeX1yOZ0ZCNYiifzoTPPdwUCv2kHcXS7FlgUa4yyU5xT2WvJU2rxuxoFc1R4-pLHrXRGwlpmEuu-PtCQQkvU");'></div>
+<div class="flex flex-col overflow-hidden">
+<p class="truncate text-sm font-medium text-text-main dark:text-white">Alejandro M.</p>
+<p class="truncate text-xs text-text-secondary dark:text-gray-400">Plan Premium</p>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
+<header class="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-gray-200 bg-white/80 px-6 backdrop-blur dark:border-gray-800 dark:bg-background-dark/80">
+<div class="flex items-center gap-4 md:hidden">
+<button class="text-text-secondary">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<span class="text-lg font-bold">Tomin</span>
+</div>
+<div class="hidden md:flex flex-col">
+<h2 class="text-xl font-bold text-text-main dark:text-white">Estados de Cuenta Agrupados</h2>
+<p class="text-xs text-text-secondary dark:text-gray-400">Gestiona tus archivos por banco y tipo de tarjeta</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 transition-colors">
+<span class="material-symbols-outlined text-[20px]">upload_file</span>
+<span class="hidden sm:inline">Subir Nuevo Archivo</span>
+</button>
+</div>
+</header>
+<div class="p-6 lg:p-8">
+<div class="mx-auto max-w-7xl">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+<div class="rounded-2xl bg-white p-5 shadow-sm border border-gray-100 dark:bg-card-dark dark:border-gray-800 flex items-center gap-4">
+<div class="size-12 rounded-full bg-primary-light flex items-center justify-center text-primary dark:bg-primary/20">
+<span class="material-symbols-outlined">account_balance</span>
+</div>
+<div>
+<p class="text-2xl font-bold text-text-main dark:text-white">5</p>
+<p class="text-sm text-text-secondary dark:text-gray-400">Cuentas conectadas</p>
+</div>
+</div>
+<div class="rounded-2xl bg-white p-5 shadow-sm border border-gray-100 dark:bg-card-dark dark:border-gray-800 flex items-center gap-4">
+<div class="size-12 rounded-full bg-green-50 flex items-center justify-center text-success dark:bg-green-900/20">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<div>
+<p class="text-2xl font-bold text-text-main dark:text-white">124</p>
+<p class="text-sm text-text-secondary dark:text-gray-400">Archivos procesados</p>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="text-lg font-bold text-text-main dark:text-white">Mis Cuentas y Tarjetas</h3>
+<button class="text-sm font-medium text-primary hover:underline flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">add</span> Vincular otra
+                        </button>
+</div>
+<details class="group bg-white rounded-xl border border-gray-100 shadow-sm dark:bg-card-dark dark:border-gray-800 overflow-hidden" open="">
+<summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 list-none transition-colors">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 dark:bg-blue-900/20">
+<span class="material-symbols-outlined">savings</span>
+</div>
+<div>
+<h4 class="font-bold text-text-main dark:text-white">BBVA Débito •••• 4291</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-text-secondary dark:text-gray-400">Débito</span>
+<span class="text-xs text-text-secondary dark:text-gray-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+                                            Última sincronización: Hoy, 10:45 AM
+                                        </span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined expand-icon transition-transform text-text-secondary">expand_more</span>
+</summary>
+<div class="border-t border-gray-50 dark:border-gray-800">
+<div class="overflow-x-auto">
+<table class="w-full text-left text-sm">
+<thead class="bg-gray-50/50 text-xs uppercase text-text-secondary dark:bg-gray-800/30 dark:text-gray-500">
+<tr>
+<th class="px-6 py-3 font-semibold">Nombre del Archivo</th>
+<th class="px-6 py-3 font-semibold">Fecha de Carga</th>
+<th class="px-6 py-3 font-semibold">Periodo</th>
+<th class="px-6 py-3 font-semibold text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-gray-50 dark:divide-gray-800">
+<tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">picture_as_pdf</span>
+<span class="font-medium text-text-main dark:text-white">Estado_BBVA_Oct23.pdf</span>
+</div>
+</td>
+<td class="px-6 py-4 text-text-secondary dark:text-gray-400">22 Oct 2023</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center rounded-full bg-primary-light px-2.5 py-0.5 text-[11px] font-medium text-primary dark:bg-primary/20">Oct 2023</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-text-secondary hover:text-danger p-1"><span class="material-symbols-outlined text-[20px]">delete</span></button>
+</td>
+</tr>
+<tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">picture_as_pdf</span>
+<span class="font-medium text-text-main dark:text-white">Estado_BBVA_Sep23.pdf</span>
+</div>
+</td>
+<td class="px-6 py-4 text-text-secondary dark:text-gray-400">05 Sep 2023</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center rounded-full bg-primary-light px-2.5 py-0.5 text-[11px] font-medium text-primary dark:bg-primary/20">Sep 2023</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-text-secondary hover:text-danger p-1"><span class="material-symbols-outlined text-[20px]">delete</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</details>
+<details class="group bg-white rounded-xl border border-gray-100 shadow-sm dark:bg-card-dark dark:border-gray-800 overflow-hidden">
+<summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 list-none transition-colors">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-red-50 flex items-center justify-center text-red-600 dark:bg-red-900/20">
+<span class="material-symbols-outlined">credit_card</span>
+</div>
+<div>
+<h4 class="font-bold text-text-main dark:text-white">Santander Light •••• 8820</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">Crédito</span>
+<span class="text-xs text-text-secondary dark:text-gray-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+                                            Última sincronización: Ayer, 09:12 PM
+                                        </span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined expand-icon transition-transform text-text-secondary">expand_more</span>
+</summary>
+<div class="border-t border-gray-50 dark:border-gray-800">
+<div class="p-8 text-center">
+<span class="material-symbols-outlined text-gray-300 dark:text-gray-700 text-4xl mb-2">folder_open</span>
+<p class="text-sm text-text-secondary dark:text-gray-400">No hay archivos cargados recientemente para esta tarjeta.</p>
+<button class="mt-4 text-sm font-medium text-primary hover:underline">Subir primer estado</button>
+</div>
+</div>
+</details>
+<details class="group bg-white rounded-xl border border-gray-100 shadow-sm dark:bg-card-dark dark:border-gray-800 overflow-hidden">
+<summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 list-none transition-colors">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 dark:bg-indigo-900/20">
+<span class="material-symbols-outlined">payments</span>
+</div>
+<div>
+<h4 class="font-bold text-text-main dark:text-white">Gold Card •••• 1007</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">Crédito</span>
+<span class="text-xs text-text-secondary dark:text-gray-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+                                            Última sincronización: Hace 2 horas
+                                        </span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined expand-icon transition-transform text-text-secondary">expand_more</span>
+</summary>
+<div class="border-t border-gray-50 dark:border-gray-800">
+<div class="overflow-x-auto">
+<table class="w-full text-left text-sm">
+<thead class="bg-gray-50/50 text-xs uppercase text-text-secondary dark:bg-gray-800/30 dark:text-gray-500">
+<tr>
+<th class="px-6 py-3 font-semibold">Nombre del Archivo</th>
+<th class="px-6 py-3 font-semibold">Fecha de Carga</th>
+<th class="px-6 py-3 font-semibold">Periodo</th>
+<th class="px-6 py-3 font-semibold text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-gray-50 dark:divide-gray-800">
+<tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">description</span>
+<span class="font-medium text-text-main dark:text-white">Amex_Gold_Sept.csv</span>
+</div>
+</td>
+<td class="px-6 py-4 text-text-secondary dark:text-gray-400">02 Oct 2023</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center rounded-full bg-primary-light px-2.5 py-0.5 text-[11px] font-medium text-primary dark:bg-primary/20">Sep 2023</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-text-secondary hover:text-danger p-1"><span class="material-symbols-outlined text-[20px]">delete</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</details>
+</div>
+<div class="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="rounded-xl border border-primary/20 bg-primary/5 p-6 dark:bg-primary/10">
+<div class="flex items-center gap-3 text-primary font-bold mb-3">
+<span class="material-symbols-outlined">lightbulb</span>
+<h4>Consejo de Tomin AI</h4>
+</div>
+<p class="text-sm text-text-main dark:text-gray-300 leading-relaxed">
+                            Agrupar por tarjeta te permite detectar comportamientos específicos. Hemos notado que tus gastos en la tarjeta Santander de Crédito son un 15% mayores a tu promedio habitual este mes.
+                        </p>
+</div>
+<div class="rounded-xl border border-gray-100 bg-card-light p-6 shadow-sm dark:border-gray-800 dark:bg-card-dark">
+<div class="flex items-center gap-3 font-bold mb-3 text-text-main dark:text-white">
+<span class="material-symbols-outlined text-primary">security</span>
+<h4>Privacidad Bancaria</h4>
+</div>
+<p class="text-sm text-text-secondary dark:text-gray-400 leading-relaxed">
+                            Al organizar tus archivos, los metadatos de sincronización nos ayudan a asegurar que no existan duplicados en tus reportes financieros mensuales.
+                        </p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>

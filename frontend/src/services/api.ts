@@ -88,5 +88,33 @@ export const financialService = {
         });
         if (!response.ok) throw new Error('Failed to upload bank statement');
         return response.json();
+    },
+
+    async getStatements() {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_URL}/statements/`, {
+            headers
+        });
+        if (!response.ok) throw new Error('Failed to fetch statements');
+        return response.json();
+    },
+
+    async getStatementsCount() {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_URL}/statements/count`, {
+            headers
+        });
+        if (!response.ok) throw new Error('Failed to fetch statements count');
+        return response.json();
+    },
+
+    async deleteStatement(fileId: string) {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_URL}/statements/${fileId}`, {
+            method: 'DELETE',
+            headers
+        });
+        if (!response.ok) throw new Error('Failed to delete statement');
+        return response.json();
     }
 };

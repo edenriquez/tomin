@@ -47,6 +47,7 @@ class SavingsMovement:
 
 @dataclass
 class ParsedStatement:
+    account_type: str = "credit" # 'debit' or 'credit'
     transactions: List[Transaction] = field(default_factory=list)
     savings_movements: List[SavingsMovement] = field(default_factory=list)
 
@@ -88,6 +89,8 @@ class ProcessedFile:
     user_id: UUID
     hash: str # SHA-256 of extracted text, used as ID
     bank_name: str
+    account_type: str # 'debit' or 'credit'
+    file_name: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
     id: Optional[UUID] = None # Deprecated in favor of hash if used as ID
 

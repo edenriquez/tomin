@@ -97,3 +97,15 @@ class ProcessedFileRepository(ABC):
     @abstractmethod
     def exists(self, user_id: UUID, file_hash: str) -> bool:
         pass
+
+    @abstractmethod
+    def get_all_by_user(self, user_id: UUID) -> List[ProcessedFile]:
+        pass
+
+    @abstractmethod
+    def count_by_user(self, user_id: UUID) -> int:
+        pass
+
+    @abstractmethod
+    def delete_by_id(self, user_id: UUID, file_id: str) -> bool:
+        pass

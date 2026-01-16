@@ -10,7 +10,7 @@ from ...infrastructure.parsers.factory import BankParserFactory
 logger = logging.getLogger(__name__)
 
 class ProcessBankStatement:
-    def __init__(self, tx_repo, cat_repo, file_repo, savings_repo, merchant_repo=None, notification_manager=None):
+    def __init__(self, tx_repo, cat_repo, file_repo, savings_repo, merchant_repo=None, notification_manager=None, account_type=None):
         self.tx_repo = tx_repo
         self.cat_repo = cat_repo
         self.file_repo = file_repo
@@ -18,8 +18,9 @@ class ProcessBankStatement:
         self.merchant_repo = merchant_repo
         self.notification_manager = notification_manager
         self.parser_factory = BankParserFactory()
+        self.account_type = account_type
 
-    async def execute(self, user_id: UUID, file_content: bytes):
+    async def execute(self, user_id: UUID, file_content: bytes, file_name: str = None):
         """
         Processes a bank statement PDF:
         1. Extracts text
@@ -27,7 +28,7 @@ class ProcessBankStatement:
         3. Identifies Bank
         4. Parses transactions (Manual rules or LLM fallback)
         """
-        logger.info(f"Starting processing of bank statement for user {user_id}")
+        logger.info(f"Starting processing of bank statement {file_name} for user {user_id}")
         
         try:
             # 1. Extract Text
@@ -53,7 +54,9 @@ class ProcessBankStatement:
             self.file_repo.save(ProcessedFile(
                 user_id=user_id,
                 hash=file_hash,
-                bank_name=parser.bank_name
+                bank_name=parser.bank_name,
+                account_type=parsed_data.account_type,
+                file_name=file_name
             ))
             
             # Associate transactions and savings with the file

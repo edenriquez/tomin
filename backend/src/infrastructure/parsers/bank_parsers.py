@@ -65,7 +65,7 @@ class BanamexParser(BankParser):
                 user_id=user_id, merchant_name=normalize_merchant(description),
                 category_id=category_id
             ))
-        return ParsedStatement(transactions=transactions)
+        return ParsedStatement(transactions=transactions, account_type="credit")
 
     def _parse_debit(self, text: str, user_id: UUID, categorization_map: List, uncategorized_id: UUID) -> ParsedStatement:
         """
@@ -195,7 +195,7 @@ class BanamexParser(BankParser):
                     current_tx_desc_buffer.append(line)
 
         logger.info(f"BanamexParser: Finished parsing. Total transactions: {len(transactions)}")
-        return ParsedStatement(transactions=transactions)
+        return ParsedStatement(transactions=transactions, account_type="credit")
 
 class BBVAParser(BankParser):
     @property
@@ -309,7 +309,7 @@ class NuParser(BankParser):
                     category_id=category_id
                 ))
             
-        return ParsedStatement(transactions=transactions, savings_movements=savings_movements)
+        return ParsedStatement(transactions=transactions, savings_movements=savings_movements, account_type="debit")
 
 class GenericBankParser(BankParser):
     @property
