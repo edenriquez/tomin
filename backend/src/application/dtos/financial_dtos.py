@@ -25,3 +25,12 @@ class ForecastSuggestionDTO(BaseModel):
     suggested_reduction: float
     reason: str
     potential_savings: float
+
+class FinancialSummaryDTO(BaseModel):
+    total_balance: float
+    total_savings: float
+    total_debt: float
+    monthly_spending: float
+    monthly_income: float
+    spending_trend: float # Percentage change vs last month
+    balance_trend: float # Percentage change vs last month

@@ -36,6 +36,15 @@ export const financialService = {
         return response.json();
     },
 
+    async getFinancialSummary() {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_URL}/transactions/summary`, {
+            headers
+        });
+        if (!response.ok) throw new Error('Failed to fetch financial summary');
+        return response.json();
+    },
+
     async getTransactions() {
         const headers = await getAuthHeaders();
         const response = await fetch(`${API_URL}/transactions/`, {

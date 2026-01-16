@@ -23,11 +23,23 @@ export default function DashboardPage() {
     const {
         spendingData,
         transactions,
+        summaryData,
         loading,
         notification,
         fetchData,
         hideNotification
     } = useDashboardData(period);
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('es-MX', {
+            style: 'currency',
+            currency: 'MXN',
+        }).format(amount);
+    };
+
+    const getTrendColor = (trend: number) => {
+        return trend >= 0 ? "text-red-500" : "text-green-500";
+    };
 
     return (
         <div className="flex min-h-screen bg-[#f6f6f8] dark:bg-[#101622]">
@@ -42,7 +54,7 @@ export default function DashboardPage() {
                                 Dashboard Financiero
                             </h1>
                             <p className="text-[#616f89] dark:text-gray-400 text-base font-normal leading-normal">
-                                Bienvenido de nuevo, Alejandro. Aquí tienes un resumen de tus finanzas.
+                                Bienvenido de nuevo. Aquí tienes un resumen de tus finanzas.
                             </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -63,22 +75,22 @@ export default function DashboardPage() {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 <MetricCard
                                     title="Balance Total"
-                                    value="$45,200.00"
-                                    trend="+12% vs mes pasado"
+                                    value={summaryData ? formatCurrency(summaryData.total_balance) : "$0.00"}
+                                    trend={summaryData ? `${summaryData.balance_trend.toFixed(1)}% vs mes pasado` : "0% vs mes pasado"}
                                     icon={<Wallet size={20} />}
                                     iconBg="bg-blue-100 text-blue-600 dark:bg-blue-900/30"
                                 />
                                 <MetricCard
                                     title="Gastos del Mes"
-                                    value="$12,450.00"
-                                    trend="5% bajo presupuesto"
+                                    value={summaryData ? formatCurrency(summaryData.monthly_spending) : "$0.00"}
+                                    trend={summaryData ? `${summaryData.spending_trend.toFixed(1)}% vs mes pasado` : "0% vs mes pasado"}
                                     icon={<Receipt size={20} />}
                                     iconBg="bg-orange-100 text-orange-600 dark:bg-orange-900/30"
                                 />
                                 <MetricCard
-                                    title="Meta: Viaje a Cancún"
-                                    value="$15,000"
-                                    trend="65% completado"
+                                    title="Ahorro Total"
+                                    value={summaryData ? formatCurrency(summaryData.total_savings) : "$0.00"}
+                                    trend="En tus Cajitas"
                                     icon={<Plane size={20} />}
                                     iconBg="bg-green-100 text-green-600 dark:bg-green-900/30"
                                 />

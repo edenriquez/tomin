@@ -6,6 +6,7 @@ import { API_URL } from '@/services/api';
 export const useDashboardData = (period: string = 'weekly') => {
     const [spendingData, setSpendingData] = useState<any[]>([]);
     const [transactions, setTransactions] = useState<any[]>([]);
+    const [summaryData, setSummaryData] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [userId, setUserId] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ message: string; visible: boolean }>({
@@ -27,9 +28,10 @@ export const useDashboardData = (period: string = 'weekly') => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [distribution, txs] = await Promise.all([
+            const [distribution, txs, summary] = await Promise.all([
                 financialService.getSpendingDistribution(period),
-                financialService.getTransactions()
+                financialService.getTransactions(),
+                financialService.getFinancialSummary()
             ]);
 
             const mappedDistribution = distribution.map((item: any) => ({
@@ -41,6 +43,7 @@ export const useDashboardData = (period: string = 'weekly') => {
 
             setSpendingData(mappedDistribution);
             setTransactions(txs);
+            setSummaryData(summary);
         } catch (err) {
             console.error('Error fetching dashboard data:', err);
         } finally {
@@ -55,7 +58,6 @@ export const useDashboardData = (period: string = 'weekly') => {
     useEffect(() => {
         if (!userId) return;
 
-        // Note: SSE endpoint still requires userId in path for now, need to ensure backend permits this
         const eventSource = new EventSource(`${API_URL}/notifications/${userId}`);
 
         eventSource.onmessage = (event) => {
@@ -83,6 +85,7 @@ export const useDashboardData = (period: string = 'weekly') => {
     return {
         spendingData,
         transactions,
+        summaryData,
         loading,
         notification,
         fetchData,

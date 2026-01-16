@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import logging
 from src.application.use_cases.get_recurring_transactions import GetRecurringTransactions
 from src.application.use_cases.get_spending_distribution import GetSpendingDistribution
+from src.application.use_cases.get_financial_summary import GetFinancialSummary
 from src.application.use_cases.process_bank_statement import ProcessBankStatement
 from src.infrastructure.database import SessionLocal, get_db
 from src.infrastructure.supabase_repositories import (
@@ -52,6 +53,16 @@ def get_distribution(
     cat_repo = SupabaseCategoryRepository(db)
     use_case = GetSpendingDistribution(tx_repo, cat_repo)
     return use_case.execute(UUID(user_id), period=period)
+
+@router.get("/summary")
+def get_summary(
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    tx_repo = SupabaseTransactionRepository(db)
+    savings_repo = SupabaseSavingsMovementRepository(db)
+    use_case = GetFinancialSummary(tx_repo, savings_repo)
+    return use_case.execute(UUID(user_id))
 
 @router.post("/upload-bank-statement")
 async def upload_bank_statement(
