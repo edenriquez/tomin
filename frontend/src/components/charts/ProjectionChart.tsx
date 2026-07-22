@@ -1,74 +1,53 @@
 "use client";
 
-import React from 'react';
 import {
-    AreaChart,
     Area,
+    AreaChart,
+    CartesianGrid,
+    Legend,
+    Line,
+    ResponsiveContainer,
+    Tooltip,
     XAxis,
     YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    ReferenceLine
-} from 'recharts';
+} from "recharts";
+import { ForecastPoint } from "@/lib/api";
 
-const data = [
-    { month: 'Jan', baseline: 400000, optimized: 400000 },
-    { month: 'Feb', baseline: 410000, optimized: 415000 },
-    { month: 'Mar', baseline: 420000, optimized: 435000 },
-    { month: 'Apr', baseline: 430000, optimized: 460000 },
-    { month: 'May', baseline: 440000, optimized: 490000 },
-    { month: 'Jun', baseline: 450000, optimized: 520000 },
-];
-
-export const ProjectionChart = () => {
+export function ProjectionChart({ points }: { points: ForecastPoint[] }) {
+    const data = points.map((p) => ({
+        month: `M${p.month_offset}`,
+        Baseline: p.baseline,
+        Optimizado: p.optimized,
+    }));
     return (
-        <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data}>
-                    <defs>
-                        <linearGradient id="colorOptimized" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#135bec" stopOpacity={0.1} />
-                            <stop offset="95%" stopColor="#135bec" stopOpacity={0} />
-                        </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis
-                        dataKey="month"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: '#64748b', fontSize: 12 }}
-                        dy={10}
-                    />
-                    <YAxis
-                        hide
-                        domain={['dataMin - 50000', 'dataMax + 50000']}
-                    />
-                    <Tooltip
-                        contentStyle={{
-                            borderRadius: '12px',
-                            border: 'none',
-                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
-                        }}
-                    />
-                    <Area
-                        type="monotone"
-                        dataKey="baseline"
-                        stroke="#94a3b8"
-                        strokeWidth={2}
-                        strokeDasharray="5 5"
-                        fill="transparent"
-                    />
-                    <Area
-                        type="monotone"
-                        dataKey="optimized"
-                        stroke="#135bec"
-                        strokeWidth={3}
-                        fillOpacity={1}
-                        fill="url(#colorOptimized)"
-                    />
-                </AreaChart>
-            </ResponsiveContainer>
-        </div>
+        <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={data}>
+                <defs>
+                    <linearGradient id="opt" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                    </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
+                <YAxis stroke="#94a3b8" fontSize={12} />
+                <Tooltip />
+                <Legend />
+                <Area
+                    type="monotone"
+                    dataKey="Optimizado"
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    fill="url(#opt)"
+                />
+                <Line
+                    type="monotone"
+                    dataKey="Baseline"
+                    stroke="#94a3b8"
+                    strokeDasharray="5 5"
+                    dot={false}
+                />
+            </AreaChart>
+        </ResponsiveContainer>
     );
-};
+}

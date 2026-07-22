@@ -1,0 +1,25 @@
+{
+    "expo": {
+        "name": "Tomin",
+        "slug": "tomin",
+        "scheme": "tomin",
+        "version": "0.2.0",
+        "orientation": "portrait",
+        "userInterfaceStyle": "light",
+        "newArchEnabled": true,
+        "splash": {
+            "backgroundColor": "#2563eb"
+        },
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "mx.tomin.app"
+        },
+        "android": {
+            "package": "mx.tomin.app"
+        },
+        "plugins": ["expo-router"],
+        "extra": {
+            "apiUrl": "http://localhost:8000"
+        }
+    }
+}
