@@ -1,52 +1,45 @@
-# Tomin: Tu brújula financiera 🧭
+# Tomin
 
-**Tomin** es una herramienta de análisis financiero potenciada por IA para usuarios mexicanos. Permite recuperar el control de tus finanzas sin abrumarte, utilizando una interfaz minimalista y clara.
+Financial visibility tool for the Mexican market ("Toma el control de tu peso").
+Aggregates messy bank data into clear insights, forecasts, and goals.
 
-## 🏗️ Estructura del Proyecto
+The **phone is the durable source of truth** for raw statements: the mobile app
+stores bank statements / SAT XML on-device and uploads only a *transient* copy
+to the backend, which parses it, stores the structured data, discards the raw
+file, and feeds an analytics cube. Web and mobile are display layers over that
+cube.
 
-El repositorio es un monorepo que contiene tres proyectos principales:
+## Architecture
 
-- `backend/`: API en Python con Clean Architecture (Entidades, Casos de Uso y DTOs listos).
-- `frontend/`: Aplicación en Next.js (Dashboard, Pronósticos y Landing Page listos).
-- `infrastructure/`: Configuración de Terraform para despliegue en la nube.
-
-### Flujos Implementados 🚀
-
-1.  **Dashboard Moderno**: Visualización de balance, gastos y distribución de categorías.
-2.  **Motor de Pronósticos**: Simulador interactivo "What-if" para proyectar el patrimonio.
-3.  **Insights de IA**: Sugerencias personalizadas para optimizar el capital.
-4.  **Clean Backend**: Arquitectura modular lista para conectar con Supabase/OpenAI.
-
-```text
-.
-├── backend/                # Lógica de negocio y API (Python)
-│   ├── src/
-│   │   ├── application/    # Casos de uso y DTOs
-│   │   ├── domain/         # Entidades y contratos de repositorios
-│   │   └── infrastructure/ # Implementaciones técnicas (DB, APIs externas)
-│   ├── tests/              # Pruebas unitarias e integración
-│   └── pyproject.toml
-├── frontend/               # Interfaz de usuario (Next.js)
-│   ├── src/
-│   │   ├── app/            # Rutas y páginas
-│   │   ├── components/     # UI y Gráficos
-│   │   ├── hooks/          # Hooks personalizados
-│   │   └── services/       # Comunicación con el Backend
-│   └── package.json
-└── infrastructure/         # Despliegue (Terraform)
-    └── terraform/
-        ├── modules/        # Módulos reutilizables
-        └── main.tf         # Configuración principal
+```
+mobile/     React Native (Expo) app - on-device statement store + display
+frontend/   Next.js web app - display layer over the cube
+backend/    Flask hexagonal API - OCR/parse pipeline + DuckDB analytics cube
+mocks/      Design references (7 screens)
+supabase_setup.sql   Postgres schema + RLS + auth trigger
 ```
 
-## 🧠 Decisiones Arquitectónicas
+Ingestion pipeline (backend): `upload -> extract (PDF text / OCR / SAT XML)
+-> classify template -> parse -> categorize -> persist structured data
+(raw file discarded) -> feed DuckDB cube`.
 
-1.  **Backend: Clean Architecture**: Separación estricta entre la lógica de negocio (Dominio) y los detalles técnicos (Infraestructura). Esto permite probar casos de uso sin depender de una base de datos real.
-2.  **Frontend: Progressive Disclosure**: La interfaz muestra lo más importante primero (Gastos totales, balance) y permite profundizar en detalles (transacciones específicas, proyecciones) solo cuando el usuario lo desea.
-3.  **Infraestructura: Serverless First**: Uso de tecnologías que escalan a cero y ofrecen niveles gratuitos generosos (Vercel, AWS Lambda/Google Cloud Run, Supabase).
+- Backend: hexagonal (ports & adapters), Flask HTTP, SQLAlchemy (Supabase
+  Postgres or SQLite), local OCR (pdfplumber + optional Tesseract), DuckDB cube.
+- Auth: Supabase (JWT verified server-side); disabled by default for local dev.
 
-## 🚀 Próximos Pasos
+## Quickstart
 
-1.  **Dominio Backend**: Definir los modelos de datos en `backend/src/domain/entities/`.
-2.  **Dashboard Frontend**: Implementar la visualización principal basada en los mocks.
-3.  **Motor de Pronósticos**: Desarrollar la lógica para detectar transacciones recurrentes y generar proyecciones.
+```bash
+# Backend (Python 3.10+)
+cd backend && python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]" && cp .env.example .env
+python -m tomin.main               # http://localhost:8000
+
+# Web
+cd frontend && npm install && npm run dev   # http://localhost:3000
+
+# Mobile
+cd mobile && npm install && npx expo start
+```
+
+See each package's `README.md` for details.

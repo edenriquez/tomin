@@ -3,49 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --primary: #135bec;
-  --primary-light: #e0eaff;
-  --background-light: #f6f6f8;
-  --background-dark: #101622;
-  --card-light: #ffffff;
-  --card-dark: #1a2332;
-  --text-main: #111318;
-  --text-secondary: #616f89;
-  --success: #07883b;
-  --danger: #d32f2f;
-  --border-light: #e2e8f0;
-  --border-dark: #2d3748;
+    --background: #f8fafc;
 }
 
-@layer base {
-  body {
-    @apply bg-[var(--background-light)] text-[var(--text-main)] transition-colors duration-200;
-  }
-  .dark body {
-    @apply bg-[var(--background-dark)] text-white;
-  }
+body {
+    background: var(--background);
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
 }
 
-@layer components {
-  .card {
-    @apply rounded-xl border border-[var(--border-light)] bg-[var(--card-light)] p-6 shadow-sm dark:border-[var(--border-dark)] dark:bg-[var(--card-dark)];
-  }
-  .btn-primary {
-    @apply bg-[var(--primary)] text-white hover:opacity-90 px-4 py-2 rounded-lg font-medium transition-all;
-  }
-}
-@layer utilities {
-  .animate-spin-slow {
-    animation: spin 3s linear infinite;
-  }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Glassmorphism utility */
-.glass {
-  @apply bg-white/70 backdrop-blur-md dark:bg-black/40;
+.card {
+    @apply bg-white rounded-2xl border border-slate-200 p-6 shadow-sm;
 }
