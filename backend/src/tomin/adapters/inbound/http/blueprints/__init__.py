@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from flask import Flask
 
+from .admin import admin_bp
 from .analytics import analytics_bp
 from .forecast import forecast_bp
 from .goals import goals_bp
@@ -17,3 +18,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(analytics_bp)
     app.register_blueprint(forecast_bp)
     app.register_blueprint(goals_bp)
+    app.register_blueprint(admin_bp)

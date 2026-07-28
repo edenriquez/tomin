@@ -4,14 +4,17 @@ from .get_spending_summary import GetSpendingSummaryUseCase
 from .goals import ManageGoalsUseCase
 from .list_transactions import ListTransactionsUseCase
 from .process_file import ProcessFileResult, ProcessFileUseCase
+from .rebuild_cube import RebuildCubeResult, RebuildCubeUseCase
 
 __all__ = [
-    "ProcessFileUseCase",
-    "ProcessFileResult",
-    "ListTransactionsUseCase",
-    "GetSpendingSummaryUseCase",
     "DetectRecurringUseCase",
     "GetForecastUseCase",
-    "SimulateForecastUseCase",
+    "GetSpendingSummaryUseCase",
+    "ListTransactionsUseCase",
     "ManageGoalsUseCase",
+    "ProcessFileResult",
+    "ProcessFileUseCase",
+    "RebuildCubeResult",
+    "RebuildCubeUseCase",
+    "SimulateForecastUseCase",
 ]

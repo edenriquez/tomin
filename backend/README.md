@@ -35,6 +35,23 @@ Defaults to a local SQLite DB and disabled auth so it runs offline. Point
 `DATABASE_URL` at Supabase Postgres and set `SUPABASE_JWT_SECRET` +
 `AUTH_DISABLED=false` for a real deployment.
 
+## The analytics cube is disposable
+
+The DuckDB cube holds only *derived* state; the relational tables are the
+record of truth. `POST /api/admin/cube/rebuild` drops the calling user's rows
+in `fact_transactions` and re-derives them by streaming the full transaction
+history back through the projection.
+
+That is deliberate leverage, not a debugging tool: every later change to the
+fact table (transfer flags, dedup fingerprints, tags) becomes "change the
+projection, rebuild" instead of a bespoke DuckDB migration — and it keeps the
+cost of replacing DuckDB with Postgres down to one adapter.
+
+There are no rollup tables. `rollup_monthly` and `rollup_category` were written
+on every upload and delete, read by nothing, and `refresh_rollups` ignored its
+`user_id` and rebuilt every user's rollups each time; they were deleted rather
+than fixed.
+
 ## Database schema & migrations
 
 `adapters/outbound/persistence/models.py` is the **single source of truth** for

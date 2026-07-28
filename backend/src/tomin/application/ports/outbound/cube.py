@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from ...dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 from ....domain.entities import Transaction
+from ...dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 
 
 @runtime_checkable
@@ -14,7 +15,13 @@ class CubeWriter(Protocol):
 
     def upsert_transactions(self, transactions: list[Transaction]) -> None: ...
 
-    def refresh_rollups(self, user_id: UUID) -> None: ...
+    def rebuild_for_user(self, user_id: UUID, transactions: Iterable[Transaction]) -> int:
+        """Drop this user's facts and re-derive them from ``transactions``.
+
+        Returns the number of rows written. The caller supplies the source data
+        so that the cube adapter never depends on a repository.
+        """
+        ...
 
 
 @runtime_checkable

@@ -124,7 +124,6 @@ class ProcessFileUseCase:
             self._statements.update(statement)
 
             self._cube.upsert_transactions(domain_txs)
-            self._cube.refresh_rollups(user_id)
 
             return ProcessFileResult(
                 statement_id=statement.id,

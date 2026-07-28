@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
@@ -108,6 +109,23 @@ class SqlTransactionRepository:
                 .offset(offset)
             )
             return [_to_transaction(m) for m in s.scalars(stmt).all()]
+
+    def iter_for_user(self, user_id: UUID, *, batch_size: int = 500) -> Iterator[Transaction]:
+        """Stream a user's entire history, oldest first, in batches.
+
+        ``yield_per`` keeps the result set off the heap; rows are converted to
+        detached domain entities as they arrive, so the caller never touches a
+        live ORM object.
+        """
+        with self._db.session() as s:
+            stmt = (
+                select(TransactionModel)
+                .where(TransactionModel.user_id == _u(user_id))
+                .order_by(TransactionModel.tx_date, TransactionModel.id)
+                .execution_options(yield_per=batch_size)
+            )
+            for m in s.scalars(stmt):
+                yield _to_transaction(m)
 
     def count_for_user(self, user_id: UUID, **filters) -> int:
         with self._db.session() as s:

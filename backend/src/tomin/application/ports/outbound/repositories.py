@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from ...dtos.extraction import ParsedTransaction  # noqa: F401  (re-exported convenience)
 from ....domain.entities import (
     Account,
     Category,
@@ -12,6 +12,7 @@ from ....domain.entities import (
     Statement,
     Transaction,
 )
+from ...dtos.extraction import ParsedTransaction  # noqa: F401  (re-exported convenience)
 
 
 @runtime_checkable
@@ -31,6 +32,16 @@ class TransactionRepository(Protocol):
     ) -> list[Transaction]: ...
 
     def count_for_user(self, user_id: UUID, **filters) -> int: ...
+
+    def iter_for_user(self, user_id: UUID, *, batch_size: int = 500) -> Iterator[Transaction]:
+        """Stream **every** transaction for a user, oldest first.
+
+        A separate method rather than `list_for_user(limit=10_000_000)`: a
+        magic limit is a silent correctness bug the day someone exceeds it, and
+        a full-history read wants to be streamed rather than materialised.
+        Used by the cube rebuild.
+        """
+        ...
 
 
 @runtime_checkable

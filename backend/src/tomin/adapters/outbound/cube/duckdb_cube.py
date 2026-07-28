@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
@@ -18,13 +19,25 @@ from ....domain.entities import Category, Transaction
 #: is Mexican, so MXN is the default rather than a required argument.
 DEFAULT_CURRENCY = "MXN"
 
+_UPSERT_FACT = "INSERT OR REPLACE INTO fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+
 
 class DuckDbCube:
     """DuckDB-backed analytics cube (implements CubeWriter + CubeReader).
 
     Structured transactions are streamed into ``fact_transactions`` as they are
-    processed; rollup tables (``rollup_monthly``, ``rollup_category``) are
-    rebuilt on demand so dashboards can query pre-aggregated data quickly.
+    processed, and every read aggregates that one fact table directly.
+
+    There are deliberately **no rollup tables**. The previous ``rollup_monthly``
+    and ``rollup_category`` were written on every upload and every delete and
+    then never read by anything; ``refresh_rollups`` also ignored its
+    ``user_id`` argument and rebuilt every user's rollups each time. They have
+    been deleted rather than fixed. If aggregate reads ever become slow enough
+    to matter, a materialisation should be added back with a reader that
+    actually consults it.
+
+    The cube is derived state. :meth:`rebuild_for_user` reconstructs it from
+    the relational tables, which is what makes it safe to throw away.
     """
 
     def __init__(self, path: str = ":memory:") -> None:
@@ -68,48 +81,42 @@ class DuckDbCube:
             return
         with self._lock:
             for t in transactions:
-                self._con.execute(
-                    "INSERT OR REPLACE INTO fact_transactions VALUES "
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [
-                        str(t.id),
-                        str(t.user_id),
-                        t.tx_date,
-                        t.amount,
-                        t.currency,
-                        t.tx_type.value,
-                        str(t.category_id) if t.category_id else None,
-                        str(t.merchant_id) if t.merchant_id else None,
-                        t.description or t.raw_description,
-                    ],
-                )
+                self._con.execute(_UPSERT_FACT, self._fact_row(t))
 
-    def refresh_rollups(self, user_id: UUID) -> None:
+    def rebuild_for_user(self, user_id: UUID, transactions: Iterable[Transaction]) -> int:
+        """Discard and re-derive one user's fact rows. Returns the row count.
+
+        The cube is a *derived* store: the relational tables are the record of
+        truth and this can always reconstruct it. That is what makes DuckDB
+        replaceable — and what makes every later backfill (transfer flags,
+        fingerprints, tags) a rebuild rather than a bespoke migration.
+
+        Delete and repopulate happen under one lock so a concurrent read never
+        observes a user with no transactions. ``transactions`` is supplied by
+        the caller rather than fetched here: the cube adapter must not reach
+        for a repository.
+        """
         with self._lock:
-            self._con.execute(
-                """
-                CREATE OR REPLACE TABLE rollup_monthly AS
-                SELECT user_id,
-                       strftime(tx_date, '%Y-%m') AS month,
-                       tx_type,
-                       SUM(amount) AS total
-                FROM fact_transactions
-                GROUP BY user_id, month, tx_type;
-                """
-            )
-            self._con.execute(
-                """
-                CREATE OR REPLACE TABLE rollup_category AS
-                SELECT f.user_id,
-                       f.category_id,
-                       COALESCE(d.name, 'Sin Categoria') AS category_name,
-                       SUM(f.amount) AS total
-                FROM fact_transactions f
-                LEFT JOIN dim_category d ON f.category_id = d.category_id
-                WHERE f.tx_type = 'expense'
-                GROUP BY f.user_id, f.category_id, category_name;
-                """
-            )
+            self._con.execute("DELETE FROM fact_transactions WHERE user_id = ?", [str(user_id)])
+            count = 0
+            for t in transactions:
+                self._con.execute(_UPSERT_FACT, self._fact_row(t))
+                count += 1
+        return count
+
+    @staticmethod
+    def _fact_row(t: Transaction) -> list:
+        return [
+            str(t.id),
+            str(t.user_id),
+            t.tx_date,
+            t.amount,
+            t.currency,
+            t.tx_type.value,
+            str(t.category_id) if t.category_id else None,
+            str(t.merchant_id) if t.merchant_id else None,
+            t.description or t.raw_description,
+        ]
 
     # --- reader ----------------------------------------------------------
     def spending_by_category(

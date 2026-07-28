@@ -28,6 +28,7 @@ from ..application.use_cases import (
     ListTransactionsUseCase,
     ManageGoalsUseCase,
     ProcessFileUseCase,
+    RebuildCubeUseCase,
     SimulateForecastUseCase,
 )
 from .settings import Settings
@@ -129,6 +130,10 @@ class Container:
     @cached_property
     def simulate_forecast(self) -> SimulateForecastUseCase:
         return SimulateForecastUseCase()
+
+    @cached_property
+    def rebuild_cube(self) -> RebuildCubeUseCase:
+        return RebuildCubeUseCase(self.transactions, self.cube)
 
     @cached_property
     def manage_goals(self) -> ManageGoalsUseCase:
