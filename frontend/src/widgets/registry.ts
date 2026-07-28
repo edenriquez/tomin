@@ -11,6 +11,7 @@
 import type { MetricSpec, WidgetSize } from "@/lib/metrics";
 import { accumulatedSpend } from "./defs/accumulatedSpend";
 import { cashWithdrawn } from "./defs/cashWithdrawn";
+import { financialAdvice } from "./defs/financialAdvice";
 import { investmentProjection } from "./defs/investmentProjection";
 import { lifetimeFlow } from "./defs/lifetimeFlow";
 import { monthlyCashFlow } from "./defs/monthlyCashFlow";
@@ -27,6 +28,7 @@ export const WIDGETS: WidgetDef[] = [
     lifetimeFlow,
     tagTotals,
     investmentProjection,
+    financialAdvice,
 ];
 
 const BY_ID: Record<string, WidgetDef> = Object.fromEntries(WIDGETS.map((w) => [w.id, w]));
@@ -35,7 +37,14 @@ export function getWidget(metricId: string): WidgetDef | undefined {
     return BY_ID[metricId];
 }
 
-const KNOWN_GROUPS: WidgetGroup[] = ["Gasto", "Ingreso", "Patrimonio", "Fiscal", "Riesgo"];
+const KNOWN_GROUPS: WidgetGroup[] = [
+    "Gasto",
+    "Ingreso",
+    "Patrimonio",
+    "Fiscal",
+    "Riesgo",
+    "Consejos",
+];
 
 function asGroup(value: string): WidgetGroup {
     return (KNOWN_GROUPS as string[]).includes(value) ? (value as WidgetGroup) : "Gasto";
