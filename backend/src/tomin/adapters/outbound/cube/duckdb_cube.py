@@ -24,6 +24,13 @@ _UPSERT_FACT = (
     "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
+#: Bump whenever the cube table shapes change. The cube is derived state with
+#: no migrations: an on-disk file created by an older build simply gets its
+#: tables dropped and recreated, then repopulated from the relational store.
+#: Without this, ``CREATE TABLE IF NOT EXISTS`` silently keeps the old shape
+#: and every metric that references a new column fails at read time.
+_SCHEMA_VERSION = 2
+
 
 class DuckDbCube:
     """DuckDB-backed analytics cube (implements CubeWriter + CubeReader).
@@ -63,6 +70,34 @@ class DuckDbCube:
 
     def _create_schema(self) -> None:
         assert self._con is not None
+        self._con.execute(
+            "CREATE TABLE IF NOT EXISTS cube_meta (key VARCHAR PRIMARY KEY, value INTEGER);"
+        )
+        row = self._con.execute(
+            "SELECT value FROM cube_meta WHERE key = 'schema_version'"
+        ).fetchone()
+        has_facts = (
+            self._con.execute(
+                "SELECT count(*) FROM information_schema.tables "
+                "WHERE table_name = 'fact_transactions'"
+            ).fetchone()[0]
+            > 0
+        )
+        # No recorded version but a facts table present = a file from before
+        # cube_meta existed; its shape is unknowable, so treat it as stale.
+        if has_facts and (row is None or row[0] != _SCHEMA_VERSION):
+            # Stale shape from an older build. Derived state: drop and let the
+            # CREATEs below rebuild the shape. Facts are gone until someone
+            # repopulates (upload, or POST /api/admin/cube/rebuild) — an empty
+            # correct answer beats a binder error on every metric.
+            self._con.execute("DROP TABLE IF EXISTS fact_transactions;")
+            self._con.execute("DROP TABLE IF EXISTS bridge_transaction_tag;")
+            self._con.execute("DROP TABLE IF EXISTS dim_tag;")
+            self._con.execute("DROP TABLE IF EXISTS dim_category;")
+        self._con.execute(
+            "INSERT OR REPLACE INTO cube_meta VALUES ('schema_version', ?)",
+            [_SCHEMA_VERSION],
+        )
         self._con.execute(
             """
             CREATE TABLE IF NOT EXISTS fact_transactions (
