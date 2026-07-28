@@ -7,6 +7,8 @@ from uuid import UUID
 from ....domain.entities import (
     Account,
     Category,
+    Dashboard,
+    DashboardWidget,
     Goal,
     Merchant,
     Statement,
@@ -84,6 +86,17 @@ class GoalRepository(Protocol):
     def list_for_user(self, user_id: UUID) -> list[Goal]: ...
 
     def delete(self, goal_id: UUID) -> None: ...
+
+
+@runtime_checkable
+class DashboardRepository(Protocol):
+    def get_default_for_user(self, user_id: UUID) -> Dashboard | None: ...
+
+    def add(self, dashboard: Dashboard) -> None: ...
+
+    def replace_widgets(self, dashboard_id: UUID, widgets: list[DashboardWidget]) -> None:
+        """Swap a dashboard's whole widget list. A layout is saved as a unit."""
+        ...
 
 
 @runtime_checkable

@@ -4,7 +4,9 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ....application.dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
-from ....domain.entities import Goal, Statement, Transaction
+from ....application.dtos.metrics import MetricError, MetricResult
+from ....domain.entities import Dashboard, DashboardWidget, Goal, Statement, Transaction
+from ....domain.metrics.spec import MetricSpec
 from ....domain.services.forecasting import ForecastPoint
 
 
@@ -72,6 +74,97 @@ def forecast_point_json(p: ForecastPoint) -> dict:
         "month_offset": p.month_offset,
         "baseline": _num(p.baseline_net_worth),
         "optimized": _num(p.optimized_net_worth),
+    }
+
+
+def metric_spec_json(spec: MetricSpec) -> dict:
+    """The catalog as data: everything the widget picker needs before querying.
+
+    ``kind`` is deliberately omitted -- whether a metric compiles to SQL or runs
+    a Python function is an implementation fact, and publishing it would let a
+    client couple to it and block the migration later.
+    """
+    return {
+        "id": spec.id,
+        "title": spec.title,
+        "description": spec.description,
+        "group": spec.group,
+        "shape": spec.shape,
+        "unit": spec.unit,
+        "dimensions": list(spec.dimensions),
+        "filters": list(spec.filters),
+        "grains": list(spec.grains),
+        "default_dimensions": list(spec.default_dimensions),
+        "default_grain": spec.default_grain,
+        "cumulative": spec.cumulative,
+        "requires": list(spec.requires),
+        "params": [
+            {
+                "name": p.name,
+                "type": p.type,
+                "required": p.required,
+                # Decimals reach JSON as strings, like every other money value.
+                "default": None if p.default is None else str(p.default),
+                "minimum": p.minimum,
+                "maximum": p.maximum,
+            }
+            for p in spec.params
+        ],
+    }
+
+
+def metric_result_json(result: MetricResult) -> dict:
+    return {
+        "metric": result.metric_id,
+        "shape": result.shape,
+        "unit": result.unit,
+        "value": result.value,
+        "rows": result.rows,
+        "meta": {
+            "currency": result.meta.currency,
+            "overlapping": result.meta.overlapping,
+            "partial": result.meta.partial,
+            "source_txn_count": result.meta.source_txn_count,
+        },
+    }
+
+
+def metric_error_json(error: MetricError) -> dict:
+    return {
+        "error": {
+            "metric": error.metric_id,
+            "code": error.code,
+            "message": error.message,
+        }
+    }
+
+
+def metric_entry_json(entry: MetricResult | MetricError) -> dict:
+    return (
+        metric_error_json(entry)
+        if isinstance(entry, MetricError)
+        else metric_result_json(entry)
+    )
+
+
+def dashboard_widget_json(w: DashboardWidget) -> dict:
+    return {
+        "id": str(w.id),
+        "metric_id": w.metric_id,
+        "position": w.position,
+        "size": w.size,
+        "params": w.params,
+        "title_override": w.title_override,
+    }
+
+
+def dashboard_json(d: Dashboard) -> dict:
+    return {
+        "id": str(d.id),
+        "name": d.name,
+        "is_default": d.is_default,
+        "updated_at": _iso(d.updated_at),
+        "widgets": [dashboard_widget_json(w) for w in d.widgets],
     }
 
 

@@ -2,17 +2,19 @@ from __future__ import annotations
 
 from functools import cached_property
 
-from ..adapters.outbound.cube import DuckDbCube
+from ..adapters.outbound.cube import DuckDbCube, DuckDbMetricEngine
 from ..adapters.outbound.extraction import (
     KeywordTemplateClassifier,
     PdfExtractor,
     SatXmlExtractor,
 )
+from ..adapters.outbound.metrics import InvestmentProjectionResolver
 from ..adapters.outbound.parsing import DefaultParserFactory
 from ..adapters.outbound.persistence import (
     Database,
     SqlAccountRepository,
     SqlCategoryRepository,
+    SqlDashboardRepository,
     SqlGoalRepository,
     SqlMerchantRepository,
     SqlStatementRepository,
@@ -24,12 +26,16 @@ from ..adapters.outbound.storage import TransientFileStorage
 from ..application.use_cases import (
     DetectRecurringUseCase,
     GetForecastUseCase,
+    GetHomeDashboardUseCase,
+    GetMetricCatalogUseCase,
     GetSpendingSummaryUseCase,
     ListTransactionsUseCase,
     ManageGoalsUseCase,
     ManageStatementsUseCase,
     ProcessFileUseCase,
     RebuildCubeUseCase,
+    RunMetricQueriesUseCase,
+    SaveHomeDashboardUseCase,
     SimulateForecastUseCase,
 )
 from .settings import Settings
@@ -55,6 +61,17 @@ class Container:
         return DuckDbCube(self.settings.cube_path)
 
     @cached_property
+    def metric_engine(self) -> DuckDbMetricEngine:
+        # Borrows the cube's connection rather than opening its own: DuckDB is
+        # single-writer per file.
+        return DuckDbMetricEngine(self.cube)
+
+    @cached_property
+    def metric_resolvers(self) -> list:
+        """Computed metrics. One entry per metric that is a Python function."""
+        return [InvestmentProjectionResolver()]
+
+    @cached_property
     def file_storage(self) -> TransientFileStorage:
         return TransientFileStorage()
 
@@ -74,6 +91,10 @@ class Container:
     @cached_property
     def goals_repo(self) -> SqlGoalRepository:
         return SqlGoalRepository(self.database)
+
+    @cached_property
+    def dashboards(self) -> SqlDashboardRepository:
+        return SqlDashboardRepository(self.database)
 
     @cached_property
     def categories(self) -> SqlCategoryRepository:
@@ -127,6 +148,24 @@ class Container:
     @cached_property
     def spending_summary(self) -> GetSpendingSummaryUseCase:
         return GetSpendingSummaryUseCase(self.cube)
+
+    @cached_property
+    def run_metric_queries(self) -> RunMetricQueriesUseCase:
+        return RunMetricQueriesUseCase(
+            engine=self.metric_engine, resolvers=self.metric_resolvers
+        )
+
+    @cached_property
+    def metric_catalog(self) -> GetMetricCatalogUseCase:
+        return GetMetricCatalogUseCase()
+
+    @cached_property
+    def get_home_dashboard(self) -> GetHomeDashboardUseCase:
+        return GetHomeDashboardUseCase(self.dashboards)
+
+    @cached_property
+    def save_home_dashboard(self) -> SaveHomeDashboardUseCase:
+        return SaveHomeDashboardUseCase(self.dashboards)
 
     @cached_property
     def detect_recurring(self) -> DetectRecurringUseCase:

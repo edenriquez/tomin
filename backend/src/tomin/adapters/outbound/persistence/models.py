@@ -4,10 +4,12 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     func,
@@ -94,6 +96,40 @@ class TransactionModel(Base):
     category_id: Mapped[str | None] = mapped_column(UUIDStr, nullable=True)
     merchant_id: Mapped[str | None] = mapped_column(UUIDStr, nullable=True)
     created_at: Mapped[datetime] = _created_at()
+
+
+class DashboardModel(Base):
+    __tablename__ = "dashboards"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class DashboardWidgetModel(Base):
+    """A widget row. Owned by its dashboard, and deleted with it.
+
+    ``ondelete="CASCADE"`` rather than an ORM cascade: the layout is replaced
+    wholesale on every save, and a widget whose dashboard is gone is not a
+    recoverable state worth leaving to application code to remember.
+    """
+
+    __tablename__ = "dashboard_widgets"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    dashboard_id: Mapped[str] = mapped_column(
+        UUIDStr, ForeignKey("dashboards.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer)
+    size: Mapped[str] = mapped_column(String(8), default="md")
+    metric_id: Mapped[str] = mapped_column(String(64))
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    title_override: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class GoalModel(Base):

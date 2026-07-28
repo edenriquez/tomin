@@ -10,6 +10,8 @@ from sqlalchemy import func, select
 from ....domain.entities import (
     Account,
     Category,
+    Dashboard,
+    DashboardWidget,
     Goal,
     Merchant,
     Statement,
@@ -25,6 +27,8 @@ from .db import Database
 from .models import (
     AccountModel,
     CategoryModel,
+    DashboardModel,
+    DashboardWidgetModel,
     GoalModel,
     MerchantModel,
     StatementModel,
@@ -311,6 +315,98 @@ class SqlGoalRepository:
             target_amount=Decimal(str(m.target_amount)),
             current_amount=Decimal(str(m.current_amount)),
             target_date=m.target_date,
+        )
+
+
+class SqlDashboardRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def get_default_for_user(self, user_id: UUID) -> Dashboard | None:
+        with self._db.session() as s:
+            stmt = (
+                select(DashboardModel)
+                .where(
+                    DashboardModel.user_id == _u(user_id),
+                    DashboardModel.is_default.is_(True),
+                )
+                .order_by(DashboardModel.created_at)
+            )
+            model = s.scalars(stmt).first()
+            if model is None:
+                return None
+            widgets = s.scalars(
+                select(DashboardWidgetModel)
+                .where(DashboardWidgetModel.dashboard_id == model.id)
+                .order_by(DashboardWidgetModel.position)
+            ).all()
+            return self._to_entity(model, list(widgets))
+
+    def add(self, dashboard: Dashboard) -> None:
+        with self._db.session() as s:
+            s.add(
+                DashboardModel(
+                    id=_u(dashboard.id),
+                    user_id=_u(dashboard.user_id),
+                    name=dashboard.name,
+                    is_default=dashboard.is_default,
+                )
+            )
+            s.flush()
+            for widget in dashboard.widgets:
+                s.add(self._widget_model(dashboard.id, widget))
+
+    def replace_widgets(self, dashboard_id: UUID, widgets: list[DashboardWidget]) -> None:
+        """Swap the whole widget list in one transaction.
+
+        A layout is saved as a unit -- reordering, resizing and removing are the
+        same gesture in the UI -- so a diff would be more code and more ways to
+        end up with two widgets claiming position 3.
+        """
+        with self._db.session() as s:
+            existing = s.scalars(
+                select(DashboardWidgetModel).where(
+                    DashboardWidgetModel.dashboard_id == _u(dashboard_id)
+                )
+            ).all()
+            for model in existing:
+                s.delete(model)
+            s.flush()
+            for widget in widgets:
+                s.add(self._widget_model(dashboard_id, widget))
+
+    @staticmethod
+    def _widget_model(dashboard_id: UUID, widget: DashboardWidget) -> DashboardWidgetModel:
+        return DashboardWidgetModel(
+            id=_u(widget.id),
+            dashboard_id=_u(dashboard_id),
+            position=widget.position,
+            size=widget.size,
+            metric_id=widget.metric_id,
+            params=dict(widget.params),
+            title_override=widget.title_override,
+        )
+
+    @staticmethod
+    def _to_entity(m: DashboardModel, widgets: list[DashboardWidgetModel]) -> Dashboard:
+        return Dashboard(
+            id=UUID(m.id),
+            user_id=UUID(m.user_id),
+            name=m.name,
+            is_default=bool(m.is_default),
+            created_at=m.created_at,
+            updated_at=m.updated_at,
+            widgets=[
+                DashboardWidget(
+                    id=UUID(w.id),
+                    metric_id=w.metric_id,
+                    position=w.position,
+                    size=w.size,
+                    params=dict(w.params or {}),
+                    title_override=w.title_override,
+                )
+                for w in widgets
+            ],
         )
 
 
