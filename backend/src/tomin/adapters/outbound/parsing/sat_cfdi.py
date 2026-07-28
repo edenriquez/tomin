@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import ClassVar
 from xml.etree import ElementTree as ET
 
 from ....application.dtos.extraction import ExtractedDocument, ParsedStatement, ParsedTransaction
@@ -17,6 +18,30 @@ class SatCfdiParser:
     """
 
     template_key = "sat_cfdi"
+
+    #: ``TipoDeComprobante`` -> direction, from the *receiver's* perspective.
+    #:
+    #: ``I`` (ingreso)  the issuer's income, so the user's money going out.
+    #: ``E`` (egreso)   a credit note / refund, so money coming back.
+    #: ``N`` (nómina)   a payroll receipt: the user is being paid. INCOME.
+    #:                  This used to fall through to the else branch and be
+    #:                  booked as an expense, i.e. a salary that *reduced* net
+    #:                  worth.
+    _TYPE_TO_TX_TYPE: ClassVar[dict[str, TxType]] = {
+        "I": TxType.EXPENSE,
+        "E": TxType.INCOME,
+        "N": TxType.INCOME,
+    }
+
+    #: Types that move no money and must produce **no transaction**.
+    #:
+    #: ``P`` (pago)      a payment-complement, which settles a previously
+    #:                   issued ``I``. Booking it double-counts that invoice.
+    #: ``T`` (traslado)  a goods-in-transit receipt. No payment at all.
+    #:
+    #: The document is still parsed and the statement still recorded, so the
+    #: upload is not silently lost -- it just contributes zero transactions.
+    _NON_MONETARY_TYPES = frozenset({"P", "T"})
 
     def parse(self, doc: ExtractedDocument) -> ParsedStatement:
         if not doc.xml:
@@ -38,18 +63,17 @@ class SatCfdiParser:
             or "CFDI"
         )
 
-        # From the receiver's (user's) perspective: an income CFDI ("I") is an
-        # expense they paid; an "E" (egreso/credit note) is money back.
-        tx_type = TxType.INCOME if tipo == "E" else TxType.EXPENSE
-
         transactions: list[ParsedTransaction] = []
-        if total is not None and fecha is not None:
+        if tipo not in self._NON_MONETARY_TYPES and total is not None and fecha is not None:
             transactions.append(
                 ParsedTransaction(
                     tx_date=fecha,
-                    amount=total,
+                    # Magnitude only: direction lives in tx_type. A CFDI Total
+                    # is already unsigned, but abs() makes the contract local
+                    # instead of an assumption about the SAT's formatting.
+                    amount=abs(total),
                     raw_description=description,
-                    tx_type=tx_type,
+                    tx_type=self._TYPE_TO_TX_TYPE.get(tipo, TxType.EXPENSE),
                 )
             )
 

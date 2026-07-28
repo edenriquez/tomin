@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///tomin.db"
     cube_path: str = "tomin_cube.duckdb"
 
+    # When true (the default) Container.bootstrap() runs `alembic upgrade head`.
+    # Tests set it false and use metadata.create_all instead: they build a fresh
+    # throwaway SQLite file per test, so replaying the migration history would
+    # only cost time and would test Alembic rather than the app.
+    run_migrations: bool = True
+
     supabase_jwt_secret: str | None = None
     auth_disabled: bool = True
     dev_user_id: str = "00000000-0000-0000-0000-000000000001"

@@ -4,6 +4,7 @@ from .get_spending_summary import GetSpendingSummaryUseCase
 from .goals import ManageGoalsUseCase
 from .list_transactions import ListTransactionsUseCase
 from .process_file import ProcessFileResult, ProcessFileUseCase
+from .rebuild_cube import RebuildCubeResult, RebuildCubeUseCase
 from .statements import (
     DeleteStatementResult,
     ManageStatementsUseCase,
@@ -11,15 +12,17 @@ from .statements import (
 )
 
 __all__ = [
-    "ProcessFileUseCase",
-    "ProcessFileResult",
-    "ManageStatementsUseCase",
     "DeleteStatementResult",
-    "StatementNotFoundError",
-    "ListTransactionsUseCase",
-    "GetSpendingSummaryUseCase",
     "DetectRecurringUseCase",
     "GetForecastUseCase",
-    "SimulateForecastUseCase",
+    "GetSpendingSummaryUseCase",
+    "ListTransactionsUseCase",
     "ManageGoalsUseCase",
+    "ManageStatementsUseCase",
+    "ProcessFileResult",
+    "ProcessFileUseCase",
+    "RebuildCubeResult",
+    "RebuildCubeUseCase",
+    "SimulateForecastUseCase",
+    "StatementNotFoundError",
 ]

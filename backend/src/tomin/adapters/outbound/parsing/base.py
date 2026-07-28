@@ -15,23 +15,48 @@ _DATE_RE = re.compile(
     r"(?:[\s/\-.](?P<y>\d{2,4}))?"
 )
 
-# Matches money amounts: 1,234.56 / -45.50 / (99.00) / $12.00
-_AMOUNT_RE = re.compile(r"[-(]?\$?\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?")
+# Matches money amounts: 1,234.56 / -45.50 / +45.50 / (99.00) / $12.00
+_AMOUNT_RE = re.compile(r"[-+(]?\$?\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?")
 
 _INCOME_HINTS = ("abono", "deposito", "depósito", "spei recibido", "nomina", "nómina")
 _EXPENSE_HINTS = ("cargo", "compra", "retiro", "pago", "comision", "comisión")
 
+#: ``sign_hint`` vocabulary. Statements disagree about how they mark direction,
+#: so "the token carried no sign" has to be distinguishable from "the token was
+#: explicitly positive" -- otherwise an unsigned line looks like income.
+SIGN_NEGATIVE = -1
+SIGN_NONE = 0
+SIGN_POSITIVE = 1
 
-def parse_amount(token: str) -> Decimal | None:
+
+def parse_amount(token: str) -> tuple[Decimal, int] | None:
+    """Split a money token into ``(magnitude, sign_hint)``.
+
+    Returns the **unsigned** magnitude plus what the token said about
+    direction, rather than a signed Decimal. Callers must not reconstruct a
+    signed amount from this: direction is `tx_type`'s job, and the hint is one
+    input to deciding it (see :func:`infer_tx_type`).
+
+    ``-45.50`` and ``(99.00)`` both yield ``SIGN_NEGATIVE``; ``+45.50`` yields
+    ``SIGN_POSITIVE``; a bare ``45.50`` yields ``SIGN_NONE``.
+    """
     raw = token.strip()
-    negative = raw.startswith("-") or raw.startswith("(")
+    if raw.startswith(("-", "(")):
+        sign_hint = SIGN_NEGATIVE
+    elif raw.startswith("+"):
+        sign_hint = SIGN_POSITIVE
+    else:
+        sign_hint = SIGN_NONE
+
     cleaned = raw.replace("$", "").replace(",", "").replace("(", "").replace(")", "")
-    cleaned = cleaned.replace(" ", "").lstrip("-")
+    cleaned = cleaned.replace(" ", "").lstrip("-+")
     try:
         value = Decimal(cleaned)
     except (InvalidOperation, ValueError):
         return None
-    return -value if negative else value
+    # A token like "-45.50" is a magnitude of 45.50 pointing outwards, never
+    # a negative magnitude.
+    return abs(value), sign_hint
 
 
 def parse_date(day: str, month: str, year: str | None, default_year: int) -> date | None:
@@ -72,22 +97,36 @@ def find_leading_date(line: str, default_year: int) -> tuple[date, str] | None:
     return parsed, line[match.end():].strip()
 
 
-def find_amounts(text: str) -> list[Decimal]:
+def find_amounts(text: str) -> list[tuple[Decimal, int]]:
+    """Every money token in ``text`` as ``(magnitude, sign_hint)`` pairs."""
     amounts = []
     for token in _AMOUNT_RE.findall(text):
-        value = parse_amount(token)
-        if value is not None:
-            amounts.append(value)
+        parsed = parse_amount(token)
+        if parsed is not None:
+            amounts.append(parsed)
     return amounts
 
 
-def infer_tx_type(description: str, amount: Decimal) -> str:
-    """Classify a bank line as income or expense.
+def infer_tx_type(description: str, sign_hint: int = SIGN_NONE) -> str:
+    """Classify a statement line as ``"income"`` or ``"expense"``.
 
-    Sign alone is unreliable across statement formats, so we key off wording.
-    Most line items on a statement are charges, so we default to expense unless
-    an explicit income keyword is present.
+    Precedence, highest first:
+
+    1. **Sign hint.** If the statement bothered to mark the token's direction,
+       that is a fact about this line and beats a guess from wording. A
+       description containing "PAGO" on a ``+1,200.00`` credit is a refund.
+    2. **Keyword.** Spanish income wording ("abono", "spei recibido",
+       "nómina", ...).
+    3. **Default expense.** Most line items on a statement are charges.
+
+    The old implementation took the *signed amount* and then ignored it
+    entirely, which is what let sign and type disagree.
     """
+    if sign_hint == SIGN_NEGATIVE:
+        return "expense"
+    if sign_hint == SIGN_POSITIVE:
+        return "income"
+
     lowered = description.lower()
     if any(h in lowered for h in _INCOME_HINTS):
         return "income"

@@ -18,6 +18,7 @@ from ..adapters.outbound.persistence import (
     SqlStatementRepository,
     SqlTransactionRepository,
 )
+from ..adapters.outbound.persistence.migrator import upgrade_to_head
 from ..adapters.outbound.persistence.seed import seed_reference_data
 from ..adapters.outbound.storage import TransientFileStorage
 from ..application.use_cases import (
@@ -28,6 +29,7 @@ from ..application.use_cases import (
     ManageGoalsUseCase,
     ManageStatementsUseCase,
     ProcessFileUseCase,
+    RebuildCubeUseCase,
     SimulateForecastUseCase,
 )
 from .settings import Settings
@@ -139,12 +141,21 @@ class Container:
         return SimulateForecastUseCase()
 
     @cached_property
+    def rebuild_cube(self) -> RebuildCubeUseCase:
+        return RebuildCubeUseCase(self.transactions, self.cube)
+
+    @cached_property
     def manage_goals(self) -> ManageGoalsUseCase:
         return ManageGoalsUseCase(self.goals_repo)
 
     # --- bootstrap -------------------------------------------------------
     def bootstrap(self) -> None:
-        """Create tables and seed reference data + cube dimensions."""
-        self.database.create_all()
+        """Migrate the schema, then seed reference data + cube dimensions."""
+        if self.settings.run_migrations:
+            upgrade_to_head(self.database, self.settings.database_url)
+        else:
+            # Test path only: a fresh throwaway database per test, where
+            # replaying migration history would test Alembic, not the app.
+            self.database.create_all()
         seed_reference_data(self.categories, self.merchants)
         self.cube.sync_categories(self.categories.get_all())

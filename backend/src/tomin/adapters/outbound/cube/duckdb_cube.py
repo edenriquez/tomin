@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
@@ -14,13 +15,29 @@ from ....application.dtos.analytics import (
 )
 from ....domain.entities import Category, Transaction
 
+#: Aggregates are scoped to a single currency. Everything the app ingests today
+#: is Mexican, so MXN is the default rather than a required argument.
+DEFAULT_CURRENCY = "MXN"
+
+_UPSERT_FACT = "INSERT OR REPLACE INTO fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+
 
 class DuckDbCube:
     """DuckDB-backed analytics cube (implements CubeWriter + CubeReader).
 
     Structured transactions are streamed into ``fact_transactions`` as they are
-    processed; rollup tables (``rollup_monthly``, ``rollup_category``) are
-    rebuilt on demand so dashboards can query pre-aggregated data quickly.
+    processed, and every read aggregates that one fact table directly.
+
+    There are deliberately **no rollup tables**. The previous ``rollup_monthly``
+    and ``rollup_category`` were written on every upload and every delete and
+    then never read by anything; ``refresh_rollups`` also ignored its
+    ``user_id`` argument and rebuilt every user's rollups each time. They have
+    been deleted rather than fixed. If aggregate reads ever become slow enough
+    to matter, a materialisation should be added back with a reader that
+    actually consults it.
+
+    The cube is derived state. :meth:`rebuild_for_user` reconstructs it from
+    the relational tables, which is what makes it safe to throw away.
 
     DuckDB allows a single writer per file, so the connection is opened lazily on
     first use rather than in ``__init__``. Importing the app therefore does not
@@ -77,21 +94,7 @@ class DuckDbCube:
             return
         with self._lock:
             for t in transactions:
-                self._connection.execute(
-                    "INSERT OR REPLACE INTO fact_transactions VALUES "
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [
-                        str(t.id),
-                        str(t.user_id),
-                        t.tx_date,
-                        t.amount,
-                        t.currency,
-                        t.tx_type.value,
-                        str(t.category_id) if t.category_id else None,
-                        str(t.merchant_id) if t.merchant_id else None,
-                        t.description or t.raw_description,
-                    ],
-                )
+                self._connection.execute(_UPSERT_FACT, self._fact_row(t))
 
     def delete_transactions(self, tx_ids: list[UUID]) -> None:
         if not tx_ids:
@@ -103,38 +106,52 @@ class DuckDbCube:
                 [str(i) for i in tx_ids],
             )
 
-    def refresh_rollups(self, user_id: UUID) -> None:
+    def rebuild_for_user(self, user_id: UUID, transactions: Iterable[Transaction]) -> int:
+        """Discard and re-derive one user's fact rows. Returns the row count.
+
+        The cube is a *derived* store: the relational tables are the record of
+        truth and this can always reconstruct it. That is what makes DuckDB
+        replaceable — and what makes every later backfill (transfer flags,
+        fingerprints, tags) a rebuild rather than a bespoke migration.
+
+        Delete and repopulate happen under one lock so a concurrent read never
+        observes a user with no transactions. ``transactions`` is supplied by
+        the caller rather than fetched here: the cube adapter must not reach
+        for a repository.
+        """
         with self._lock:
             self._connection.execute(
-                """
-                CREATE OR REPLACE TABLE rollup_monthly AS
-                SELECT user_id,
-                       strftime(tx_date, '%Y-%m') AS month,
-                       tx_type,
-                       SUM(amount) AS total
-                FROM fact_transactions
-                GROUP BY user_id, month, tx_type;
-                """
+                "DELETE FROM fact_transactions WHERE user_id = ?", [str(user_id)]
             )
-            self._connection.execute(
-                """
-                CREATE OR REPLACE TABLE rollup_category AS
-                SELECT f.user_id,
-                       f.category_id,
-                       COALESCE(d.name, 'Sin Categoria') AS category_name,
-                       SUM(f.amount) AS total
-                FROM fact_transactions f
-                LEFT JOIN dim_category d ON f.category_id = d.category_id
-                WHERE f.tx_type = 'expense'
-                GROUP BY f.user_id, f.category_id, category_name;
-                """
-            )
+            count = 0
+            for t in transactions:
+                self._connection.execute(_UPSERT_FACT, self._fact_row(t))
+                count += 1
+        return count
+
+    @staticmethod
+    def _fact_row(t: Transaction) -> list:
+        return [
+            str(t.id),
+            str(t.user_id),
+            t.tx_date,
+            t.amount,
+            t.currency,
+            t.tx_type.value,
+            str(t.category_id) if t.category_id else None,
+            str(t.merchant_id) if t.merchant_id else None,
+            t.description or t.raw_description,
+        ]
 
     # --- reader ----------------------------------------------------------
     def spending_by_category(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = DEFAULT_CURRENCY,
     ) -> list[CategorySpend]:
-        clause, params = self._filter(user_id, start, end)
+        clause, params = self._filter(user_id, start, end, currency)
         with self._lock:
             rows = self._connection.execute(
                 f"""
@@ -149,7 +166,7 @@ class DuckDbCube:
                 """,
                 params,
             ).fetchall()
-        total = sum((r[2] for r in rows), Decimal("0")) or Decimal("1")
+        total = sum((r[2] for r in rows), Decimal(0)) or Decimal(1)
         return [
             CategorySpend(
                 category_id=r[0],
@@ -183,9 +200,13 @@ class DuckDbCube:
         return points
 
     def spending_summary(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = DEFAULT_CURRENCY,
     ) -> SpendingSummary:
-        clause, params = self._filter(user_id, start, end)
+        clause, params = self._filter(user_id, start, end, currency)
         with self._lock:
             income, expense = self._connection.execute(
                 f"""
@@ -198,7 +219,7 @@ class DuckDbCube:
                 params,
             ).fetchone()
 
-        by_category = self.spending_by_category(user_id, start, end)
+        by_category = self.spending_by_category(user_id, start, end, currency)
         monthly = self.monthly_series(user_id)
         return SpendingSummary(
             total_income=Decimal(str(income or 0)),
@@ -209,9 +230,20 @@ class DuckDbCube:
         )
 
     @staticmethod
-    def _filter(user_id: UUID, start: date | None, end: date | None):
+    def _filter(
+        user_id: UUID,
+        start: date | None,
+        end: date | None,
+        currency: str | None = DEFAULT_CURRENCY,
+    ):
         clause = "AND f.user_id = ?"
         params: list = [str(user_id)]
+        if currency:
+            # Money in different currencies does not add up. Summing MXN and
+            # USD produced a headline number in no currency at all, so every
+            # aggregate is scoped to exactly one.
+            clause += " AND f.currency = ?"
+            params.append(currency)
         if start:
             clause += " AND f.tx_date >= ?"
             params.append(start)

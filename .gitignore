@@ -9,3 +9,4 @@ __pycache__/
 .next/*.duckdb
 *.duckdb.wal
 *.db
+.claude/worktrees/

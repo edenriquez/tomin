@@ -15,6 +15,9 @@ dependencies = [
     "pyjwt>=2.8",
     "duckdb>=0.10",
     "pdfplumber>=0.11",
+    # Runtime dependency, not dev-only: Container.bootstrap() runs
+    # `alembic.command.upgrade` programmatically on startup.
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]

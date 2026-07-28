@@ -52,7 +52,6 @@ class ManageStatementsUseCase:
         self._statements.delete(statement_id)
 
         self._cube.delete_transactions(tx_ids)
-        self._cube.refresh_rollups(user_id)
 
         return DeleteStatementResult(
             statement_id=statement_id, transactions_deleted=len(tx_ids)

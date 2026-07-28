@@ -12,8 +12,18 @@ def app(tmp_path):
         database_url=f"sqlite:///{tmp_path/'test.db'}",
         cube_path=":memory:",
         auth_disabled=True,
+        # Each test gets a brand-new SQLite file, so create_all lands on the
+        # same schema Alembic would build (models.py is the source of truth for
+        # both) without paying for the migration history on every test.
+        # test_migrations.py exercises the Alembic path itself.
+        run_migrations=False,
     )
-    return create_app(settings)
+    application = create_app(settings)
+    # The app defers bootstrap to the first request (DuckDB single-writer lock
+    # vs the dev reloader). Tests may use the container directly without ever
+    # issuing a request, so bootstrap eagerly here.
+    application.extensions["container"].bootstrap()
+    return application
 
 
 @pytest.fixture

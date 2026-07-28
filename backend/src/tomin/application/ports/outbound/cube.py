@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from ...dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 from ....domain.entities import Transaction
+from ...dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 
 
 @runtime_checkable
@@ -16,19 +17,35 @@ class CubeWriter(Protocol):
 
     def delete_transactions(self, tx_ids: list[UUID]) -> None: ...
 
-    def refresh_rollups(self, user_id: UUID) -> None: ...
+    def rebuild_for_user(self, user_id: UUID, transactions: Iterable[Transaction]) -> int:
+        """Drop this user's facts and re-derive them from ``transactions``.
+
+        Returns the number of rows written. The caller supplies the source data
+        so that the cube adapter never depends on a repository.
+        """
+        ...
 
 
 @runtime_checkable
 class CubeReader(Protocol):
     """Fast analytical reads served from the cube."""
 
+    # `currency` is not optional in meaning, only in syntax: aggregating across
+    # currencies yields a number denominated in nothing.
     def spending_summary(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = "MXN",
     ) -> SpendingSummary: ...
 
     def spending_by_category(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = "MXN",
     ) -> list[CategorySpend]: ...
 
     def monthly_series(self, user_id: UUID, months: int = 12) -> list[MonthlyPoint]: ...

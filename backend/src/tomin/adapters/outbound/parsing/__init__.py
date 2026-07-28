@@ -5,7 +5,7 @@ from .sat_cfdi import SatCfdiParser
 
 __all__ = [
     "BanamexParser",
+    "DefaultParserFactory",
     "GenericBankParser",
     "SatCfdiParser",
-    "DefaultParserFactory",
 ]

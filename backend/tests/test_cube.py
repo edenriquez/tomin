@@ -7,22 +7,21 @@ from tomin.domain.entities import Category, Transaction
 from tomin.domain.value_objects.enums import TxType
 
 
-def test_cube_rollups_and_summary():
+def test_cube_summary():
     cube = DuckDbCube(":memory:")
     user = uuid4()
     food = Category(name="Comida")
     cube.sync_categories([food])
 
     txs = [
-        Transaction(user_id=user, tx_date=date(2024, 1, 5), amount=Decimal("100"),
+        Transaction(user_id=user, tx_date=date(2024, 1, 5), amount=Decimal(100),
                     raw_description="OXXO", tx_type=TxType.EXPENSE, category_id=food.id),
-        Transaction(user_id=user, tx_date=date(2024, 1, 6), amount=Decimal("300"),
+        Transaction(user_id=user, tx_date=date(2024, 1, 6), amount=Decimal(300),
                     raw_description="Walmart", tx_type=TxType.EXPENSE, category_id=food.id),
-        Transaction(user_id=user, tx_date=date(2024, 1, 7), amount=Decimal("5000"),
+        Transaction(user_id=user, tx_date=date(2024, 1, 7), amount=Decimal(5000),
                     raw_description="Nomina", tx_type=TxType.INCOME),
     ]
     cube.upsert_transactions(txs)
-    cube.refresh_rollups(user)
 
     summary = cube.spending_summary(user)
     assert summary.total_income == Decimal("5000.00")
@@ -39,7 +38,7 @@ def test_cube_rollups_and_summary():
 def test_upsert_is_idempotent():
     cube = DuckDbCube(":memory:")
     user = uuid4()
-    tx = Transaction(user_id=user, tx_date=date(2024, 1, 5), amount=Decimal("100"),
+    tx = Transaction(user_id=user, tx_date=date(2024, 1, 5), amount=Decimal(100),
                      raw_description="OXXO", tx_type=TxType.EXPENSE)
     cube.upsert_transactions([tx])
     cube.upsert_transactions([tx])  # same id again

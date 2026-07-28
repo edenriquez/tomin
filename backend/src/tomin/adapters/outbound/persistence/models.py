@@ -4,11 +4,13 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
     Numeric,
     String,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -19,6 +21,11 @@ class Base(DeclarativeBase):
 
 # UUIDs are stored as 36-char strings for portability across SQLite/Postgres.
 UUIDStr = String(36)
+
+
+def _created_at() -> Mapped[datetime]:
+    """`created_at` audit column, matching the Supabase DDL's `timestamptz default now()`."""
+    return mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 
 class CategoryModel(Base):
@@ -47,6 +54,7 @@ class AccountModel(Base):
     bank: Mapped[str | None] = mapped_column(String(120), nullable=True)
     alias: Mapped[str | None] = mapped_column(String(120), nullable=True)
     account_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = _created_at()
 
 
 class StatementModel(Base):
@@ -67,6 +75,10 @@ class StatementModel(Base):
 class TransactionModel(Base):
     __tablename__ = "transactions"
 
+    # `amount` is always a non-negative magnitude; `tx_type` alone carries
+    # direction (see docs/redesign-plan.md §2 "Sign convention").
+    __table_args__ = (CheckConstraint("amount >= 0", name="ck_transactions_amount_non_negative"),)
+
     id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
     user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
     statement_id: Mapped[str | None] = mapped_column(
@@ -81,6 +93,7 @@ class TransactionModel(Base):
     status: Mapped[str] = mapped_column(String(12), default="completed")
     category_id: Mapped[str | None] = mapped_column(UUIDStr, nullable=True)
     merchant_id: Mapped[str | None] = mapped_column(UUIDStr, nullable=True)
+    created_at: Mapped[datetime] = _created_at()
 
 
 class GoalModel(Base):
@@ -92,3 +105,4 @@ class GoalModel(Base):
     target_amount: Mapped[Numeric] = mapped_column(Numeric(14, 2))
     current_amount: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = _created_at()
