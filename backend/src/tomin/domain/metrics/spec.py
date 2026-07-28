@@ -77,6 +77,11 @@ class Dimension:
     #: Semantic column holding a stable id for the dimension member, when the
     #: label alone is not addressable (category name vs category id).
     key_column: str | None = None
+    #: A transaction can belong to more than one member of this axis, so the
+    #: rows do **not** partition the total -- one transaction with three tags
+    #: appears three times. Surfaced to the client as ``meta.overlapping``;
+    #: without it someone ships a pie chart summing to 240%.
+    overlapping: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,6 +91,10 @@ class FilterDef:
     name: str
     column: str
     ops: tuple[FilterOp, ...] = ("eq", "in")
+    #: The column holds a *list*, so the predicate is membership rather than
+    #: equality: ``tag = "viaje"`` means "is tagged viaje", not "has exactly one
+    #: tag, viaje".
+    multivalued: bool = False
 
 
 @dataclass(frozen=True)

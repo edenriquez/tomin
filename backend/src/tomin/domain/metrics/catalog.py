@@ -23,9 +23,35 @@ SPEND_BY_CATEGORY = MetricSpec(
     unit="MXN",
     measures=("expense_amount",),
     dimensions=("category", "tx_type"),
-    filters=("category", "currency", "tx_type"),
+    filters=("category", "currency", "tx_type", "tag"),
     default_dimensions=("category",),
     requires=("transactions",),
+)
+
+# Tag totals (docs/redesign-plan.md §3, metric 5). The breakdown **overlaps**:
+# a transaction tagged both `viaje` and `deducible` is counted under each, so
+# the rows do not sum to the period total. The engine flags that as
+# `meta.overlapping` off the dimension's own declaration.
+#
+# Note what this deliberately is *not*: a return. Tagged outflows are
+# contributions. An IRR computed from bank movements would be a number with a
+# finance name and no finance meaning (§3, "Tag groups — returns").
+TAG_TOTALS = MetricSpec(
+    id="tag_totals",
+    title="Totales por etiqueta",
+    description=(
+        "Gasto del periodo agrupado por etiqueta. Un movimiento con varias "
+        "etiquetas cuenta en cada una, asi que las filas no suman el total."
+    ),
+    group="Patrimonio",
+    kind="aggregation",
+    shape="breakdown",
+    unit="MXN",
+    measures=("expense_amount",),
+    dimensions=("tag",),
+    filters=("tag", "category", "currency"),
+    default_dimensions=("tag",),
+    requires=("tags",),
 )
 
 MONTHLY_CASH_FLOW = MetricSpec(
@@ -38,7 +64,7 @@ MONTHLY_CASH_FLOW = MetricSpec(
     unit="MXN",
     measures=("income_amount", "expense_amount"),
     dimensions=(),
-    filters=("category", "currency"),
+    filters=("category", "currency", "tag"),
     grains=("month",),
     default_grain="month",
     requires=("transactions",),
@@ -54,7 +80,7 @@ ACCUMULATED_SPEND = MetricSpec(
     unit="MXN",
     measures=("expense_amount",),
     dimensions=(),
-    filters=("category", "currency"),
+    filters=("category", "currency", "tag"),
     grains=("month", "day"),
     default_grain="month",
     cumulative=True,
@@ -91,6 +117,7 @@ METRIC_CATALOG: dict[str, MetricSpec] = {
     spec.id: spec
     for spec in (
         SPEND_BY_CATEGORY,
+        TAG_TOTALS,
         MONTHLY_CASH_FLOW,
         ACCUMULATED_SPEND,
         INVESTMENT_PROJECTION,

@@ -88,6 +88,7 @@ def test_catalog_lists_every_metric_with_its_declaration(client):
     by_id = {i["id"]: i for i in items}
     assert set(by_id) == {
         "spend_by_category",
+        "tag_totals",
         "monthly_cash_flow",
         "accumulated_spend",
         "investment_projection",

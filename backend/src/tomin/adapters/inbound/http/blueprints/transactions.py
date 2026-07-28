@@ -84,6 +84,29 @@ def _optional_uuid(body: dict, key: str):
     return UUID(raw) if raw is not None else None
 
 
+@transactions_bp.put("/<transaction_id>/tags")
+def set_transaction_tags(transaction_id: str):
+    """Replace this transaction's tag list.
+
+    PUT, not PATCH: the client edits the list as a unit, and "these are its
+    tags now" is a simpler thing to get right than an add/remove diff.
+    """
+    user_id = current_user_id()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("tag_ids")
+    if not isinstance(raw, list):
+        return jsonify(error="'tag_ids' must be a list of ids"), 400
+
+    tag_ids = get_container().manage_tags.set_for_transaction(
+        user_id=user_id,
+        transaction_id=UUID(transaction_id),
+        tag_ids=[UUID(value) for value in raw],
+    )
+    return jsonify(
+        transaction_id=transaction_id, tag_ids=[str(t) for t in tag_ids]
+    )
+
+
 @transactions_bp.get("/export.csv")
 def export_csv():
     user_id = current_user_id()

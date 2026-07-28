@@ -55,12 +55,23 @@ DIMENSIONS: dict[str, Dimension] = {
     "month": Dimension(name="month", column="tx_month", label="Mes"),
     "currency": Dimension(name="currency", column="currency", label="Moneda"),
     "tx_type": Dimension(name="tx_type", column="tx_type", label="Tipo"),
+    # The one overlapping axis: tags are many-per-transaction on purpose.
+    "tag": Dimension(
+        name="tag",
+        column="tag_name",
+        label="Etiqueta",
+        key_column="tag_id",
+        overlapping=True,
+    ),
 }
 
 FILTERS: dict[str, FilterDef] = {
     "category": FilterDef(name="category", column="category_id"),
     "currency": FilterDef(name="currency", column="currency"),
     "tx_type": FilterDef(name="tx_type", column="tx_type"),
+    # Filtering reads the denormalised array on the fact row; only *grouping*
+    # by tag needs the bridge join. That is why the cube keeps both.
+    "tag": FilterDef(name="tag", column="tag_ids", multivalued=True),
 }
 
 GRAINS: dict[str, Grain] = {

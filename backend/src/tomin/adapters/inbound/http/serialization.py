@@ -5,7 +5,14 @@ from decimal import Decimal
 
 from ....application.dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 from ....application.dtos.metrics import MetricError, MetricResult
-from ....domain.entities import Dashboard, DashboardWidget, Goal, Statement, Transaction
+from ....domain.entities import (
+    Dashboard,
+    DashboardWidget,
+    Goal,
+    Statement,
+    Tag,
+    Transaction,
+)
 from ....domain.metrics.spec import MetricSpec
 from ....domain.services.forecasting import ForecastPoint
 
@@ -34,6 +41,18 @@ def transaction_json(t: Transaction) -> dict:
         "category_source": t.category_source,
         "notes": t.notes,
         "excluded_from_stats": t.excluded_from_stats,
+        "tag_ids": [str(tag_id) for tag_id in t.tag_ids],
+    }
+
+
+def tag_json(t: Tag) -> dict:
+    return {
+        "id": str(t.id),
+        "name": t.name,
+        "slug": t.slug,
+        "color": t.color,
+        "kind": t.kind,
+        "created_at": _iso(t.created_at),
     }
 
 

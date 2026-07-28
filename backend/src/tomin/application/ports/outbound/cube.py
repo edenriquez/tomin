@@ -5,7 +5,7 @@ from datetime import date
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from ....domain.entities import Transaction
+from ....domain.entities import Tag, Transaction
 from ...dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 
 
@@ -16,6 +16,14 @@ class CubeWriter(Protocol):
     def upsert_transactions(self, transactions: list[Transaction]) -> None: ...
 
     def delete_transactions(self, tx_ids: list[UUID]) -> None: ...
+
+    def sync_tags(self, tags: list[Tag]) -> None:
+        """Refresh the tag dimension so a breakdown by tag has labels."""
+        ...
+
+    def forget_tag(self, tag_id: UUID) -> None:
+        """Drop a deleted tag from the dimension and the bridge."""
+        ...
 
     def rebuild_for_user(self, user_id: UUID, transactions: Iterable[Transaction]) -> int:
         """Drop this user's facts and re-derive them from ``transactions``.

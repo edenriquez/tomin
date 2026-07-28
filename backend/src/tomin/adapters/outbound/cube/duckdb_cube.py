@@ -13,13 +13,15 @@ from ....application.dtos.analytics import (
     MonthlyPoint,
     SpendingSummary,
 )
-from ....domain.entities import Category, Transaction
+from ....domain.entities import Category, Tag, Transaction
 
 #: Aggregates are scoped to a single currency. Everything the app ingests today
 #: is Mexican, so MXN is the default rather than a required argument.
 DEFAULT_CURRENCY = "MXN"
 
-_UPSERT_FACT = "INSERT OR REPLACE INTO fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+_UPSERT_FACT = (
+    "INSERT OR REPLACE INTO fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+)
 
 
 class DuckDbCube:
@@ -72,13 +74,26 @@ class DuckDbCube:
                 category_id VARCHAR,
                 merchant_id VARCHAR,
                 description VARCHAR,
-                excluded_from_stats BOOLEAN
+                excluded_from_stats BOOLEAN,
+                tag_ids VARCHAR[]
             );
             """
         )
         self._con.execute(
             "CREATE TABLE IF NOT EXISTS dim_category "
             "(category_id VARCHAR PRIMARY KEY, name VARCHAR);"
+        )
+        self._con.execute(
+            "CREATE TABLE IF NOT EXISTS dim_tag (tag_id VARCHAR PRIMARY KEY, name VARCHAR);"
+        )
+        # Tags go into the cube **both ways** (docs/redesign-plan.md §7). The
+        # array column answers "is this transaction tagged X" with
+        # `list_contains` and no join; the bridge answers "total per tag", which
+        # needs one row per (transaction, tag) pair. Neither one does the other's
+        # job well, and both are derived from `transaction_tags`.
+        self._con.execute(
+            "CREATE TABLE IF NOT EXISTS bridge_transaction_tag "
+            "(tx_id VARCHAR, tag_id VARCHAR, PRIMARY KEY (tx_id, tag_id));"
         )
 
     # --- writer ----------------------------------------------------------
@@ -90,21 +105,61 @@ class DuckDbCube:
                     [str(c.id), c.name],
                 )
 
+    def sync_tags(self, tags: list[Tag]) -> None:
+        """Refresh the tag dimension so a tag breakdown has labels to show.
+
+        Mirrors :meth:`sync_categories`. Deleted tags are pruned rather than
+        left behind: a stale label attached to no facts is invisible, but a
+        stale label reattached by an id reused elsewhere is a wrong answer.
+        """
+        with self._lock:
+            for t in tags:
+                self._connection.execute(
+                    "INSERT OR REPLACE INTO dim_tag VALUES (?, ?)", [str(t.id), t.name]
+                )
+
+    def forget_tag(self, tag_id: UUID) -> None:
+        """Drop a deleted tag's dimension row and every bridge row it owned."""
+        with self._lock:
+            self._connection.execute(
+                "DELETE FROM bridge_transaction_tag WHERE tag_id = ?", [str(tag_id)]
+            )
+            self._connection.execute("DELETE FROM dim_tag WHERE tag_id = ?", [str(tag_id)])
+
     def upsert_transactions(self, transactions: list[Transaction]) -> None:
         if not transactions:
             return
         with self._lock:
             for t in transactions:
                 self._connection.execute(_UPSERT_FACT, self._fact_row(t))
+                self._write_bridge(t)
+
+    def _write_bridge(self, t: Transaction) -> None:
+        """Re-derive one transaction's bridge rows. Callers hold ``self._lock``.
+
+        Delete-then-insert rather than insert-if-missing: the entity's tag list
+        is the whole truth for that transaction, so untagging has to be able to
+        remove a row, not just fail to add one.
+        """
+        assert self._con is not None
+        self._con.execute("DELETE FROM bridge_transaction_tag WHERE tx_id = ?", [str(t.id)])
+        for tag_id in t.tag_ids:
+            self._con.execute(
+                "INSERT OR REPLACE INTO bridge_transaction_tag VALUES (?, ?)",
+                [str(t.id), str(tag_id)],
+            )
 
     def delete_transactions(self, tx_ids: list[UUID]) -> None:
         if not tx_ids:
             return
         placeholders = ", ".join("?" * len(tx_ids))
+        ids = [str(i) for i in tx_ids]
         with self._lock:
             self._connection.execute(
-                f"DELETE FROM fact_transactions WHERE tx_id IN ({placeholders})",
-                [str(i) for i in tx_ids],
+                f"DELETE FROM bridge_transaction_tag WHERE tx_id IN ({placeholders})", ids
+            )
+            self._connection.execute(
+                f"DELETE FROM fact_transactions WHERE tx_id IN ({placeholders})", ids
             )
 
     def rebuild_for_user(self, user_id: UUID, transactions: Iterable[Transaction]) -> int:
@@ -121,12 +176,21 @@ class DuckDbCube:
         for a repository.
         """
         with self._lock:
+            # Bridge rows first, while the fact table still says which
+            # transactions are this user's -- the bridge carries no user_id, by
+            # the same reasoning as the relational one.
+            self._connection.execute(
+                "DELETE FROM bridge_transaction_tag WHERE tx_id IN "
+                "(SELECT tx_id FROM fact_transactions WHERE user_id = ?)",
+                [str(user_id)],
+            )
             self._connection.execute(
                 "DELETE FROM fact_transactions WHERE user_id = ?", [str(user_id)]
             )
             count = 0
             for t in transactions:
                 self._connection.execute(_UPSERT_FACT, self._fact_row(t))
+                self._write_bridge(t)
                 count += 1
         return count
 
@@ -143,6 +207,7 @@ class DuckDbCube:
             str(t.merchant_id) if t.merchant_id else None,
             t.description or t.raw_description,
             t.excluded_from_stats,
+            [str(tag_id) for tag_id in t.tag_ids],
         ]
 
     # --- reader ----------------------------------------------------------

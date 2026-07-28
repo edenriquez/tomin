@@ -10,6 +10,7 @@ from ....application.use_cases.process_file import (
     UnsupportedFileError,
 )
 from ....application.use_cases.statements import StatementNotFoundError
+from ....application.use_cases.tags import TagNotFoundError
 from ....application.use_cases.update_transaction import TransactionNotFoundError
 from .auth import AuthError
 
@@ -36,6 +37,12 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(TransactionNotFoundError)
     def _transaction_missing(err: TransactionNotFoundError):
         return jsonify(error="Transaction not found", detail=str(err)), 404
+
+    @app.errorhandler(TagNotFoundError)
+    def _tag_missing(err: TagNotFoundError):
+        # 404 rather than 403 for another user's tag, same non-disclosure
+        # reasoning as the statement and transaction handlers above.
+        return jsonify(error="Tag not found", detail=str(err)), 404
 
     # `UnknownCategoryError` deliberately has no handler of its own: it is a
     # ValueError and the 400 below is the right answer. The transaction was

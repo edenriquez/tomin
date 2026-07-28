@@ -18,6 +18,7 @@ from ..adapters.outbound.persistence import (
     SqlGoalRepository,
     SqlMerchantRepository,
     SqlStatementRepository,
+    SqlTagRepository,
     SqlTransactionRepository,
 )
 from ..adapters.outbound.persistence.migrator import upgrade_to_head
@@ -32,6 +33,7 @@ from ..application.use_cases import (
     ListTransactionsUseCase,
     ManageGoalsUseCase,
     ManageStatementsUseCase,
+    ManageTagsUseCase,
     ProcessFileUseCase,
     RebuildCubeUseCase,
     RunMetricQueriesUseCase,
@@ -98,6 +100,10 @@ class Container:
         return SqlDashboardRepository(self.database)
 
     @cached_property
+    def tags(self) -> SqlTagRepository:
+        return SqlTagRepository(self.database)
+
+    @cached_property
     def categories(self) -> SqlCategoryRepository:
         return SqlCategoryRepository(self.database)
 
@@ -155,6 +161,14 @@ class Container:
         )
 
     @cached_property
+    def manage_tags(self) -> ManageTagsUseCase:
+        return ManageTagsUseCase(
+            tags=self.tags,
+            transactions=self.transactions,
+            cube=self.cube,
+        )
+
+    @cached_property
     def spending_summary(self) -> GetSpendingSummaryUseCase:
         return GetSpendingSummaryUseCase(self.cube)
 
@@ -190,7 +204,7 @@ class Container:
 
     @cached_property
     def rebuild_cube(self) -> RebuildCubeUseCase:
-        return RebuildCubeUseCase(self.transactions, self.cube)
+        return RebuildCubeUseCase(self.transactions, self.cube, self.tags)
 
     @cached_property
     def manage_goals(self) -> ManageGoalsUseCase:

@@ -5,8 +5,10 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 
+from ....application.ports.outbound.repositories import DuplicateTagError
 from ....domain.entities import (
     Account,
     Category,
@@ -15,6 +17,7 @@ from ....domain.entities import (
     Goal,
     Merchant,
     Statement,
+    Tag,
     Transaction,
 )
 from ....domain.value_objects.enums import (
@@ -32,7 +35,9 @@ from .models import (
     GoalModel,
     MerchantModel,
     StatementModel,
+    TagModel,
     TransactionModel,
+    TransactionTagModel,
 )
 
 
@@ -41,8 +46,46 @@ def _u(value) -> str:
 
 
 # --- mappers --------------------------------------------------------------
-def _to_transaction(m: TransactionModel) -> Transaction:
+def _tags_by_transaction(session, tx_ids: list[str]) -> dict[str, list[UUID]]:
+    """Bridge rows for a *page* of transactions, in one query.
+
+    Loaded in bulk rather than per row: a transaction list is the hottest read
+    in the app and an N+1 here would be paid on every scroll.
+    """
+    if not tx_ids:
+        return {}
+    rows = session.execute(
+        select(TransactionTagModel.transaction_id, TransactionTagModel.tag_id).where(
+            TransactionTagModel.transaction_id.in_(tx_ids)
+        )
+    ).all()
+    grouped: dict[str, list[UUID]] = {}
+    for tx_id, tag_id in rows:
+        grouped.setdefault(tx_id, []).append(UUID(tag_id))
+    return grouped
+
+
+def _tags_for_user(session, user_id: str) -> dict[str, list[UUID]]:
+    """Every bridge row a user owns, keyed by transaction.
+
+    Used by the streaming read, where a per-batch lookup would reopen the
+    question on every batch. Only *tagged* transactions appear, so this is
+    bounded by tagging effort rather than by history size.
+    """
+    rows = session.execute(
+        select(TransactionTagModel.transaction_id, TransactionTagModel.tag_id)
+        .join(TagModel, TagModel.id == TransactionTagModel.tag_id)
+        .where(TagModel.user_id == user_id)
+    ).all()
+    grouped: dict[str, list[UUID]] = {}
+    for tx_id, tag_id in rows:
+        grouped.setdefault(tx_id, []).append(UUID(tag_id))
+    return grouped
+
+
+def _to_transaction(m: TransactionModel, tag_ids: list[UUID] | None = None) -> Transaction:
     return Transaction(
+        tag_ids=list(tag_ids or []),
         id=UUID(m.id),
         user_id=UUID(m.user_id),
         statement_id=UUID(m.statement_id) if m.statement_id else None,
@@ -92,7 +135,29 @@ class SqlTransactionRepository:
     def get(self, transaction_id: UUID) -> Transaction | None:
         with self._db.session() as s:
             m = s.get(TransactionModel, _u(transaction_id))
-            return _to_transaction(m) if m else None
+            if m is None:
+                return None
+            return _to_transaction(m, _tags_by_transaction(s, [m.id]).get(m.id))
+
+    def list_by_ids(self, user_id: UUID, ids: list[UUID]) -> list[Transaction]:
+        """Fetch specific transactions, scoped to their owner.
+
+        The scope is not a convenience: it is what makes a bulk tag operation
+        over client-supplied ids unable to touch someone else's rows.
+        """
+        if not ids:
+            return []
+        with self._db.session() as s:
+            models = list(
+                s.scalars(
+                    select(TransactionModel).where(
+                        TransactionModel.user_id == _u(user_id),
+                        TransactionModel.id.in_([_u(i) for i in ids]),
+                    )
+                ).all()
+            )
+            tags = _tags_by_transaction(s, [m.id for m in models])
+            return [_to_transaction(m, tags.get(m.id)) for m in models]
 
     def update(self, transaction: Transaction) -> None:
         """Persist the user-editable fields of an already-stored transaction.
@@ -145,7 +210,9 @@ class SqlTransactionRepository:
                 .limit(limit)
                 .offset(offset)
             )
-            return [_to_transaction(m) for m in s.scalars(stmt).all()]
+            models = list(s.scalars(stmt).all())
+            tags = _tags_by_transaction(s, [m.id for m in models])
+            return [_to_transaction(m, tags.get(m.id)) for m in models]
 
     def iter_for_user(self, user_id: UUID, *, batch_size: int = 500) -> Iterator[Transaction]:
         """Stream a user's entire history, oldest first, in batches.
@@ -161,8 +228,11 @@ class SqlTransactionRepository:
                 .order_by(TransactionModel.tx_date, TransactionModel.id)
                 .execution_options(yield_per=batch_size)
             )
+            # Resolved once for the whole stream: this feeds the cube rebuild,
+            # which must reproduce `fact_transactions.tag_ids` exactly.
+            tags = _tags_for_user(s, _u(user_id))
             for m in s.scalars(stmt):
-                yield _to_transaction(m)
+                yield _to_transaction(m, tags.get(m.id))
 
     def count_for_user(self, user_id: UUID, **filters) -> int:
         with self._db.session() as s:
@@ -181,6 +251,15 @@ class SqlTransactionRepository:
                 TransactionModel.statement_id == _u(statement_id)
             )
             models = list(s.scalars(stmt).all())
+            if models:
+                # Explicit rather than relying on ON DELETE CASCADE: SQLite does
+                # not enforce foreign keys unless PRAGMA foreign_keys is on, and
+                # it is not. Doing it here is correct on both dialects.
+                s.execute(
+                    delete(TransactionTagModel).where(
+                        TransactionTagModel.transaction_id.in_([m.id for m in models])
+                    )
+                )
             for m in models:
                 s.delete(m)
             return [UUID(m.id) for m in models]
@@ -472,6 +551,138 @@ class SqlCategoryRepository:
                         categorization_labels=list(c.categorization_labels),
                     )
                 )
+
+
+class SqlTagRepository:
+    """Tags and the transaction bridge.
+
+    The bridge lives here rather than on the transaction repository because
+    every write to it is a *tagging* operation, and splitting one table's writes
+    across two repositories is how the two drift.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def list_for_user(self, user_id: UUID) -> list[Tag]:
+        with self._db.session() as s:
+            stmt = (
+                select(TagModel)
+                .where(TagModel.user_id == _u(user_id))
+                .order_by(TagModel.name)
+            )
+            return [self._to_entity(m) for m in s.scalars(stmt).all()]
+
+    def get(self, tag_id: UUID) -> Tag | None:
+        with self._db.session() as s:
+            m = s.get(TagModel, _u(tag_id))
+            return self._to_entity(m) if m else None
+
+    def add(self, tag: Tag) -> None:
+        try:
+            with self._db.session() as s:
+                s.add(
+                    TagModel(
+                        id=_u(tag.id),
+                        user_id=_u(tag.user_id),
+                        name=tag.name,
+                        slug=tag.slug,
+                        color=tag.color,
+                        kind=tag.kind,
+                    )
+                )
+        except IntegrityError as exc:
+            # The unique index is the arbiter, not a prior SELECT: a check-then-
+            # insert races itself the moment two requests arrive together.
+            raise DuplicateTagError(f"Tag '{tag.slug}' already exists.") from exc
+
+    def update(self, tag: Tag) -> None:
+        try:
+            with self._db.session() as s:
+                m = s.get(TagModel, _u(tag.id))
+                if m is None:
+                    return
+                m.name = tag.name
+                m.slug = tag.slug
+                m.color = tag.color
+                m.kind = tag.kind
+        except IntegrityError as exc:
+            raise DuplicateTagError(f"Tag '{tag.slug}' already exists.") from exc
+
+    def delete(self, tag_id: UUID) -> None:
+        with self._db.session() as s:
+            # Explicit bridge cleanup: see TransactionTagModel on why the FK's
+            # ON DELETE CASCADE cannot be relied on under SQLite.
+            s.execute(delete(TransactionTagModel).where(TransactionTagModel.tag_id == _u(tag_id)))
+            m = s.get(TagModel, _u(tag_id))
+            if m:
+                s.delete(m)
+
+    def transaction_ids_for_tag(self, tag_id: UUID) -> list[UUID]:
+        """Which transactions carry this tag. Read before a delete, so the cube
+        rows that are about to change can be re-derived."""
+        with self._db.session() as s:
+            rows = s.scalars(
+                select(TransactionTagModel.transaction_id).where(
+                    TransactionTagModel.tag_id == _u(tag_id)
+                )
+            ).all()
+            return [UUID(r) for r in rows]
+
+    def replace_for_transaction(self, transaction_id: UUID, tag_ids: list[UUID]) -> None:
+        """Set a transaction's tag list wholesale.
+
+        Replacement rather than diffing, for the same reason dashboard widgets
+        are replaced: the client edits the list as a unit, and a diff is more
+        code plus more ways to end up half-applied.
+        """
+        with self._db.session() as s:
+            s.execute(
+                delete(TransactionTagModel).where(
+                    TransactionTagModel.transaction_id == _u(transaction_id)
+                )
+            )
+            s.flush()
+            for tag_id in dict.fromkeys(tag_ids):
+                s.add(
+                    TransactionTagModel(
+                        transaction_id=_u(transaction_id), tag_id=_u(tag_id)
+                    )
+                )
+
+    def attach_to_transactions(self, tag_id: UUID, transaction_ids: list[UUID]) -> None:
+        """Add one tag to many transactions, skipping the ones that have it.
+
+        Additive, not a replacement: bulk-tagging must not silently strip the
+        other tags those transactions already carry.
+        """
+        if not transaction_ids:
+            return
+        wanted = [_u(i) for i in dict.fromkeys(transaction_ids)]
+        with self._db.session() as s:
+            existing = set(
+                s.scalars(
+                    select(TransactionTagModel.transaction_id).where(
+                        TransactionTagModel.tag_id == _u(tag_id),
+                        TransactionTagModel.transaction_id.in_(wanted),
+                    )
+                ).all()
+            )
+            for tx_id in wanted:
+                if tx_id not in existing:
+                    s.add(TransactionTagModel(transaction_id=tx_id, tag_id=_u(tag_id)))
+
+    @staticmethod
+    def _to_entity(m: TagModel) -> Tag:
+        return Tag(
+            id=UUID(m.id),
+            user_id=UUID(m.user_id),
+            name=m.name,
+            slug=m.slug,
+            color=m.color,
+            kind=m.kind,
+            created_at=m.created_at,
+        )
 
 
 class SqlMerchantRepository:

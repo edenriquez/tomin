@@ -12,6 +12,7 @@ from ....domain.entities import (
     Goal,
     Merchant,
     Statement,
+    Tag,
     Transaction,
 )
 from ...dtos.extraction import ParsedTransaction  # noqa: F401  (re-exported convenience)
@@ -36,6 +37,15 @@ class TransactionRepository(Protocol):
     def count_for_user(self, user_id: UUID, **filters) -> int: ...
 
     def get(self, transaction_id: UUID) -> Transaction | None: ...
+
+    def list_by_ids(self, user_id: UUID, ids: list[UUID]) -> list[Transaction]:
+        """Fetch specific transactions, scoped to their owner.
+
+        The scope is the security boundary for bulk operations over
+        client-supplied ids: rows the caller does not own simply do not come
+        back, so they cannot be acted on.
+        """
+        ...
 
     def update(self, transaction: Transaction) -> None:
         """Persist the user-editable fields of an existing transaction.
@@ -107,6 +117,49 @@ class DashboardRepository(Protocol):
 
     def replace_widgets(self, dashboard_id: UUID, widgets: list[DashboardWidget]) -> None:
         """Swap a dashboard's whole widget list. A layout is saved as a unit."""
+        ...
+
+
+class DuplicateTagError(ValueError):
+    """Two tags with the same slug for one user.
+
+    Declared on the *port* rather than in the adapter: "slugs are unique per
+    user" is part of the contract every implementation owes, so the use case
+    can name the failure without importing a database module. Subclasses
+    ``ValueError`` so an unhandled path still degrades to a 400; the blueprint
+    upgrades it to the more precise 409.
+    """
+
+
+@runtime_checkable
+class TagRepository(Protocol):
+    """Tags plus the ``transaction_tags`` bridge.
+
+    The bridge is the **record of truth** for tagging. The cube's
+    ``fact_transactions.tag_ids`` and ``bridge_transaction_tag`` are derived
+    copies, rebuildable from here.
+    """
+
+    def list_for_user(self, user_id: UUID) -> list[Tag]: ...
+
+    def get(self, tag_id: UUID) -> Tag | None: ...
+
+    def add(self, tag: Tag) -> None: ...
+
+    def update(self, tag: Tag) -> None: ...
+
+    def delete(self, tag_id: UUID) -> None: ...
+
+    def transaction_ids_for_tag(self, tag_id: UUID) -> list[UUID]:
+        """Which transactions carry this tag, so their cube rows can be re-derived."""
+        ...
+
+    def replace_for_transaction(self, transaction_id: UUID, tag_ids: list[UUID]) -> None:
+        """Set one transaction's tag list wholesale."""
+        ...
+
+    def attach_to_transactions(self, tag_id: UUID, transaction_ids: list[UUID]) -> None:
+        """Add one tag to many transactions without disturbing their other tags."""
         ...
 
 
