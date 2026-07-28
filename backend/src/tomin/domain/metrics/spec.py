@@ -21,7 +21,11 @@ from typing import Any, Literal
 MetricQuality = Literal["estimate", "beta"]
 
 MetricKind = Literal["aggregation", "computed"]
-MetricShape = Literal["scalar", "series", "breakdown"]
+#: ``table`` is rows that are not a measure over an axis -- one row per
+#: *statement about the data* rather than per bucket of it. The advisor's
+#: principles are the first: a row is a sentence plus the numbers that justify
+#: it, and calling that a "breakdown" would promise a total it does not have.
+MetricShape = Literal["scalar", "series", "breakdown", "table"]
 Aggregation = Literal["sum", "count"]
 #: Which side of the ledger a measure reads. ``net`` signs income positive and
 #: expense negative; ``any`` ignores direction entirely.

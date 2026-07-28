@@ -94,11 +94,16 @@ def test_catalog_lists_every_metric_with_its_declaration(client):
         "cash_withdrawn",
         "lifetime_flow",
         "investment_projection",
+        "financial_advice",
     }
     for item in items:
-        assert item["shape"] in {"scalar", "series", "breakdown"}
-        assert item["unit"] == "MXN"
+        assert item["shape"] in {"scalar", "series", "breakdown", "table"}
         assert isinstance(item["requires"], list)
+    # Every metric is a peso figure except the advisor, whose rows are
+    # sentences: labelling that card "MXN" would name a currency for a widget
+    # that has no headline amount.
+    assert {i["unit"] for i in items if i["id"] != "financial_advice"} == {"MXN"}
+    assert by_id["financial_advice"]["unit"] == "none"
 
     assert by_id["spend_by_category"]["shape"] == "breakdown"
     assert by_id["spend_by_category"]["requires"] == ["transactions"]

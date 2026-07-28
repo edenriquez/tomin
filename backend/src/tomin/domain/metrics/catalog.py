@@ -158,6 +158,31 @@ INVESTMENT_PROJECTION = MetricSpec(
     requires=(),
 )
 
+# Computed. The advisor's first principle (docs/advisor-principles.md, P1).
+# `unit="none"` because the rows are sentences, not money: the one monetary
+# field, `suggested_amount`, is a peso figure inside a row and the client
+# formats it, while a widget-level "MXN" would label the whole card as a
+# currency figure it does not have.
+#
+# `ignores_period` for the same reason `lifetime_flow` carries it, but sharper:
+# advice is a claim about the *latest* month against its own trailing baseline.
+# Let the dashboard's period narrow it and both "latest" and "baseline" quietly
+# mean something else than what the card says.
+FINANCIAL_ADVICE = MetricSpec(
+    id="financial_advice",
+    title="Consejo",
+    description=(
+        "Principios financieros evaluados contra tus numeros. Cada consejo se "
+        "activa solo cuando tus datos lo hacen oportuno, y siempre dice por que."
+    ),
+    group="Consejos",
+    kind="computed",
+    shape="table",
+    unit="none",
+    requires=("transactions",),
+    ignores_period=True,
+)
+
 METRIC_CATALOG: dict[str, MetricSpec] = {
     spec.id: spec
     for spec in (
@@ -168,5 +193,6 @@ METRIC_CATALOG: dict[str, MetricSpec] = {
         CASH_WITHDRAWN,
         LIFETIME_FLOW,
         INVESTMENT_PROJECTION,
+        FINANCIAL_ADVICE,
     )
 }
