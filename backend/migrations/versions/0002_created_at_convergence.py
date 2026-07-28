@@ -49,18 +49,31 @@ _TABLES = ("accounts", "transactions", "goals")
 
 
 def upgrade() -> None:
+    # Idempotent on purpose. This revision targets legacy create_all() DBs,
+    # and SQLite DDL is non-transactional: a crash mid-revision (e.g. two dev
+    # processes racing the first-boot migration) leaves some columns added
+    # with the version still at 0001, and a naive re-run then dies on
+    # "duplicate column". Skipping already-present columns makes the retry
+    # converge instead.
+    inspector = sa.inspect(op.get_bind())
     for table in _TABLES:
+        existing = {c["name"] for c in inspector.get_columns(table)}
+        if "created_at" in existing:
+            continue
+        # batch_alter_table because SQLite rejects a plain ADD COLUMN with a
+        # non-constant default (CURRENT_TIMESTAMP); batch mode rebuilds the
+        # table instead. On PostgreSQL it degrades to a normal ALTER.
         # server_default=now() both backfills existing rows and keeps the
         # column NOT NULL for inserts that don't mention it.
-        op.add_column(
-            table,
-            sa.Column(
-                "created_at",
-                sa.DateTime(),
-                nullable=False,
-                server_default=sa.func.now(),
-            ),
-        )
+        with op.batch_alter_table(table) as batch:
+            batch.add_column(
+                sa.Column(
+                    "created_at",
+                    sa.DateTime(),
+                    nullable=False,
+                    server_default=sa.func.now(),
+                ),
+            )
 
 
 def downgrade() -> None:
