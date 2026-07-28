@@ -27,8 +27,27 @@ import {
     ToastProvider,
     useToast,
 } from "@/components/ui";
+import { DistributionChart } from "@/components/charts/DistributionChart";
+import { ProjectionChart } from "@/components/charts/ProjectionChart";
 import { chart, colors } from "@/design/tokens";
 import { compactMxn, monthLabelFromOffset, mxn, mxn2, pct } from "@/lib/format";
+
+const CATEGORIES = [
+    { category_id: "a", category_name: "Alimentos", amount: 18400, percentage: 34 },
+    { category_id: "b", category_name: "Transporte", amount: 9200, percentage: 17 },
+    { category_id: "c", category_name: "Servicios", amount: 7100, percentage: 13 },
+    { category_id: "d", category_name: "Entretenimiento", amount: 5300, percentage: 10 },
+    { category_id: "e", category_name: "Salud", amount: 4100, percentage: 8 },
+    { category_id: "f", category_name: "Ropa", amount: 3000, percentage: 6 },
+    { category_id: "g", category_name: "Mascotas", amount: 1800, percentage: 3 },
+    { category_id: "h", category_name: "Otros gastos", amount: 900, percentage: 2 },
+];
+
+const FORECAST = Array.from({ length: 12 }, (_, i) => ({
+    month_offset: i,
+    baseline: 10000 + i * 4200,
+    optimized: 10000 + i * 4200 * 1.35,
+}));
 
 type Row = { id: string; date: string; concept: string; amount: number };
 
@@ -387,6 +406,20 @@ function Body() {
                         Negative (persiste)
                     </Button>
                 </Cluster>
+            </Section>
+
+            <Section title="Charts">
+                <div className="grid gap-4 md:grid-cols-2">
+                    <Card title="ProjectionChart (área + línea)" className="min-w-0">
+                        <ProjectionChart points={FORECAST} />
+                    </Card>
+                    <Card title="DistributionChart (barra horizontal)" className="min-w-0">
+                        <DistributionChart data={CATEGORIES} />
+                    </Card>
+                    <Card title="DistributionChart vacío" className="min-w-0">
+                        <DistributionChart data={[]} />
+                    </Card>
+                </div>
             </Section>
 
             <Section title="Formatters">
