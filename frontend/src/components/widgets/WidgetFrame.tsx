@@ -21,6 +21,8 @@ export type WidgetFrameProps = {
     onMoveDown?: () => void;
     onRetry?: () => void;
     detailHref?: string;
+    /** Replaces the default "aun no hay movimientos" body. See `WidgetDef.Empty`. */
+    empty?: ReactNode;
     /** The chart. Rendered only for `ready` and `insufficient`. */
     children?: ReactNode;
     className?: string;
@@ -47,6 +49,7 @@ export function WidgetFrame({
     onMoveDown,
     onRetry,
     detailHref,
+    empty,
     children,
     className,
 }: WidgetFrameProps) {
@@ -94,7 +97,7 @@ export function WidgetFrame({
             </header>
 
             <div className="min-w-0 flex-1 px-6" style={{ minHeight: height }}>
-                <Content state={state} height={height} onRetry={onRetry}>
+                <Content state={state} height={height} onRetry={onRetry} empty={empty}>
                     {children}
                 </Content>
             </div>
@@ -117,11 +120,13 @@ function Content({
     state,
     height,
     onRetry,
+    empty,
     children,
 }: {
     state: WidgetState;
     height: number;
     onRetry?: () => void;
+    empty?: ReactNode;
     children?: ReactNode;
 }) {
     switch (state.kind) {
@@ -135,6 +140,7 @@ function Content({
             );
 
         case "empty":
+            if (empty) return <div style={{ height }}>{empty}</div>;
             return (
                 <div style={{ height }} className="flex flex-col justify-center">
                     <p className="text-body font-medium text-ink">Aun no hay movimientos.</p>

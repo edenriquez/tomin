@@ -10,9 +10,12 @@
 
 import type { MetricSpec, WidgetSize } from "@/lib/metrics";
 import { accumulatedSpend } from "./defs/accumulatedSpend";
+import { cashWithdrawn } from "./defs/cashWithdrawn";
 import { investmentProjection } from "./defs/investmentProjection";
+import { lifetimeFlow } from "./defs/lifetimeFlow";
 import { monthlyCashFlow } from "./defs/monthlyCashFlow";
 import { spendByCategory } from "./defs/spendByCategory";
+import { tagTotals } from "./defs/tagTotals";
 import { GenericSeriesBody } from "./defs/generic";
 import type { WidgetDef, WidgetGroup } from "./types";
 
@@ -20,6 +23,9 @@ export const WIDGETS: WidgetDef[] = [
     spendByCategory,
     monthlyCashFlow,
     accumulatedSpend,
+    cashWithdrawn,
+    lifetimeFlow,
+    tagTotals,
     investmentProjection,
 ];
 
@@ -42,7 +48,16 @@ function asGroup(value: string): WidgetGroup {
  */
 export function resolveWidget(spec: MetricSpec): WidgetDef {
     const registered = BY_ID[spec.id];
-    if (registered) return registered;
+    // The catalog wins on `quality`. It is the backend's own judgement about
+    // its own number: when a metric stops being a heuristic the badge has to
+    // disappear on the server's say-so, not on the next frontend release. The
+    // registered value stays as the fallback for when the catalog is out of
+    // reach (the detail page renders from `getWidget` alone).
+    if (registered) {
+        return spec.quality === undefined
+            ? registered
+            : { ...registered, quality: spec.quality ?? undefined };
+    }
     return {
         id: spec.id,
         title: spec.title,
@@ -50,7 +65,10 @@ export function resolveWidget(spec: MetricSpec): WidgetDef {
         group: asGroup(spec.group),
         sizes: ["md", "lg"] as WidgetSize[],
         requires: spec.requires,
-        quality: "beta",
+        // "beta" by default: a metric with no presentation here is one the
+        // frontend has never looked at, and saying so is more honest than a
+        // bare card.
+        quality: spec.quality ?? "beta",
         Body: GenericSeriesBody,
     };
 }
