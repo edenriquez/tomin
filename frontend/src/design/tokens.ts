@@ -121,6 +121,15 @@ export const boxShadow = {
     float: "0 12px 40px -8px rgba(10, 12, 16, 0.24)",
 } as const;
 
+/**
+ * Layout. `page` is the content measure inside the app shell — wide enough for
+ * a 12-column widget grid, narrow enough that a table row doesn't become a
+ * scan across a 27" monitor.
+ */
+export const maxWidth = {
+    page: "1200px",
+} as const;
+
 export const zIndex = {
     sheet: 40,
     modal: 50,

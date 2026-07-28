@@ -23,7 +23,7 @@ export default function LandingPage() {
                         About
                     </a>
                     <Link
-                        href="/dashboard"
+                        href="/inicio"
                         className="rounded-control bg-ember px-4 py-2 font-semibold text-ink"
                     >
                         Get Started
@@ -52,7 +52,7 @@ export default function LandingPage() {
                             placeholder="Enter your email address"
                         />
                         <Link
-                            href="/dashboard"
+                            href="/inicio"
                             className="rounded-control bg-ember px-6 py-3 font-semibold text-ink"
                         >
                             Start Analyzing for Free

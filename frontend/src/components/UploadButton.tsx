@@ -37,7 +37,7 @@ export function UploadButton({ onDone }: { onDone?: () => void }) {
                 icon={<Upload size={16} />}
                 onClick={() => inputRef.current?.click()}
             >
-                Subir Estado de Cuenta
+                Subir documento
             </Button>
             <input
                 ref={inputRef}

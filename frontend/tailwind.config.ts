@@ -5,6 +5,7 @@ import {
     colors,
     fontFamily,
     fontSize,
+    maxWidth,
     zIndex,
 } from "./src/design/tokens";
 
@@ -22,6 +23,7 @@ const config: Config = {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             fontSize: fontSize as any,
             borderRadius: { ...borderRadius },
+            maxWidth: { ...maxWidth },
             zIndex: Object.fromEntries(
                 Object.entries(zIndex).map(([k, v]) => [k, String(v)])
             ),
