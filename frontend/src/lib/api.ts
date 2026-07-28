@@ -19,7 +19,26 @@ export type Transaction = {
     type: "income" | "expense";
     status: "completed" | "pending";
     category_id: string | null;
+    /** "auto" when the classifier assigned it, "manual" once a human did. */
+    category_source?: string | null;
     merchant_id?: string | null;
+    /** Free text the user wrote. Never derived from the statement. */
+    notes?: string | null;
+    /** Kept in the ledger, left out of every metric. For the transfer between
+     *  your own accounts that would otherwise show up as both income and spend. */
+    excluded_from_stats?: boolean;
+    /** Ids only — resolve names against the tag list (see `lib/tags.ts`). */
+    tag_ids?: string[];
+};
+
+/** The editable surface of a transaction. Everything else on it is bank data
+ *  and stays read-only: a description the user can rewrite is a label, the
+ *  original text survives in `raw_description`. */
+export type TransactionPatch = {
+    category_id?: string | null;
+    description?: string;
+    notes?: string | null;
+    excluded_from_stats?: boolean;
 };
 
 export type TransactionPage = {
@@ -95,6 +114,13 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
     summary: (params = "") => request<SpendingSummary>(`/api/analytics/summary${params}`),
     transactions: (query = "") => request<TransactionPage>(`/api/transactions${query}`),
+    /** Returns the updated transaction, so the caller never has to guess what
+     *  the server made of the patch. */
+    updateTransaction: (id: string, patch: TransactionPatch) =>
+        request<Transaction>(`/api/transactions/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify(patch),
+        }),
     /**
      * Absolute URL, not a fetch: the browser has to navigate to it for the
      * Content-Disposition attachment to become a download. Takes the same

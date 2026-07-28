@@ -6,6 +6,7 @@ import { Download, Inbox, SearchX } from "lucide-react";
 import { api, type Transaction } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { mxn2 } from "@/lib/format";
+import { createTag, listTags, tagIndex, isDuplicateTagError, type Tag } from "@/lib/tags";
 import {
     PAGE_SIZE,
     RANGES,
@@ -18,6 +19,8 @@ import {
     type TxFilters,
 } from "@/lib/transactions";
 import { UploadButton } from "@/components/UploadButton";
+import { BulkTagBar } from "@/components/transactions/BulkTagBar";
+import { TransactionSheet } from "@/components/transactions/TransactionSheet";
 import {
     Button,
     Card,
@@ -28,7 +31,8 @@ import {
     SearchInput,
     Table,
     TableSkeleton,
-    Tag,
+    Tag as TagChip,
+    useToast,
     type Column,
 } from "@/components/ui";
 
@@ -41,47 +45,12 @@ import {
  * different, unrelated slice. In a finance app a filter that doesn't reach the
  * total is worse than no filter, so the control waits for the API.
  *
- * Same reasoning for a category filter: there is no `GET /api/categories`, so
- * a `category_id` cannot be shown to anyone as a name.
+ * The category *name* is a different compromise: there is no
+ * `GET /api/categories`, but the all-time summary carries id -> name for every
+ * category that has movements, which is every category the user can actually
+ * be looking at. So the sheet names the category, and falls back rather than
+ * inventing one.
  */
-
-const COLUMNS: Column<Transaction>[] = [
-    {
-        key: "date",
-        header: "Fecha",
-        width: "7rem",
-        cell: (t) => <span className="tabular text-pewter">{t.date}</span>,
-    },
-    {
-        key: "concept",
-        header: "Concepto",
-        cell: (t) => <span title={t.raw_description ?? undefined}>{t.description}</span>,
-    },
-    {
-        key: "status",
-        header: "Estado",
-        width: "8rem",
-        cell: (t) => (
-            <Tag tone={t.status === "completed" ? "positive" : "neutral"}>
-                {t.status === "completed" ? "Completado" : "Pendiente"}
-            </Tag>
-        ),
-    },
-    {
-        key: "amount",
-        header: "Monto (MXN)",
-        numeric: true,
-        width: "10rem",
-        // Income is the exception and gets the colour; an expense is the
-        // default state of a bank statement and stays ink.
-        cell: (t) => (
-            <span className={cn(t.type === "income" && "text-positive")}>
-                {t.type === "income" ? "+" : "−"}
-                {mxn2(Math.abs(t.amount))}
-            </span>
-        ),
-    },
-];
 
 export default function MovimientosPage() {
     // `useSearchParams` opts the tree out of prerendering; without a boundary
@@ -101,7 +70,7 @@ function MovimientosFallback() {
                 subtitle="Analiza tus ingresos y gastos por categoria y comercio."
             />
             <Card>
-                <TableSkeleton columns={4} />
+                <TableSkeleton columns={5} />
             </Card>
         </div>
     );
@@ -111,6 +80,7 @@ function Movimientos() {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const { toast } = useToast();
 
     // The URL is the state. Everything below reads from it, so the back button
     // and a pasted link land on exactly the same view.
@@ -125,6 +95,13 @@ function Movimientos() {
     const [error, setError] = useState<string | null>(null);
     /** False until the first response lands, so the footer never appears empty. */
     const [loaded, setLoaded] = useState(false);
+    /** Bumped after a mutation to refetch the page the user is looking at. */
+    const [reloadKey, setReloadKey] = useState(0);
+
+    const [tags, setTags] = useState<Tag[]>([]);
+    const [categories, setCategories] = useState<Map<string, string>>(new Map());
+    const [selected, setSelected] = useState<string[]>([]);
+    const [openId, setOpenId] = useState<string | null>(null);
 
     const filtersRef = useRef(filters);
     filtersRef.current = filters;
@@ -141,6 +118,7 @@ function Movimientos() {
     );
 
     const query = filtersToQuery(filters);
+    const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
     useEffect(() => {
         let stale = false;
@@ -168,10 +146,165 @@ function Movimientos() {
         return () => {
             stale = true;
         };
+    }, [query, reloadKey]);
+
+    // A selection is a set of rows on screen. When the rows change — new page,
+    // new filter — carrying it over would leave the bar claiming "30
+    // seleccionados" over movements the user can no longer see.
+    useEffect(() => {
+        setSelected([]);
     }, [query]);
+
+    // Tags and category names are reference data: fetched once, refreshed only
+    // when this page creates a tag itself.
+    useEffect(() => {
+        let alive = true;
+        listTags()
+            .then((t) => alive && setTags(t))
+            .catch(() => undefined);
+        api.summary()
+            .then(
+                (s) =>
+                    alive &&
+                    setCategories(
+                        new Map(
+                            s.by_category
+                                .filter((c) => c.category_id)
+                                .map((c) => [c.category_id as string, c.category_name])
+                        )
+                    )
+            )
+            .catch(() => undefined);
+        return () => {
+            alive = false;
+        };
+    }, []);
+
+    const index = useMemo(() => tagIndex(tags), [tags]);
+
+    const categoryName = useCallback(
+        (categoryId: string | null) => {
+            if (!categoryId) return "Sin categoria";
+            return categories.get(categoryId) ?? "Categoria no disponible";
+        },
+        [categories]
+    );
+
+    /** Creates the tag and folds it into the local list, so the combobox in the
+     *  sheet and the one in the bulk bar both see it without a refetch. */
+    const onCreateTag = useCallback(
+        async (name: string): Promise<Tag | null> => {
+            try {
+                const tag = await createTag({ name });
+                setTags((current) => [...current, tag]);
+                return tag;
+            } catch (e) {
+                toast(
+                    isDuplicateTagError(e)
+                        ? `Ya tienes una etiqueta llamada "${name}".`
+                        : `No se pudo crear la etiqueta: ${(e as Error).message}`,
+                    "negative"
+                );
+                return null;
+            }
+        },
+        [toast]
+    );
+
+    const allSelected = items.length > 0 && selected.length === items.length;
+
+    const toggleAll = useCallback(() => {
+        setSelected((current) => (current.length === items.length ? [] : items.map((t) => t.id)));
+    }, [items]);
+
+    const toggleOne = useCallback((id: string) => {
+        setSelected((current) =>
+            current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
+        );
+    }, []);
+
+    const columns: Column<Transaction>[] = useMemo(
+        () => [
+            {
+                key: "select",
+                width: "2.5rem",
+                header: (
+                    <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                        aria-label="Seleccionar todos los de esta pagina"
+                        className="h-4 w-4 accent-ember"
+                    />
+                ),
+                cell: (t) => (
+                    <input
+                        type="checkbox"
+                        checked={selected.includes(t.id)}
+                        // The row opens the sheet; the checkbox must not.
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleOne(t.id)}
+                        aria-label={`Seleccionar ${t.description}`}
+                        className="h-4 w-4 accent-ember"
+                    />
+                ),
+            },
+            {
+                key: "date",
+                header: "Fecha",
+                width: "7rem",
+                cell: (t) => <span className="tabular text-pewter">{t.date}</span>,
+            },
+            {
+                key: "concept",
+                header: "Concepto",
+                cell: (t) => (
+                    <div className="min-w-0">
+                        <span title={t.raw_description ?? undefined}>{t.description}</span>
+                        {(t.tag_ids?.length ?? 0) > 0 && (
+                            <span className="mt-1 flex flex-wrap gap-1">
+                                {t.tag_ids?.map((id) => (
+                                    <TagChip key={id}>{index.get(id)?.name ?? "etiqueta"}</TagChip>
+                                ))}
+                            </span>
+                        )}
+                    </div>
+                ),
+            },
+            {
+                key: "status",
+                header: "Estado",
+                width: "8rem",
+                cell: (t) => (
+                    <span className="flex flex-wrap gap-1">
+                        <TagChip tone={t.status === "completed" ? "positive" : "neutral"}>
+                            {t.status === "completed" ? "Completado" : "Pendiente"}
+                        </TagChip>
+                        {t.excluded_from_stats && <TagChip tone="estimate">Excluido</TagChip>}
+                    </span>
+                ),
+            },
+            {
+                key: "amount",
+                header: "Monto (MXN)",
+                numeric: true,
+                width: "10rem",
+                // Income is the exception and gets the colour; an expense is the
+                // default state of a bank statement and stays ink.
+                cell: (t) => (
+                    <span className={cn(t.type === "income" && "text-positive")}>
+                        {t.type === "income" ? "+" : "−"}
+                        {mxn2(Math.abs(t.amount))}
+                    </span>
+                ),
+            },
+        ],
+        [allSelected, toggleAll, toggleOne, selected, index]
+    );
 
     const activeRange = matchRange(filters.start, filters.end);
     const filtered = hasActiveFilters(filters);
+    const open = useMemo(() => items.find((t) => t.id === openId) ?? null, [items, openId]);
 
     // SearchInput owns its text, so clearing the filters from outside it has to
     // remount it. Bumping a key does that; keying on `filters.q` itself would
@@ -277,11 +410,23 @@ function Movimientos() {
                     </p>
                 )}
 
+                {selected.length > 0 && (
+                    <BulkTagBar
+                        count={selected.length}
+                        transactionIds={selected}
+                        tags={tags}
+                        onCreateTag={onCreateTag}
+                        onDone={reload}
+                        onClear={() => setSelected([])}
+                    />
+                )}
+
                 <Table
                     caption="Movimientos"
-                    columns={COLUMNS}
+                    columns={columns}
                     rows={items}
                     rowKey={(t) => t.id}
+                    onRowClick={(t) => setOpenId(t.id)}
                     loading={loading}
                     skeletonRows={8}
                     empty={
@@ -322,6 +467,20 @@ function Movimientos() {
                     />
                 )}
             </Card>
+
+            {open && (
+                // Keyed by id: opening a different row rebuilds the draft state
+                // instead of showing the previous movement's unsaved edits.
+                <TransactionSheet
+                    key={open.id}
+                    transaction={open}
+                    tags={tags}
+                    categoryName={categoryName}
+                    onCreateTag={onCreateTag}
+                    onSaved={reload}
+                    onClose={() => setOpenId(null)}
+                />
+            )}
         </div>
     );
 }
