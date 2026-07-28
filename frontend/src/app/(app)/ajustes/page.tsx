@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { UploadButton } from "@/components/UploadButton";
-import { Card, Field, Input, PageHeader, Tabs } from "@/components/ui";
+import { Button, Card, Field, Input, PageHeader, Tabs, Tag } from "@/components/ui";
 import { useProfile } from "@/lib/profile";
 
 const AGGRESSIVENESS = [
@@ -11,8 +11,22 @@ const AGGRESSIVENESS = [
     { value: "aggressive", label: "Agresivo" },
 ];
 
+/**
+ * There is no profiles endpoint yet: the API has nothing to PUT a name, an RFC
+ * or a preference to. Rather than render a Guardar button that throws the form
+ * away on reload — the worst outcome, because the user believes it saved — the
+ * editable sections are shown disabled and labelled "Proximamente".
+ *
+ * Two fields were removed outright rather than disabled. "RFC" and "Meta de
+ * ingreso mensual" were never wired to anything and there is no feature waiting
+ * on them, so a greyed-out input would only be a promise nobody made.
+ *
+ * What stays is what Tomin actually knows (`lib/profile.ts`) and what actually
+ * works (the uploader). When `PUT /api/profile` lands, delete `readOnly` here.
+ */
+const PROXIMAMENTE = <Tag tone="estimate">Proximamente</Tag>;
+
 export default function AjustesPage() {
-    // Nothing here persists yet — the save path lands in F6.
     const [advice, setAdvice] = useState("balanced");
     const profile = useProfile();
 
@@ -20,33 +34,30 @@ export default function AjustesPage() {
         <div className="max-w-3xl space-y-12">
             <PageHeader title="Ajustes" subtitle="Administra tus preferencias." />
 
-            {/* Empty inputs with placeholders, not invented values: a fake RFC
-                sitting in a real form reads as data Tomin already has. */}
-            <Card title="Informacion personal">
+            <Card title="Informacion personal" actions={PROXIMAMENTE}>
                 <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="Nombre completo">
-                        {(p) => (
-                            <Input {...p} defaultValue={profile.name} placeholder="Tu nombre" />
-                        )}
-                    </Field>
-                    <Field label="RFC" hint="Necesario para la integracion con el SAT.">
-                        {(p) => <Input {...p} defaultValue="" placeholder="XAXX010101000" />}
+                    <Field label="Nombre">
+                        {(p) => <Input {...p} value={profile.name} disabled readOnly />}
                     </Field>
                     <Field label="Correo electronico">
                         {(p) => (
                             <Input
                                 {...p}
                                 type="email"
-                                defaultValue={profile.email ?? ""}
-                                placeholder="tu@correo.com"
+                                value={profile.email ?? ""}
+                                placeholder="Sin cuenta todavia"
+                                disabled
+                                readOnly
                             />
                         )}
                     </Field>
-                    <Field label="Meta de ingreso mensual" hint="En pesos, sin centavos.">
-                        {(p) => (
-                            <Input {...p} inputMode="numeric" defaultValue="" placeholder="45000" />
-                        )}
-                    </Field>
+                </div>
+                <div className="mt-4 flex items-center gap-3">
+                    <Button disabled>Guardar</Button>
+                    <p className="text-label text-pewter">
+                        Tomin funciona sin registro por ahora, asi que no hay a donde guardar un
+                        perfil. Llega con las cuentas de usuario.
+                    </p>
                 </div>
             </Card>
 
@@ -60,7 +71,7 @@ export default function AjustesPage() {
                 </div>
             </Card>
 
-            <Card title="Asistente">
+            <Card title="Asistente" actions={PROXIMAMENTE}>
                 <p className="mb-2 text-body-sm text-graphite">Nivel de recomendaciones</p>
                 <Tabs
                     aria-label="Nivel de recomendaciones"
@@ -68,6 +79,9 @@ export default function AjustesPage() {
                     value={advice}
                     onChange={setAdvice}
                 />
+                <p className="mt-3 text-label text-pewter">
+                    La seleccion se pierde al recargar: todavia no cambia las recomendaciones.
+                </p>
             </Card>
         </div>
     );

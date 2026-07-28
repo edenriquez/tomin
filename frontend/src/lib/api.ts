@@ -9,13 +9,24 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000
 
 export type Transaction = {
     id: string;
+    statement_id?: string | null;
     date: string;
     description: string;
+    /** Untouched bank text, before normalisation. Useful as a title attribute. */
+    raw_description?: string | null;
     amount: number;
     currency: string;
     type: "income" | "expense";
     status: "completed" | "pending";
     category_id: string | null;
+    merchant_id?: string | null;
+};
+
+export type TransactionPage = {
+    items: Transaction[];
+    total: number;
+    limit: number;
+    offset: number;
 };
 
 export type CategorySpend = {
@@ -83,8 +94,13 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
     summary: (params = "") => request<SpendingSummary>(`/api/analytics/summary${params}`),
-    transactions: (query = "") =>
-        request<{ items: Transaction[]; total: number }>(`/api/transactions${query}`),
+    transactions: (query = "") => request<TransactionPage>(`/api/transactions${query}`),
+    /**
+     * Absolute URL, not a fetch: the browser has to navigate to it for the
+     * Content-Disposition attachment to become a download. Takes the same
+     * query string the table was loaded with, so the file matches the screen.
+     */
+    transactionsExportUrl: (query = "") => `${API_URL}/api/transactions/export.csv${query}`,
     recurring: () => request<{ items: RecurringItem[] }>(`/api/analytics/recurring`),
     forecast: () => request<{ points: ForecastPoint[] }>(`/api/forecast`),
     simulate: (body: Record<string, number>) =>
