@@ -1,3 +1,4 @@
+from .dashboards import GetHomeDashboardUseCase, SaveHomeDashboardUseCase
 from .detect_recurring import DetectRecurringUseCase
 from .forecast import GetForecastUseCase, SimulateForecastUseCase
 from .get_spending_summary import GetSpendingSummaryUseCase
@@ -16,6 +17,7 @@ __all__ = [
     "DeleteStatementResult",
     "DetectRecurringUseCase",
     "GetForecastUseCase",
+    "GetHomeDashboardUseCase",
     "GetMetricCatalogUseCase",
     "GetSpendingSummaryUseCase",
     "ListTransactionsUseCase",
@@ -26,6 +28,7 @@ __all__ = [
     "RebuildCubeResult",
     "RebuildCubeUseCase",
     "RunMetricQueriesUseCase",
+    "SaveHomeDashboardUseCase",
     "SimulateForecastUseCase",
     "StatementNotFoundError",
 ]

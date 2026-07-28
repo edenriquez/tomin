@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from ....application.dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 from ....application.dtos.metrics import MetricError, MetricResult
-from ....domain.entities import Goal, Statement, Transaction
+from ....domain.entities import Dashboard, DashboardWidget, Goal, Statement, Transaction
 from ....domain.metrics.spec import MetricSpec
 from ....domain.services.forecasting import ForecastPoint
 
@@ -145,6 +145,27 @@ def metric_entry_json(entry: MetricResult | MetricError) -> dict:
         if isinstance(entry, MetricError)
         else metric_result_json(entry)
     )
+
+
+def dashboard_widget_json(w: DashboardWidget) -> dict:
+    return {
+        "id": str(w.id),
+        "metric_id": w.metric_id,
+        "position": w.position,
+        "size": w.size,
+        "params": w.params,
+        "title_override": w.title_override,
+    }
+
+
+def dashboard_json(d: Dashboard) -> dict:
+    return {
+        "id": str(d.id),
+        "name": d.name,
+        "is_default": d.is_default,
+        "updated_at": _iso(d.updated_at),
+        "widgets": [dashboard_widget_json(w) for w in d.widgets],
+    }
 
 
 def goal_json(g: Goal) -> dict:

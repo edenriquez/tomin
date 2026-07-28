@@ -14,6 +14,7 @@ from ..adapters.outbound.persistence import (
     Database,
     SqlAccountRepository,
     SqlCategoryRepository,
+    SqlDashboardRepository,
     SqlGoalRepository,
     SqlMerchantRepository,
     SqlStatementRepository,
@@ -25,6 +26,7 @@ from ..adapters.outbound.storage import TransientFileStorage
 from ..application.use_cases import (
     DetectRecurringUseCase,
     GetForecastUseCase,
+    GetHomeDashboardUseCase,
     GetMetricCatalogUseCase,
     GetSpendingSummaryUseCase,
     ListTransactionsUseCase,
@@ -33,6 +35,7 @@ from ..application.use_cases import (
     ProcessFileUseCase,
     RebuildCubeUseCase,
     RunMetricQueriesUseCase,
+    SaveHomeDashboardUseCase,
     SimulateForecastUseCase,
 )
 from .settings import Settings
@@ -88,6 +91,10 @@ class Container:
     @cached_property
     def goals_repo(self) -> SqlGoalRepository:
         return SqlGoalRepository(self.database)
+
+    @cached_property
+    def dashboards(self) -> SqlDashboardRepository:
+        return SqlDashboardRepository(self.database)
 
     @cached_property
     def categories(self) -> SqlCategoryRepository:
@@ -151,6 +158,14 @@ class Container:
     @cached_property
     def metric_catalog(self) -> GetMetricCatalogUseCase:
         return GetMetricCatalogUseCase()
+
+    @cached_property
+    def get_home_dashboard(self) -> GetHomeDashboardUseCase:
+        return GetHomeDashboardUseCase(self.dashboards)
+
+    @cached_property
+    def save_home_dashboard(self) -> SaveHomeDashboardUseCase:
+        return SaveHomeDashboardUseCase(self.dashboards)
 
     @cached_property
     def detect_recurring(self) -> DetectRecurringUseCase:
