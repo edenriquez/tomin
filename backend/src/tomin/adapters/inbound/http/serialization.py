@@ -119,6 +119,10 @@ def metric_spec_json(spec: MetricSpec) -> dict:
         "default_dimensions": list(spec.default_dimensions),
         "default_grain": spec.default_grain,
         "cumulative": spec.cumulative,
+        # `null` unless the metric rests on a heuristic. The frame renders the
+        # tag off this field, so it never has to know which metric it holds.
+        "quality": spec.quality,
+        "ignores_period": spec.ignores_period,
         "requires": list(spec.requires),
         "params": [
             {

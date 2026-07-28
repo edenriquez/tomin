@@ -41,6 +41,15 @@ class Transaction:
     notes: str | None = None
     #: Excluded from every analytics measure by the user's own decision.
     excluded_from_stats: bool = False
+    #: Money moving between the user's own accounts (a card payment, a
+    #: traspaso). Derived at ingest by ``domain/services/flags.py`` and excluded
+    #: by default from every spend measure -- counting a card payment *and* the
+    #: card's own charges is the same pesos twice.
+    is_transfer: bool = False
+    #: Cash out of an ATM. A flag rather than a category, because a
+    #: withdrawal's category is genuinely unknown: the statement cannot see
+    #: what the cash was spent on.
+    is_cash_withdrawal: bool = False
     updated_at: datetime | None = None
     #: The tags attached to this movement. Read-only from the transaction's
     #: point of view -- ``transaction_tags`` is the record of truth and the

@@ -17,6 +17,11 @@ _LEDGER_DEFAULTS = (
     # The user's own opinion about a row. Honoured everywhere, immediately:
     # an exclusion that does not move the number on screen reads as a bug.
     Eq("excluded_from_stats", False),
+    # A card payment is not spend -- the card's own charges already are, and
+    # counting both is the same pesos twice (§2). Declared here, once, which is
+    # the property that pays for this whole abstraction: with nine bespoke
+    # endpoints, nine places would have to remember it and one would not.
+    Eq("is_transfer", False),
 )
 
 MEASURES: dict[str, Measure] = {
@@ -42,6 +47,19 @@ MEASURES: dict[str, Measure] = {
         agg="sum",
         direction="net",
         default_filters=_LEDGER_DEFAULTS,
+    ),
+    # Cash out of an ATM. Its own measure rather than a client-supplied filter,
+    # because "which rows count as withdrawn cash" is a definition (fees are
+    # not cash) and definitions belong to the measure, not to the caller.
+    "withdrawal_amount": Measure(
+        name="withdrawal_amount",
+        column="amount",
+        agg="sum",
+        direction="expense",
+        default_filters=(
+            Eq("excluded_from_stats", False),
+            Eq("is_cash_withdrawal", True),
+        ),
     ),
 }
 

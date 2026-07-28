@@ -43,6 +43,8 @@ _COLUMN_SQL: dict[str, str] = {
     "merchant_id": "f.merchant_id",
     "description": "f.description",
     "excluded_from_stats": "f.excluded_from_stats",
+    "is_transfer": "f.is_transfer",
+    "is_cash_withdrawal": "f.is_cash_withdrawal",
     "tag_ids": "f.tag_ids",
     "category_name": "COALESCE(d.name, 'Sin Categoria')",
     "tag_id": "b.tag_id",
@@ -153,6 +155,7 @@ class DuckDbMetricEngine:
     def _where(
         self,
         user_id: UUID,
+        spec: MetricSpec,
         query: MetricQuery,
         measures: list[Measure],
         currency: str | None,
@@ -163,12 +166,16 @@ class DuckDbMetricEngine:
         if currency:
             clauses.append(f"{self._sql('currency')} = ?")
             params.append(currency)
-        if query.period.start:
-            clauses.append(f"{self._sql('tx_date')} >= ?")
-            params.append(query.period.start)
-        if query.period.end:
-            clauses.append(f"{self._sql('tx_date')} <= ?")
-            params.append(query.period.end)
+        # `ignores_period` metrics are all-time by definition: narrowing
+        # "lifetime in vs out" to the dashboard's month would answer a
+        # different question under the same label.
+        if not spec.ignores_period:
+            if query.period.start:
+                clauses.append(f"{self._sql('tx_date')} >= ?")
+                params.append(query.period.start)
+            if query.period.end:
+                clauses.append(f"{self._sql('tx_date')} <= ?")
+                params.append(query.period.end)
 
         # When every selected measure reads the same side of the ledger, the
         # rows on the other side are excluded rather than merely zeroed by the
@@ -233,7 +240,7 @@ class DuckDbMetricEngine:
         # different claims.
         select.append(f"COUNT(*) AS {_ROW_COUNT}")
 
-        clauses, params = self._where(user_id, query, measures, currency)
+        clauses, params = self._where(user_id, spec, query, measures, currency)
 
         sql = (
             f"SELECT {', '.join(select)} "

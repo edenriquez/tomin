@@ -20,7 +20,8 @@ from ....domain.entities import Category, Tag, Transaction
 DEFAULT_CURRENCY = "MXN"
 
 _UPSERT_FACT = (
-    "INSERT OR REPLACE INTO fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT OR REPLACE INTO fact_transactions VALUES "
+    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
 
@@ -75,6 +76,8 @@ class DuckDbCube:
                 merchant_id VARCHAR,
                 description VARCHAR,
                 excluded_from_stats BOOLEAN,
+                is_transfer BOOLEAN,
+                is_cash_withdrawal BOOLEAN,
                 tag_ids VARCHAR[]
             );
             """
@@ -207,6 +210,8 @@ class DuckDbCube:
             str(t.merchant_id) if t.merchant_id else None,
             t.description or t.raw_description,
             t.excluded_from_stats,
+            t.is_transfer,
+            t.is_cash_withdrawal,
             [str(tag_id) for tag_id in t.tag_ids],
         ]
 

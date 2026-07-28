@@ -101,6 +101,8 @@ def _to_transaction(m: TransactionModel, tag_ids: list[UUID] | None = None) -> T
         category_source=m.category_source or "auto",
         notes=m.notes,
         excluded_from_stats=bool(m.excluded_from_stats),
+        is_transfer=bool(m.is_transfer),
+        is_cash_withdrawal=bool(m.is_cash_withdrawal),
         updated_at=m.updated_at,
     )
 
@@ -129,6 +131,8 @@ class SqlTransactionRepository:
                         category_source=t.category_source,
                         notes=t.notes,
                         excluded_from_stats=t.excluded_from_stats,
+                        is_transfer=t.is_transfer,
+                        is_cash_withdrawal=t.is_cash_withdrawal,
                     )
                 )
 

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from ...domain.entities import Statement, Transaction
 from ...domain.services.categorization import CategorizationService
+from ...domain.services.flags import detect_flags
 from ...domain.value_objects.enums import StatementStatus
 from ..ports.outbound import (
     CategoryRepository,
@@ -104,6 +105,9 @@ class ProcessFileUseCase:
             domain_txs: list[Transaction] = []
             for p in parsed.transactions:
                 cls = categorizer.classify(p.raw_description)
+                # Derived once, at ingest, so every later read agrees. A
+                # transfer is not spend and a withdrawal is not a category.
+                flags = detect_flags(p.raw_description)
                 domain_txs.append(
                     Transaction(
                         user_id=user_id,
@@ -116,6 +120,8 @@ class ProcessFileUseCase:
                         status=p.status,
                         category_id=cls.category_id,
                         merchant_id=cls.merchant_id,
+                        is_transfer=flags.is_transfer,
+                        is_cash_withdrawal=flags.is_cash_withdrawal,
                     )
                 )
 

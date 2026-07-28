@@ -18,6 +18,8 @@ from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
+MetricQuality = Literal["estimate", "beta"]
+
 MetricKind = Literal["aggregation", "computed"]
 MetricShape = Literal["scalar", "series", "breakdown"]
 Aggregation = Literal["sum", "count"]
@@ -152,6 +154,16 @@ class MetricSpec:
     #: Capability strings the UI uses to lock a widget it cannot yet fill:
     #: "transactions", "months:3", "cfdi", "tags", "balance".
     requires: tuple[str, ...] = ()
+    #: How much to trust the number. ``estimate`` means it rests on a
+    #: heuristic over free text rather than on a field the bank stated; the
+    #: plan makes the header tag **mandatory** for cash withdrawals and
+    #: anomalies (§4). Published in the catalog so the frame can render it
+    #: without knowing which metric it is showing.
+    quality: Literal["estimate", "beta"] | None = None
+    #: The request period does not apply. "Lifetime in vs out" is a claim about
+    #: all of history; silently narrowing it to the dashboard's month would
+    #: answer a different question with the same label.
+    ignores_period: bool = False
 
     # --- validation ------------------------------------------------------
     def validate_dimensions(self, dimensions: tuple[str, ...]) -> None:

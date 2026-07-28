@@ -37,8 +37,11 @@ DEFAULT_CATEGORIES: list[dict] = [
         "name": "Transferencias & Ajustes",
         "color": "#64748b",
         "icon": "payments",
-        "labels": ["transferencia", "spei", "pago tc", "abono", "deposito",
-                   "retiro", "cajero"],
+        # "retiro"/"cajero" deliberately absent: a withdrawal's category is
+        # unknown -- the statement cannot see what the cash bought -- so it is
+        # a flag (`is_cash_withdrawal`), not a category (plan §2). Filing them
+        # here made every ATM visit look like an internal transfer.
+        "labels": ["transferencia", "spei", "pago tc", "abono", "deposito"],
     },
 ]
 

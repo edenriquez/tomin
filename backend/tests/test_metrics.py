@@ -91,6 +91,8 @@ def test_catalog_lists_every_metric_with_its_declaration(client):
         "tag_totals",
         "monthly_cash_flow",
         "accumulated_spend",
+        "cash_withdrawn",
+        "lifetime_flow",
         "investment_projection",
     }
     for item in items:

@@ -110,6 +110,16 @@ class TransactionModel(Base):
     excluded_from_stats: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=sa_false(), default=False
     )
+    # Derived at ingest from the description (domain/services/flags.py), not
+    # user input. Stored rather than recomputed at read time so a heuristic
+    # change is a visible, backfillable event instead of every historical
+    # number quietly shifting.
+    is_transfer: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sa_false(), default=False
+    )
+    is_cash_withdrawal: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sa_false(), default=False
+    )
     created_at: Mapped[datetime] = _created_at()
     # Nullable rather than defaulted: a row that has never been edited has no
     # meaningful update time, and now() would claim one.
