@@ -144,6 +144,20 @@ class DuckDbCube:
         ]
 
     # --- reader ----------------------------------------------------------
+    def fetch(self, sql: str, params: list) -> list[tuple]:
+        """Run one read against the fact tables under this cube's lock.
+
+        Exposed for the sibling adapter in this package: the metric engine
+        compiles its own SQL, and DuckDB is single-writer, so every statement
+        has to travel through the one connection this class owns rather than a
+        second one opened on the same file.
+
+        ``sql`` is built from whitelisted identifiers by the caller; ``params``
+        carries every value. Nothing user-supplied is ever interpolated.
+        """
+        with self._lock:
+            return self._connection.execute(sql, params).fetchall()
+
     def spending_by_category(
         self,
         user_id: UUID,
