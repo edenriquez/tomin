@@ -42,7 +42,7 @@ function period(s: Statement): string {
     return `${s.period_start ?? "?"} - ${s.period_end ?? "?"}`;
 }
 
-export default function StatementsPage() {
+export default function DocumentosPage() {
     const [items, setItems] = useState<Statement[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -138,28 +138,30 @@ export default function StatementsPage() {
     ];
 
     return (
-        <div>
-            <PageHeader
-                title="Estados de Cuenta"
-                subtitle="Archivos procesados. Al eliminar uno se borran tambien los movimientos que se extrajeron de el."
-                actions={
-                    <div className="w-64">
-                        <UploadButton onDone={load} />
-                    </div>
-                }
-            />
+        <div className="space-y-12">
+            <div className="space-y-4">
+                <PageHeader
+                    title="Documentos"
+                    subtitle="Estados de cuenta y facturas procesados. Al eliminar uno se borran tambien los movimientos que se extrajeron de el."
+                    actions={
+                        <div className="w-64">
+                            <UploadButton onDone={load} />
+                        </div>
+                    }
+                />
 
-            {error && (
-                <p className="mt-4 rounded-control border-l-2 border-ember bg-fog p-3 text-body-sm text-graphite">
-                    No se pudo cargar la informacion ({error}). Verifica que el backend este
-                    corriendo en el puerto 8000.
-                </p>
-            )}
+                {error && (
+                    <p className="rounded-control border-l-2 border-ember bg-fog p-3 text-body-sm text-graphite">
+                        No se pudo cargar la informacion ({error}). Revisa que el backend este
+                        corriendo en el puerto 8000.
+                    </p>
+                )}
+            </div>
 
-            <Card className="mt-6" flush>
+            <Card flush>
                 <div className="px-6 py-2">
                     <Table
-                        caption="Estados de cuenta procesados"
+                        caption="Documentos procesados"
                         columns={columns}
                         rows={items}
                         rowKey={(s) => s.id}
@@ -167,7 +169,7 @@ export default function StatementsPage() {
                         empty={
                             <EmptyState
                                 icon={<FileText size={18} />}
-                                title="Aun no hay archivos procesados"
+                                title="Aun no hay documentos procesados"
                                 description="Sube tu primer estado de cuenta y Tomin extrae los movimientos."
                             />
                         }

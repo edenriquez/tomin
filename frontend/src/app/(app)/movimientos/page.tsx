@@ -37,7 +37,7 @@ const COLUMNS: Column<Transaction>[] = [
     },
 ];
 
-export default function TransactionsPage() {
+export default function MovimientosPage() {
     const [items, setItems] = useState<Transaction[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -63,9 +63,9 @@ export default function TransactionsPage() {
     }, [load]);
 
     return (
-        <div>
+        <div className="space-y-12">
             <PageHeader
-                title="Gestion de Transacciones"
+                title="Movimientos"
                 subtitle="Analiza tus ingresos y gastos por categoria y comercio."
                 actions={
                     <Button
@@ -80,16 +80,16 @@ export default function TransactionsPage() {
                 }
             />
 
-            <Card className="mt-6">
+            <Card>
                 <SearchInput
                     className="mb-4"
                     onSearch={setSearch}
                     placeholder="Buscar comercio (ej. OXXO, Uber)..."
-                    aria-label="Buscar transacciones"
+                    aria-label="Buscar movimientos"
                 />
 
                 <Table
-                    caption="Transacciones"
+                    caption="Movimientos"
                     columns={COLUMNS}
                     rows={items}
                     rowKey={(t) => t.id}
@@ -97,7 +97,7 @@ export default function TransactionsPage() {
                     empty={
                         <EmptyState
                             icon={<Inbox size={18} />}
-                            title={search ? "Sin resultados" : "Aun no hay transacciones"}
+                            title={search ? "Sin resultados" : "Aun no hay movimientos"}
                             description={
                                 search
                                     ? `Ningun movimiento coincide con "${search}".`
