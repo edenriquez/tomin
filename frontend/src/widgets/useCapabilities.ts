@@ -3,19 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { isMetricError, queryMetrics, type Requirement } from "@/lib/metrics";
 import { resolvePeriod } from "@/lib/period";
+import { listTags } from "@/lib/tags";
 
 /**
  * What the account can currently answer.
  *
- * Exactly one capability is derivable today — whether any transaction exists —
- * because the rest of the vocabulary (`cfdi`, `tags`, `balance`) is behind
- * backend work that hasn't landed. The hook is shaped for the full set anyway
- * so adding one is a field here and a line in `REQUIREMENT_COPY`, not a new
- * mechanism at every call site.
+ * Two capabilities are derivable today — whether any transaction exists, and
+ * whether any tag does. The rest of the vocabulary (`cfdi`, `balance`) is
+ * behind backend work that hasn't landed. The hook is shaped for the full set
+ * anyway so adding one is a field here and a line in `REQUIREMENT_COPY`, not a
+ * new mechanism at every call site.
  */
-export type Capabilities = { transactions: boolean } & Partial<Record<string, boolean>>;
+export type Capabilities = { transactions: boolean; tags: boolean } & Partial<
+    Record<string, boolean>
+>;
 
-const NONE: Capabilities = { transactions: false };
+const NONE: Capabilities = { transactions: false, tags: false };
 
 export type RequirementCopy = { label: string; action: string; href: string };
 
@@ -57,18 +60,24 @@ export function useCapabilities() {
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
-            // A year-wide probe, not the selected period: whether the account
-            // has any data at all must not flip when the user narrows to a
-            // month they happen not to have uploaded.
-            const batch = await queryMetrics(resolvePeriod("year"), [
-                { key: "__capability_transactions", metric: "spend_by_category" },
+            // Both probes in flight at once, and neither is allowed to sink the
+            // other: an unreachable /api/tags must not make the picker claim the
+            // account has no movements either.
+            const [batch, tags] = await Promise.all([
+                // A year-wide probe, not the selected period: whether the
+                // account has any data at all must not flip when the user
+                // narrows to a month they happen not to have uploaded.
+                queryMetrics(resolvePeriod("year"), [
+                    { key: "__capability_transactions", metric: "spend_by_category" },
+                ]),
+                listTags().catch(() => null),
             ]);
             const entry = batch.results.__capability_transactions;
             const has =
                 !!entry &&
                 !isMetricError(entry) &&
                 ((entry.meta.source_txn_count ?? 0) > 0 || entry.rows.length > 0);
-            setCapabilities({ transactions: has });
+            setCapabilities({ transactions: has, tags: (tags?.length ?? 0) > 0 });
             setError(null);
         } catch (e) {
             // Unreachable backend is not "the user has no data": leave every

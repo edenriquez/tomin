@@ -54,6 +54,11 @@ export type WidgetDef = {
     /** Params the metric declares as required and the user has not typed yet. */
     defaultParams?: MetricParams;
     Body: ComponentType<WidgetBodyProps>;
+    /** Replaces the frame's default empty state. Worth overriding whenever
+     *  "no data" has a cause other than "no movements uploaded" — the default
+     *  copy sends the user to /documentos, which for a metric that is waiting
+     *  on something else is a dead end. */
+    Empty?: ComponentType;
 };
 
 /* -------------------------------------------------------------------------- */

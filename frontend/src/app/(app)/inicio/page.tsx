@@ -108,6 +108,7 @@ export default function InicioPage() {
                                 state={state}
                                 quality={def?.quality}
                                 sizes={def?.sizes ?? [w.size]}
+                                empty={def?.Empty ? <def.Empty /> : undefined}
                                 detailHref={`/w/${w.metricId}`}
                                 onResize={(size) => layout.resize(w.key, size)}
                                 onRemove={() => layout.remove(w.key)}

@@ -46,6 +46,14 @@ export type MetricSpec = {
     cumulative: boolean;
     requires: Requirement[];
     params: MetricParamDef[];
+    /** The backend's own judgement about how much the number can be trusted.
+     *  Authoritative: a metric that becomes exact stops being an estimate
+     *  server-side and the badge disappears without a frontend release. */
+    quality?: "estimate" | "beta" | null;
+    /** Declared by metrics whose answer spans the whole history. The period
+     *  selector still moves; this metric's result does not, and the widget has
+     *  to say so rather than let the user infer a period that never applied. */
+    ignores_period?: boolean;
 };
 
 /* -------------------------------------------------------------------------- */

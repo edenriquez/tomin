@@ -74,6 +74,7 @@ export default function WidgetDetailPage({ params }: { params: { widgetId: strin
                 size="lg"
                 state={state}
                 quality={def?.quality}
+                empty={def?.Empty ? <def.Empty /> : undefined}
                 onRetry={batch.refresh}
             >
                 {(state.kind === "ready" || state.kind === "insufficient") && (
