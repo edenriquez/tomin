@@ -26,6 +26,7 @@ from ..application.use_cases import (
     GetSpendingSummaryUseCase,
     ListTransactionsUseCase,
     ManageGoalsUseCase,
+    ManageStatementsUseCase,
     ProcessFileUseCase,
     SimulateForecastUseCase,
 )
@@ -107,6 +108,14 @@ class Container:
             merchants=self.merchants,
             cube=self.cube,
             file_storage=self.file_storage,
+        )
+
+    @cached_property
+    def manage_statements(self) -> ManageStatementsUseCase:
+        return ManageStatementsUseCase(
+            statements=self.statements,
+            transactions=self.transactions,
+            cube=self.cube,
         )
 
     @cached_property

@@ -48,6 +48,55 @@ def test_duplicate_upload_rejected(client, sample_cfdi_bytes):
     assert second.status_code == 409
 
 
+def test_list_and_delete_statement(client, sample_cfdi_bytes):
+    created = client.post(
+        "/api/statements",
+        data={"file": (sample_cfdi_bytes, "factura.xml")},
+        content_type="multipart/form-data",
+    )
+    assert created.status_code == 201
+    statement_id = created.get_json()["statement_id"]
+
+    listing = client.get("/api/statements").get_json()
+    assert listing["total"] == 1
+    assert listing["items"][0]["id"] == statement_id
+    assert listing["items"][0]["status"] == "processed"
+
+    deleted = client.delete(f"/api/statements/{statement_id}")
+    assert deleted.status_code == 200, deleted.get_data(as_text=True)
+    assert deleted.get_json()["transactions_deleted"] == 1
+
+    # The statement, its transactions, and its cube rows are all gone.
+    assert client.get("/api/statements").get_json()["total"] == 0
+    assert client.get("/api/transactions").get_json()["items"] == []
+    assert client.get("/api/analytics/summary").get_json()["total_expense"] == 0.0
+
+
+def test_delete_unknown_statement_returns_404(client):
+    resp = client.delete("/api/statements/2b1f9a3c-0000-4000-8000-000000000000")
+    assert resp.status_code == 404
+
+
+def test_delete_statement_frees_the_duplicate_hash(client, sample_cfdi_bytes):
+    data = sample_cfdi_bytes.getvalue()
+    import io
+
+    first = client.post(
+        "/api/statements",
+        data={"file": (io.BytesIO(data), "factura.xml")},
+        content_type="multipart/form-data",
+    )
+    client.delete(f"/api/statements/{first.get_json()['statement_id']}")
+
+    # Deleting removes the stored hash, so the same file can be re-uploaded.
+    again = client.post(
+        "/api/statements",
+        data={"file": (io.BytesIO(data), "factura.xml")},
+        content_type="multipart/form-data",
+    )
+    assert again.status_code == 201
+
+
 def test_goals_crud(client):
     created = client.post("/api/goals", json={"name": "Viaje a Cancun", "target_amount": 15000})
     assert created.status_code == 201

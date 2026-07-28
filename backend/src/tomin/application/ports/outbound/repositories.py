@@ -32,6 +32,13 @@ class TransactionRepository(Protocol):
 
     def count_for_user(self, user_id: UUID, **filters) -> int: ...
 
+    def delete_for_statement(self, statement_id: UUID) -> list[UUID]:
+        """Delete every transaction derived from a statement.
+
+        Returns the ids that were removed so the caller can prune the cube.
+        """
+        ...
+
 
 @runtime_checkable
 class StatementRepository(Protocol):
@@ -40,6 +47,10 @@ class StatementRepository(Protocol):
     def update(self, statement: Statement) -> None: ...
 
     def get(self, statement_id: UUID) -> Statement | None: ...
+
+    def list_for_user(self, user_id: UUID) -> list[Statement]: ...
+
+    def delete(self, statement_id: UUID) -> None: ...
 
     def exists_hash(self, user_id: UUID, file_hash: str) -> bool: ...
 

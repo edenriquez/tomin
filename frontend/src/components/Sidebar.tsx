@@ -9,6 +9,7 @@ import {
     Wallet,
     Target,
     LineChart,
+    FileText,
     Settings,
     Sparkles,
 } from "lucide-react";
@@ -17,6 +18,7 @@ const NAV = [
     { href: "/dashboard", label: "Resumen", icon: LayoutDashboard },
     { href: "/transactions", label: "Transacciones", icon: Wallet },
     { href: "/spending", label: "Gastos", icon: TrendingUp },
+    { href: "/statements", label: "Estados de Cuenta", icon: FileText },
     { href: "/forecasts", label: "Proyecciones", icon: LineChart },
     { href: "/settings", label: "Ajustes", icon: Settings },
 ];

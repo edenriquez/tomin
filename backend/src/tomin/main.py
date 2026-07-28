@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from flask import Flask
 from flask_cors import CORS
@@ -14,10 +15,16 @@ logging.basicConfig(level=logging.INFO)
 
 
 def create_app(settings: Settings | None = None) -> Flask:
-    """Application factory: builds the container, wires HTTP adapters, bootstraps."""
+    """Application factory: builds the container and wires HTTP adapters.
+
+    Bootstrap (schema creation + seeding) runs on the first request rather than
+    here, because it opens the single-writer DuckDB cube. Under the Flask dev
+    reloader the parent process imports this module to resolve ``app`` but never
+    serves a request, so deferring keeps it from taking the cube's file lock and
+    locking out the child that actually serves traffic.
+    """
     settings = settings or get_settings()
     container = Container(settings)
-    container.bootstrap()
 
     app = Flask(__name__)
     app.extensions["container"] = container
@@ -26,6 +33,20 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     register_blueprints(app)
     register_error_handlers(app)
+
+    bootstrap_lock = threading.Lock()
+    bootstrapped = False
+
+    @app.before_request
+    def _bootstrap_once() -> None:
+        nonlocal bootstrapped
+        if bootstrapped:
+            return
+        with bootstrap_lock:
+            if not bootstrapped:
+                container.bootstrap()
+                bootstrapped = True
+
     return app
 
 
@@ -34,6 +55,4 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    # use_reloader=False: the reloader forks a second process that would open a
-    # second connection to the single-writer DuckDB cube file and deadlock.
-    app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=8000, debug=True)

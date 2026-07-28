@@ -21,40 +21,53 @@ class DuckDbCube:
     Structured transactions are streamed into ``fact_transactions`` as they are
     processed; rollup tables (``rollup_monthly``, ``rollup_category``) are
     rebuilt on demand so dashboards can query pre-aggregated data quickly.
+
+    DuckDB allows a single writer per file, so the connection is opened lazily on
+    first use rather than in ``__init__``. Importing the app therefore does not
+    take the file lock -- which matters under the Flask dev reloader, where the
+    parent process imports the app but never serves a request.
     """
 
     def __init__(self, path: str = ":memory:") -> None:
-        self._con = duckdb.connect(path)
+        self._path = path
         self._lock = threading.Lock()
-        self._init_schema()
+        self._con: duckdb.DuckDBPyConnection | None = None
 
-    def _init_schema(self) -> None:
-        with self._lock:
-            self._con.execute(
-                """
-                CREATE TABLE IF NOT EXISTS fact_transactions (
-                    tx_id VARCHAR PRIMARY KEY,
-                    user_id VARCHAR,
-                    tx_date DATE,
-                    amount DECIMAL(14,2),
-                    currency VARCHAR,
-                    tx_type VARCHAR,
-                    category_id VARCHAR,
-                    merchant_id VARCHAR,
-                    description VARCHAR
-                );
-                """
-            )
-            self._con.execute(
-                "CREATE TABLE IF NOT EXISTS dim_category "
-                "(category_id VARCHAR PRIMARY KEY, name VARCHAR);"
-            )
+    @property
+    def _connection(self) -> duckdb.DuckDBPyConnection:
+        """Connection, opened on first access. Callers must hold ``self._lock``."""
+        if self._con is None:
+            self._con = duckdb.connect(self._path)
+            self._create_schema()
+        return self._con
+
+    def _create_schema(self) -> None:
+        assert self._con is not None
+        self._con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS fact_transactions (
+                tx_id VARCHAR PRIMARY KEY,
+                user_id VARCHAR,
+                tx_date DATE,
+                amount DECIMAL(14,2),
+                currency VARCHAR,
+                tx_type VARCHAR,
+                category_id VARCHAR,
+                merchant_id VARCHAR,
+                description VARCHAR
+            );
+            """
+        )
+        self._con.execute(
+            "CREATE TABLE IF NOT EXISTS dim_category "
+            "(category_id VARCHAR PRIMARY KEY, name VARCHAR);"
+        )
 
     # --- writer ----------------------------------------------------------
     def sync_categories(self, categories: list[Category]) -> None:
         with self._lock:
             for c in categories:
-                self._con.execute(
+                self._connection.execute(
                     "INSERT OR REPLACE INTO dim_category VALUES (?, ?)",
                     [str(c.id), c.name],
                 )
@@ -64,7 +77,7 @@ class DuckDbCube:
             return
         with self._lock:
             for t in transactions:
-                self._con.execute(
+                self._connection.execute(
                     "INSERT OR REPLACE INTO fact_transactions VALUES "
                     "(?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
@@ -80,9 +93,19 @@ class DuckDbCube:
                     ],
                 )
 
+    def delete_transactions(self, tx_ids: list[UUID]) -> None:
+        if not tx_ids:
+            return
+        placeholders = ", ".join("?" * len(tx_ids))
+        with self._lock:
+            self._connection.execute(
+                f"DELETE FROM fact_transactions WHERE tx_id IN ({placeholders})",
+                [str(i) for i in tx_ids],
+            )
+
     def refresh_rollups(self, user_id: UUID) -> None:
         with self._lock:
-            self._con.execute(
+            self._connection.execute(
                 """
                 CREATE OR REPLACE TABLE rollup_monthly AS
                 SELECT user_id,
@@ -93,7 +116,7 @@ class DuckDbCube:
                 GROUP BY user_id, month, tx_type;
                 """
             )
-            self._con.execute(
+            self._connection.execute(
                 """
                 CREATE OR REPLACE TABLE rollup_category AS
                 SELECT f.user_id,
@@ -113,7 +136,7 @@ class DuckDbCube:
     ) -> list[CategorySpend]:
         clause, params = self._filter(user_id, start, end)
         with self._lock:
-            rows = self._con.execute(
+            rows = self._connection.execute(
                 f"""
                 SELECT f.category_id,
                        COALESCE(d.name, 'Sin Categoria') AS name,
@@ -139,7 +162,7 @@ class DuckDbCube:
 
     def monthly_series(self, user_id: UUID, months: int = 12) -> list[MonthlyPoint]:
         with self._lock:
-            rows = self._con.execute(
+            rows = self._connection.execute(
                 """
                 SELECT strftime(tx_date, '%Y-%m') AS month,
                        SUM(CASE WHEN tx_type = 'income' THEN amount ELSE 0 END) AS income,
@@ -164,7 +187,7 @@ class DuckDbCube:
     ) -> SpendingSummary:
         clause, params = self._filter(user_id, start, end)
         with self._lock:
-            income, expense = self._con.execute(
+            income, expense = self._connection.execute(
                 f"""
                 SELECT
                     SUM(CASE WHEN tx_type = 'income' THEN amount ELSE 0 END),

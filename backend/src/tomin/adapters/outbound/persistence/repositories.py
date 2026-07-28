@@ -120,6 +120,16 @@ class SqlTransactionRepository:
             )
             return s.scalar(select(func.count()).select_from(stmt.subquery())) or 0
 
+    def delete_for_statement(self, statement_id: UUID) -> list[UUID]:
+        with self._db.session() as s:
+            stmt = select(TransactionModel).where(
+                TransactionModel.statement_id == _u(statement_id)
+            )
+            models = list(s.scalars(stmt).all())
+            for m in models:
+                s.delete(m)
+            return [UUID(m.id) for m in models]
+
 
 class SqlStatementRepository:
     def __init__(self, db: Database) -> None:
@@ -144,6 +154,21 @@ class SqlStatementRepository:
         with self._db.session() as s:
             m = s.get(StatementModel, _u(statement_id))
             return self._to_entity(m) if m else None
+
+    def list_for_user(self, user_id: UUID) -> list[Statement]:
+        with self._db.session() as s:
+            stmt = (
+                select(StatementModel)
+                .where(StatementModel.user_id == _u(user_id))
+                .order_by(StatementModel.uploaded_at.desc())
+            )
+            return [self._to_entity(m) for m in s.scalars(stmt).all()]
+
+    def delete(self, statement_id: UUID) -> None:
+        with self._db.session() as s:
+            m = s.get(StatementModel, _u(statement_id))
+            if m:
+                s.delete(m)
 
     def exists_hash(self, user_id: UUID, file_hash: str) -> bool:
         with self._db.session() as s:

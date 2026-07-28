@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ....application.dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
-from ....domain.entities import Goal, Transaction
+from ....domain.entities import Goal, Statement, Transaction
 from ....domain.services.forecasting import ForecastPoint
 
 
@@ -29,6 +29,18 @@ def transaction_json(t: Transaction) -> dict:
         "status": t.status.value,
         "category_id": str(t.category_id) if t.category_id else None,
         "merchant_id": str(t.merchant_id) if t.merchant_id else None,
+    }
+
+
+def statement_json(s: Statement) -> dict:
+    return {
+        "id": str(s.id),
+        "source_type": s.source_type.value,
+        "bank": s.bank,
+        "period_start": _iso(s.period_start),
+        "period_end": _iso(s.period_end),
+        "status": s.status.value,
+        "uploaded_at": _iso(s.uploaded_at),
     }
 
 

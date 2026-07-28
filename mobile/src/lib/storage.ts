@@ -18,6 +18,8 @@ export type StoredStatement = {
     mimeType: string;
     storedAt: string;
     processed: boolean;
+    /** Backend statement id, set once the server has parsed this file. */
+    remoteId?: string;
 };
 
 async function ensureDir(): Promise<void> {
@@ -67,8 +69,28 @@ export async function storeStatement(
     return record;
 }
 
-export async function markProcessed(id: string): Promise<void> {
+export async function markProcessed(id: string, remoteId: string): Promise<void> {
     const items = await listStatements();
-    for (const item of items) if (item.id === id) item.processed = true;
+    for (const item of items) {
+        if (item.id === id) {
+            item.processed = true;
+            item.remoteId = remoteId;
+        }
+    }
+    await writeIndex(items);
+}
+
+/**
+ * Forgets the backend statement after it has been deleted server-side. The
+ * local file stays put, so it can be re-processed later.
+ */
+export async function markUnprocessed(id: string): Promise<void> {
+    const items = await listStatements();
+    for (const item of items) {
+        if (item.id === id) {
+            item.processed = false;
+            delete item.remoteId;
+        }
+    }
     await writeIndex(items);
 }

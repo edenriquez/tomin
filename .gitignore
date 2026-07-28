@@ -6,4 +6,6 @@ __pycache__/
 .venv/
 .idea/
 .vscode/
-.next/
+.next/*.duckdb
+*.duckdb.wal
+*.db
