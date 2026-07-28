@@ -5,7 +5,7 @@
  * display layer. When Supabase auth is enabled, attach the access token here.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type Transaction = {
     id: string;
@@ -63,7 +63,12 @@ export type Goal = {
     progress: number;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * The one place a request is made. Exported so `lib/metrics.ts` speaks to the
+ * metric endpoints through the same helper instead of growing a second one
+ * that drifts on headers, caching or error shape.
+ */
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${API_URL}${path}`, {
         ...init,
         headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
