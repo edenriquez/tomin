@@ -7,27 +7,37 @@ dictionaries can reach a query.
 
 from __future__ import annotations
 
-from .spec import Dimension, FilterDef, Grain, Measure
+from .spec import Dimension, Eq, FilterDef, Grain, Measure
 
 # Default filters (docs/redesign-plan.md §1) attach to the measure so that
-# "spend excludes transfers" is declared once. The flags that belong here --
-# `is_transfer`, `excluded_from_stats`, `is_primary_in_group` -- are introduced
-# by B7/B10; the mechanism is live and applied by the compiler today, it simply
-# has no members yet. Adding one is a one-line change here, not nine.
+# "spend excludes what the user excluded" is declared once and inherited by
+# every metric that sums money, rather than remembered in nine places. The
+# remaining member, `is_primary_in_group` (fingerprint dedup), arrives with B10.
+_LEDGER_DEFAULTS = (
+    # The user's own opinion about a row. Honoured everywhere, immediately:
+    # an exclusion that does not move the number on screen reads as a bug.
+    Eq("excluded_from_stats", False),
+    # A card payment is not spend -- the card's own charges already are, and
+    # counting both is the same pesos twice (§2). Declared here, once, which is
+    # the property that pays for this whole abstraction: with nine bespoke
+    # endpoints, nine places would have to remember it and one would not.
+    Eq("is_transfer", False),
+)
+
 MEASURES: dict[str, Measure] = {
     "expense_amount": Measure(
         name="expense_amount",
         column="amount",
         agg="sum",
         direction="expense",
-        default_filters=(),
+        default_filters=_LEDGER_DEFAULTS,
     ),
     "income_amount": Measure(
         name="income_amount",
         column="amount",
         agg="sum",
         direction="income",
-        default_filters=(),
+        default_filters=_LEDGER_DEFAULTS,
     ),
     # Signed: income positive, expense negative. The only measure that may go
     # below zero, which is the point of it.
@@ -36,7 +46,20 @@ MEASURES: dict[str, Measure] = {
         column="amount",
         agg="sum",
         direction="net",
-        default_filters=(),
+        default_filters=_LEDGER_DEFAULTS,
+    ),
+    # Cash out of an ATM. Its own measure rather than a client-supplied filter,
+    # because "which rows count as withdrawn cash" is a definition (fees are
+    # not cash) and definitions belong to the measure, not to the caller.
+    "withdrawal_amount": Measure(
+        name="withdrawal_amount",
+        column="amount",
+        agg="sum",
+        direction="expense",
+        default_filters=(
+            Eq("excluded_from_stats", False),
+            Eq("is_cash_withdrawal", True),
+        ),
     ),
 }
 
@@ -50,12 +73,23 @@ DIMENSIONS: dict[str, Dimension] = {
     "month": Dimension(name="month", column="tx_month", label="Mes"),
     "currency": Dimension(name="currency", column="currency", label="Moneda"),
     "tx_type": Dimension(name="tx_type", column="tx_type", label="Tipo"),
+    # The one overlapping axis: tags are many-per-transaction on purpose.
+    "tag": Dimension(
+        name="tag",
+        column="tag_name",
+        label="Etiqueta",
+        key_column="tag_id",
+        overlapping=True,
+    ),
 }
 
 FILTERS: dict[str, FilterDef] = {
     "category": FilterDef(name="category", column="category_id"),
     "currency": FilterDef(name="currency", column="currency"),
     "tx_type": FilterDef(name="tx_type", column="tx_type"),
+    # Filtering reads the denormalised array on the fact row; only *grouping*
+    # by tag needs the bridge join. That is why the cube keeps both.
+    "tag": FilterDef(name="tag", column="tag_ids", multivalued=True),
 }
 
 GRAINS: dict[str, Grain] = {

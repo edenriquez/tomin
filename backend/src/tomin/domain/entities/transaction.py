@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID, uuid4
 
 from ..value_objects.enums import TransactionStatus, TxType
+
+#: Who chose the category. ``auto`` is the ingest classifier's guess; ``user``
+#: is a correction, and a correction is never overwritten by a later guess.
+CategorySource = Literal["auto", "user"]
 
 
 @dataclass(slots=True)
@@ -32,6 +37,25 @@ class Transaction:
     statement_id: UUID | None = None
     category_id: UUID | None = None
     merchant_id: UUID | None = None
+    category_source: CategorySource = "auto"
+    notes: str | None = None
+    #: Excluded from every analytics measure by the user's own decision.
+    excluded_from_stats: bool = False
+    #: Money moving between the user's own accounts (a card payment, a
+    #: traspaso). Derived at ingest by ``domain/services/flags.py`` and excluded
+    #: by default from every spend measure -- counting a card payment *and* the
+    #: card's own charges is the same pesos twice.
+    is_transfer: bool = False
+    #: Cash out of an ATM. A flag rather than a category, because a
+    #: withdrawal's category is genuinely unknown: the statement cannot see
+    #: what the cash was spent on.
+    is_cash_withdrawal: bool = False
+    updated_at: datetime | None = None
+    #: The tags attached to this movement. Read-only from the transaction's
+    #: point of view -- ``transaction_tags`` is the record of truth and the
+    #: repository fills this in -- but carried on the entity so the cube can
+    #: denormalise it into ``fact_transactions.tag_ids`` without a second query.
+    tag_ids: list[UUID] = field(default_factory=list)
     id: UUID = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:

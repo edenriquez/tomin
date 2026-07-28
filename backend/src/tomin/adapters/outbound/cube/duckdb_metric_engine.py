@@ -31,7 +31,9 @@ from ....domain.metrics.vocabulary import DIMENSIONS, FILTERS, GRAINS, MEASURES
 from .duckdb_cube import DuckDbCube
 
 #: Semantic column name -> SQL expression. The whitelist. `f` is
-#: ``fact_transactions``; `d` is ``dim_category``.
+#: ``fact_transactions``, `d` is ``dim_category``, `b` is
+#: ``bridge_transaction_tag`` and `g` is ``dim_tag`` -- the last two are joined
+#: in only when tag is a *dimension* (see :meth:`DuckDbMetricEngine._from`).
 _COLUMN_SQL: dict[str, str] = {
     "amount": "f.amount",
     "tx_date": "f.tx_date",
@@ -40,7 +42,13 @@ _COLUMN_SQL: dict[str, str] = {
     "category_id": "f.category_id",
     "merchant_id": "f.merchant_id",
     "description": "f.description",
+    "excluded_from_stats": "f.excluded_from_stats",
+    "is_transfer": "f.is_transfer",
+    "is_cash_withdrawal": "f.is_cash_withdrawal",
+    "tag_ids": "f.tag_ids",
     "category_name": "COALESCE(d.name, 'Sin Categoria')",
+    "tag_id": "b.tag_id",
+    "tag_name": "COALESCE(g.name, 'Etiqueta eliminada')",
     "tx_month": "strftime(f.tx_date, '%Y-%m')",
 }
 
@@ -75,7 +83,11 @@ class DuckDbMetricEngine:
         sql, params = self._compile(user_id, spec, query, measures, group_by, currency)
         rows = self._cube.fetch(sql, params)
 
-        return self._to_result(spec, measures, group_by, rows, currency)
+        # A breakdown by an overlapping axis does not partition the total: one
+        # transaction with three tags lands in three rows. The client is told so
+        # rather than left to infer it from sums that do not add up.
+        overlapping = any(DIMENSIONS[name].overlapping for name in query.dimensions)
+        return self._to_result(spec, measures, group_by, rows, currency, overlapping)
 
     # --- compilation -----------------------------------------------------
     @staticmethod
@@ -143,6 +155,7 @@ class DuckDbMetricEngine:
     def _where(
         self,
         user_id: UUID,
+        spec: MetricSpec,
         query: MetricQuery,
         measures: list[Measure],
         currency: str | None,
@@ -153,12 +166,16 @@ class DuckDbMetricEngine:
         if currency:
             clauses.append(f"{self._sql('currency')} = ?")
             params.append(currency)
-        if query.period.start:
-            clauses.append(f"{self._sql('tx_date')} >= ?")
-            params.append(query.period.start)
-        if query.period.end:
-            clauses.append(f"{self._sql('tx_date')} <= ?")
-            params.append(query.period.end)
+        # `ignores_period` metrics are all-time by definition: narrowing
+        # "lifetime in vs out" to the dashboard's month would answer a
+        # different question under the same label.
+        if not spec.ignores_period:
+            if query.period.start:
+                clauses.append(f"{self._sql('tx_date')} >= ?")
+                params.append(query.period.start)
+            if query.period.end:
+                clauses.append(f"{self._sql('tx_date')} <= ?")
+                params.append(query.period.end)
 
         # When every selected measure reads the same side of the ledger, the
         # rows on the other side are excluded rather than merely zeroed by the
@@ -180,7 +197,20 @@ class DuckDbMetricEngine:
         for name, value in query.filters.items():
             if name == "currency":
                 continue  # already applied as the currency scope
-            column = self._sql(FILTERS[name].column)
+            filter_def = FILTERS[name]
+            column = self._sql(filter_def.column)
+            if filter_def.multivalued:
+                # The column is an array, so the predicate is membership. A list
+                # of values is an OR ("tagged viaje *or* deducible"), which is
+                # what a multi-select in the UI means.
+                values = value if isinstance(value, (list, tuple)) else [value]
+                if not values:
+                    clauses.append("1 = 0")
+                    continue
+                tests = " OR ".join(f"list_contains({column}, ?)" for _ in values)
+                clauses.append(f"({tests})")
+                params.extend(str(v) for v in values)
+                continue
             if isinstance(value, (list, tuple)):
                 if not value:
                     clauses.append("1 = 0")
@@ -210,12 +240,11 @@ class DuckDbMetricEngine:
         # different claims.
         select.append(f"COUNT(*) AS {_ROW_COUNT}")
 
-        clauses, params = self._where(user_id, query, measures, currency)
+        clauses, params = self._where(user_id, spec, query, measures, currency)
 
         sql = (
             f"SELECT {', '.join(select)} "
-            "FROM fact_transactions f "
-            "LEFT JOIN dim_category d ON f.category_id = d.category_id "
+            f"{self._from(query)} "
             f"WHERE {' AND '.join(clauses)}"
         )
         if group_by:
@@ -240,6 +269,27 @@ class DuckDbMetricEngine:
         return sql, params
 
     @staticmethod
+    def _from(query: MetricQuery) -> str:
+        """The FROM/JOIN chain. The bridge joins in only for a tag *breakdown*.
+
+        Grouping by tag needs one row per (transaction, tag) pair, which is what
+        the bridge is; an INNER join is deliberate, so untagged transactions do
+        not open a NULL bucket. Filtering by tag takes the array column instead
+        and never reaches here -- a join would fan the rows out and double-count
+        the very total being filtered.
+        """
+        sql = (
+            "FROM fact_transactions f "
+            "LEFT JOIN dim_category d ON f.category_id = d.category_id"
+        )
+        if "tag" in query.dimensions:
+            sql += (
+                " JOIN bridge_transaction_tag b ON b.tx_id = f.tx_id"
+                " LEFT JOIN dim_tag g ON g.tag_id = b.tag_id"
+            )
+        return sql
+
+    @staticmethod
     def _order_by(spec: MetricSpec, measures: list[Measure]) -> str:
         # `1` is the leading group column; measure aliases are unambiguous.
         if spec.shape == "series":
@@ -256,6 +306,7 @@ class DuckDbMetricEngine:
         group_by: list[tuple[str, str]],
         raw_rows: list[tuple],
         currency: str | None,
+        overlapping: bool = False,
     ) -> MetricResult:
         aliases = [alias for alias, _ in group_by]
         rows: list[dict[str, Any]] = []
@@ -286,5 +337,9 @@ class DuckDbMetricEngine:
                 else None
             ),
             rows=rows,
-            meta=MetricMeta(currency=currency, source_txn_count=source_count),
+            meta=MetricMeta(
+                currency=currency,
+                overlapping=overlapping,
+                source_txn_count=source_count,
+            ),
         )

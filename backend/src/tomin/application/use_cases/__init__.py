@@ -12,8 +12,16 @@ from .statements import (
     ManageStatementsUseCase,
     StatementNotFoundError,
 )
+from .tags import ManageTagsUseCase, TagNotFoundError
+from .update_transaction import (
+    UNSET,
+    TransactionNotFoundError,
+    UnknownCategoryError,
+    UpdateTransactionUseCase,
+)
 
 __all__ = [
+    "UNSET",
     "DeleteStatementResult",
     "DetectRecurringUseCase",
     "GetForecastUseCase",
@@ -23,6 +31,7 @@ __all__ = [
     "ListTransactionsUseCase",
     "ManageGoalsUseCase",
     "ManageStatementsUseCase",
+    "ManageTagsUseCase",
     "ProcessFileResult",
     "ProcessFileUseCase",
     "RebuildCubeResult",
@@ -31,4 +40,8 @@ __all__ = [
     "SaveHomeDashboardUseCase",
     "SimulateForecastUseCase",
     "StatementNotFoundError",
+    "TagNotFoundError",
+    "TransactionNotFoundError",
+    "UnknownCategoryError",
+    "UpdateTransactionUseCase",
 ]

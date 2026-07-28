@@ -5,9 +5,11 @@ from .repositories import (
     AccountRepository,
     CategoryRepository,
     DashboardRepository,
+    DuplicateTagError,
     GoalRepository,
     MerchantRepository,
     StatementRepository,
+    TagRepository,
     TransactionRepository,
 )
 from .storage import FileStorage
@@ -16,9 +18,11 @@ __all__ = [
     "AccountRepository",
     "CategoryRepository",
     "DashboardRepository",
+    "DuplicateTagError",
     "GoalRepository",
     "MerchantRepository",
     "StatementRepository",
+    "TagRepository",
     "TransactionRepository",
     "Extractor",
     "TemplateClassifier",

@@ -5,7 +5,14 @@ from decimal import Decimal
 
 from ....application.dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 from ....application.dtos.metrics import MetricError, MetricResult
-from ....domain.entities import Dashboard, DashboardWidget, Goal, Statement, Transaction
+from ....domain.entities import (
+    Dashboard,
+    DashboardWidget,
+    Goal,
+    Statement,
+    Tag,
+    Transaction,
+)
 from ....domain.metrics.spec import MetricSpec
 from ....domain.services.forecasting import ForecastPoint
 
@@ -31,6 +38,21 @@ def transaction_json(t: Transaction) -> dict:
         "status": t.status.value,
         "category_id": str(t.category_id) if t.category_id else None,
         "merchant_id": str(t.merchant_id) if t.merchant_id else None,
+        "category_source": t.category_source,
+        "notes": t.notes,
+        "excluded_from_stats": t.excluded_from_stats,
+        "tag_ids": [str(tag_id) for tag_id in t.tag_ids],
+    }
+
+
+def tag_json(t: Tag) -> dict:
+    return {
+        "id": str(t.id),
+        "name": t.name,
+        "slug": t.slug,
+        "color": t.color,
+        "kind": t.kind,
+        "created_at": _iso(t.created_at),
     }
 
 
@@ -97,6 +119,10 @@ def metric_spec_json(spec: MetricSpec) -> dict:
         "default_dimensions": list(spec.default_dimensions),
         "default_grain": spec.default_grain,
         "cumulative": spec.cumulative,
+        # `null` unless the metric rests on a heuristic. The frame renders the
+        # tag off this field, so it never has to know which metric it holds.
+        "quality": spec.quality,
+        "ignores_period": spec.ignores_period,
         "requires": list(spec.requires),
         "params": [
             {
