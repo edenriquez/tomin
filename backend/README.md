@@ -35,6 +35,49 @@ Defaults to a local SQLite DB and disabled auth so it runs offline. Point
 `DATABASE_URL` at Supabase Postgres and set `SUPABASE_JWT_SECRET` +
 `AUTH_DISABLED=false` for a real deployment.
 
+## Database schema & migrations
+
+`adapters/outbound/persistence/models.py` is the **single source of truth** for
+the schema. Alembic (`backend/migrations/`) is how that truth reaches a
+database. `../supabase_setup.sql` is reduced to what SQLAlchemy cannot express:
+the `profiles` table, the `handle_new_user` trigger on `auth.users`, and grants.
+
+`Container.bootstrap()` runs `alembic upgrade head` in-process on startup, so
+there is no separate "remember to migrate" deploy step. Set
+`RUN_MIGRATIONS=false` to manage the schema out of band.
+
+`migrations/env.py` takes the URL from `get_settings().database_url`, not from
+`alembic.ini`, so the CLI, the app and the tests can never disagree.
+
+```bash
+alembic upgrade head              # apply
+alembic downgrade -1              # roll back one
+alembic revision --autogenerate -m "add foo"   # after editing models.py
+alembic current                   # where am I
+```
+
+### Existing databases created before Alembic (stamp, don't migrate)
+
+Revision `0001` reproduces exactly what the old `Database.create_all()`
+produced. A database built that way already *has* those tables, so running
+`upgrade` against it would fail on "table already exists". Mark it instead:
+
+```bash
+alembic stamp 0001      # "you are already at the baseline"
+alembic upgrade head    # now apply 0002+ (created_at, RLS, amount CHECK)
+```
+
+A brand-new database just runs `alembic upgrade head`.
+
+### Tests use `create_all`, deliberately
+
+Every test builds a throwaway SQLite file, so the fixture sets
+`run_migrations=False` and calls `metadata.create_all` — replaying the
+migration history per test would measure Alembic, not the app.
+`tests/test_migrations.py` guards the seam by asserting that a migrated
+database and a `create_all` database have identical tables and columns; if a
+migration is ever forgotten after a `models.py` edit, that test fails.
+
 ## Test
 
 ```bash

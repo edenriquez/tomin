@@ -12,6 +12,11 @@ def app(tmp_path):
         database_url=f"sqlite:///{tmp_path/'test.db'}",
         cube_path=":memory:",
         auth_disabled=True,
+        # Each test gets a brand-new SQLite file, so create_all lands on the
+        # same schema Alembic would build (models.py is the source of truth for
+        # both) without paying for the migration history on every test.
+        # test_migrations.py exercises the Alembic path itself.
+        run_migrations=False,
     )
     return create_app(settings)
 
