@@ -105,8 +105,10 @@ export const fontFamily: Record<string, string[]> = {
 
 export const borderRadius = {
     none: "0",
-    tag: "4px",
-    control: "8px",
+    /** Inline tags and chips only. */
+    tag: "6px",
+    /** Buttons and inputs — the guide is explicit: 12px, never 8/10px compromises. */
+    control: "12px",
     card: "12px",
     sheet: "16px",
     full: "9999px",
