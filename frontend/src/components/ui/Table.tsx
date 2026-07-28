@@ -142,6 +142,7 @@ export function Pagination({
     total,
     onPageChange,
     className,
+    label,
 }: {
     /** 1-based. */
     page: number;
@@ -149,6 +150,8 @@ export function Pagination({
     total: number;
     onPageChange: (page: number) => void;
     className?: string;
+    /** Prefixes the range, e.g. "Mostrando 1–25 de 340". */
+    label?: string;
 }) {
     const pages = Math.max(1, Math.ceil(total / pageSize));
     const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -162,6 +165,7 @@ export function Pagination({
             )}
         >
             <p className="tabular text-label text-pewter">
+                {label ? `${label} ` : ""}
                 {from}–{to} de {total}
             </p>
             <div className="flex items-center gap-1">
