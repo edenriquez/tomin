@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import type { ApexOptions } from "apexcharts";
-import { CategorySpend } from "@/lib/api";
 import { compactMxn, mxn0 } from "@/lib/format";
 import { ApexChart } from "./apex/ApexChart";
 import { categoricalColors } from "./apex/theme";
@@ -10,13 +9,24 @@ import { categoricalColors } from "./apex/theme";
 /** Beyond six bars a category breakdown stops being readable. */
 const MAX_BARS = 6;
 
+/** Deliberately not `CategorySpend`: the same chart draws a metric row, a
+ *  legacy summary and a fixture. It needs a label and a number. */
+export type DistributionSlice = { label: string; amount: number };
+
 /**
  * Horizontal bar, sorted descending. The largest category gets Ember; the
  * rest take the neutral ramp in order. Length is the quantitative channel and
  * position is the categorical one, which leaves hue free to mean "this is the
  * one that matters".
  */
-export function DistributionChart({ data }: { data: CategorySpend[] }) {
+export function DistributionChart({
+    data,
+    height,
+}: {
+    data: DistributionSlice[];
+    /** Fixed frame geometry overrides the per-bar height. */
+    height?: number;
+}) {
     const rows = useMemo(() => {
         const sorted = [...data].sort((a, b) => b.amount - a.amount);
         if (sorted.length <= MAX_BARS) return sorted;
@@ -24,12 +34,7 @@ export function DistributionChart({ data }: { data: CategorySpend[] }) {
         const rest = sorted.slice(MAX_BARS - 1);
         return [
             ...head,
-            {
-                category_id: "__otros__",
-                category_name: "Otros",
-                amount: rest.reduce((s, c) => s + c.amount, 0),
-                percentage: rest.reduce((s, c) => s + c.percentage, 0),
-            },
+            { label: "Otros", amount: rest.reduce((s, c) => s + c.amount, 0) },
         ];
     }, [data]);
 
@@ -46,7 +51,7 @@ export function DistributionChart({ data }: { data: CategorySpend[] }) {
                 },
             },
             xaxis: {
-                categories: rows.map((c) => c.category_name),
+                categories: rows.map((c) => c.label),
                 labels: { formatter: (v: string) => compactMxn(Number(v)) },
             },
             grid: { xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } } },
@@ -71,7 +76,7 @@ export function DistributionChart({ data }: { data: CategorySpend[] }) {
             type="bar"
             series={[{ name: "Gasto", data: rows.map((c) => Math.round(c.amount)) }]}
             options={options}
-            height={Math.max(180, rows.length * 44 + 40)}
+            height={height ?? Math.max(180, rows.length * 44 + 40)}
         />
     );
 }

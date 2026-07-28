@@ -414,7 +414,12 @@ function Body() {
                         <ProjectionChart points={FORECAST} />
                     </Card>
                     <Card title="DistributionChart (barra horizontal)" className="min-w-0">
-                        <DistributionChart data={CATEGORIES} />
+                        <DistributionChart
+                            data={CATEGORIES.map((c) => ({
+                                label: c.category_name,
+                                amount: c.amount,
+                            }))}
+                        />
                     </Card>
                     <Card title="DistributionChart vacío" className="min-w-0">
                         <DistributionChart data={[]} />

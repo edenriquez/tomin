@@ -12,6 +12,11 @@ const nextConfig = {
             { source: "/transactions", destination: "/movimientos", permanent: true },
             { source: "/statements", destination: "/documentos", permanent: true },
             { source: "/settings", destination: "/ajustes", permanent: true },
+            // F4/F5: `/spending` and `/forecasts` stopped being pages and
+            // became widgets. Each lands on its own detail view, which is the
+            // same analysis with a period selector on it.
+            { source: "/spending", destination: "/w/spend_by_category", permanent: true },
+            { source: "/forecasts", destination: "/w/investment_projection", permanent: true },
         ];
     },
 };
