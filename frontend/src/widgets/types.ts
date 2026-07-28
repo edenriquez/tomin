@@ -19,7 +19,13 @@ import type {
 
 export type { WidgetSize };
 
-export type WidgetGroup = "Gasto" | "Ingreso" | "Patrimonio" | "Fiscal" | "Riesgo";
+export type WidgetGroup =
+    | "Gasto"
+    | "Ingreso"
+    | "Patrimonio"
+    | "Fiscal"
+    | "Riesgo"
+    | "Consejos";
 
 /** Content height in px, excluding the frame's header and footer. */
 export const SIZE_HEIGHT: Record<WidgetSize, number> = { sm: 300, md: 300, lg: 400 };
@@ -53,6 +59,11 @@ export type WidgetDef = {
     quality?: "estimate" | "beta";
     /** Params the metric declares as required and the user has not typed yet. */
     defaultParams?: MetricParams;
+    /** Replaces the frame's `meta.partial` copy. The default sentence blames
+     *  missing statements, which is the usual cause but not the only one — the
+     *  advisor is partial because it has not seen enough *months*, and telling
+     *  the user to upload the statements they already uploaded is a dead end. */
+    partialNote?: (result: MetricResult) => string;
     Body: ComponentType<WidgetBodyProps>;
     /** Replaces the frame's default empty state. Worth overriding whenever
      *  "no data" has a cause other than "no movements uploaded" — the default
@@ -89,7 +100,10 @@ const PARTIAL_NOTE =
  * is a request in flight, and rendering "aun no hay movimientos" over it would
  * flash a false claim on every period change.
  */
-export function deriveState(entry: MetricEntry | undefined): WidgetState {
+export function deriveState(
+    entry: MetricEntry | undefined,
+    partialNote?: (result: MetricResult) => string
+): WidgetState {
     if (!entry) return { kind: "loading" };
     if ("error" in entry) return { kind: "error", message: entry.error.message };
 
@@ -99,6 +113,12 @@ export function deriveState(entry: MetricEntry | undefined): WidgetState {
     if (rows.length === 0 && value === null) return { kind: "empty" };
     if (meta.source_txn_count === 0 && rows.length === 0) return { kind: "empty" };
 
-    if (meta.partial) return { kind: "insufficient", result: entry, note: PARTIAL_NOTE };
+    if (meta.partial) {
+        return {
+            kind: "insufficient",
+            result: entry,
+            note: partialNote?.(entry) ?? PARTIAL_NOTE,
+        };
+    }
     return { kind: "ready", result: entry };
 }

@@ -11,6 +11,7 @@ import { PeriodSelector } from "@/components/widgets/PeriodSelector";
 import { ProjectionParams } from "@/components/widgets/ProjectionParams";
 import { WidgetBody } from "@/components/widgets/WidgetBody";
 import { WidgetFrame } from "@/components/widgets/WidgetFrame";
+import { AdviceCard, readAdvices } from "@/widgets/defs/financialAdvice";
 import { getWidget } from "@/widgets/registry";
 import { useMetricBatch } from "@/widgets/useMetricBatch";
 import { deriveState } from "@/widgets/types";
@@ -41,8 +42,9 @@ export default function WidgetDetailPage({ params }: { params: { widgetId: strin
     );
     const batch = useMetricBatch(period, queries);
 
-    const state = deriveState(batch.entryFor("detail"));
+    const state = deriveState(batch.entryFor("detail"), def?.partialNote);
     const editable = metricId === "investment_projection";
+    const isAdvisor = metricId === "financial_advice";
 
     return (
         <div className="space-y-8">
@@ -91,6 +93,26 @@ export default function WidgetDetailPage({ params }: { params: { widgetId: strin
             {editable && (
                 <Card title="Supuestos">
                     <ProjectionParams value={metricParams} onChange={setMetricParams} />
+                </Card>
+            )}
+
+            {/* The advisor page, seeded. The card above shows the principle
+                that matters right now; this lists the whole corpus, dormant
+                entries included — a principle is true always and urgent only
+                when the data says so, and a list that hid the quiet ones would
+                teach the opposite. */}
+            {isAdvisor && (state.kind === "ready" || state.kind === "insufficient") && (
+                <Card title="Principios">
+                    <ul className="divide-y divide-mist">
+                        {readAdvices(state.result).map((advice) => (
+                            <li
+                                key={advice.principleId}
+                                className="py-6 first:pt-0 last:pb-0"
+                            >
+                                <AdviceCard advice={advice} wide />
+                            </li>
+                        ))}
+                    </ul>
                 </Card>
             )}
 

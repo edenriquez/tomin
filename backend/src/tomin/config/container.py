@@ -8,7 +8,10 @@ from ..adapters.outbound.extraction import (
     PdfExtractor,
     SatXmlExtractor,
 )
-from ..adapters.outbound.metrics import InvestmentProjectionResolver
+from ..adapters.outbound.metrics import (
+    FinancialAdviceResolver,
+    InvestmentProjectionResolver,
+)
 from ..adapters.outbound.parsing import DefaultParserFactory
 from ..adapters.outbound.persistence import (
     Database,
@@ -72,7 +75,13 @@ class Container:
     @cached_property
     def metric_resolvers(self) -> list:
         """Computed metrics. One entry per metric that is a Python function."""
-        return [InvestmentProjectionResolver()]
+        # The advice resolver reads the monthly series *through* the engine
+        # rather than issuing its own SQL, so the measure-level default filters
+        # (transfers, excluded rows) apply to it by construction.
+        return [
+            InvestmentProjectionResolver(),
+            FinancialAdviceResolver(self.metric_engine),
+        ]
 
     @cached_property
     def file_storage(self) -> TransientFileStorage:

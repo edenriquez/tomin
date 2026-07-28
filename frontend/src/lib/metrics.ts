@@ -16,7 +16,10 @@ import { request } from "./api";
 /* Catalog                                                                     */
 /* -------------------------------------------------------------------------- */
 
-export type MetricShape = "breakdown" | "series" | "scalar";
+/** `table` is rows that are not a measure over an axis — one row per
+ *  *statement about* the data rather than per bucket of it. The advisor's
+ *  principles are the first. */
+export type MetricShape = "breakdown" | "series" | "scalar" | "table";
 
 /** The declared requirements a metric can carry. Open-ended on purpose: the
  *  backend may add one before the frontend knows its copy. */
@@ -76,7 +79,11 @@ export type MetricQuery = {
     period?: Period;
 };
 
-export type MetricRow = Record<string, string | number | null>;
+/** `boolean` is in here for `table`-shaped metrics, whose cells are facts about
+ *  a row rather than measures of it (the advisor's `active`). */
+export type MetricCell = string | number | boolean | null;
+
+export type MetricRow = Record<string, MetricCell>;
 
 export type MetricMeta = {
     currency: string | null;
@@ -173,14 +180,16 @@ export const { fetchCatalog, queryMetrics, getHomeDashboard, saveHomeDashboard }
 
 /** Money string -> number. `null`/absent/garbage collapse to 0 *for arithmetic
  *  only*; whether a widget has data at all is decided before this is called. */
-export function num(value: string | number | null | undefined): number {
+export function num(value: MetricCell | undefined): number {
     if (value === null || value === undefined) return 0;
+    // A flag is not an amount. `Number(true)` is 1, and one peso is a claim.
+    if (typeof value === "boolean") return 0;
     const n = typeof value === "number" ? value : Number(value);
     return Number.isFinite(n) ? n : 0;
 }
 
 /** "2026-01" or "2026-01-14" -> a Date at local midnight on day 1. */
-export function parsePeriodKey(key: string | number | null): Date | null {
+export function parsePeriodKey(key: MetricCell): Date | null {
     if (typeof key !== "string") return null;
     const [y, m, d] = key.split("-").map(Number);
     if (!y || !m) return null;

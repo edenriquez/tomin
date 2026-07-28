@@ -98,7 +98,7 @@ export default function InicioPage() {
                     const title = w.titleOverride || def?.title || w.metricId;
                     const state = layout.loading
                         ? ({ kind: "loading" } as const)
-                        : deriveState(batch.entryFor(w.key));
+                        : deriveState(batch.entryFor(w.key), def?.partialNote);
 
                     return (
                         <div key={w.key} className={`min-w-0 ${SPAN[w.size]}`}>
