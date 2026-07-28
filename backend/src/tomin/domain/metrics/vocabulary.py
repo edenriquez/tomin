@@ -7,27 +7,32 @@ dictionaries can reach a query.
 
 from __future__ import annotations
 
-from .spec import Dimension, FilterDef, Grain, Measure
+from .spec import Dimension, Eq, FilterDef, Grain, Measure
 
 # Default filters (docs/redesign-plan.md §1) attach to the measure so that
-# "spend excludes transfers" is declared once. The flags that belong here --
-# `is_transfer`, `excluded_from_stats`, `is_primary_in_group` -- are introduced
-# by B7/B10; the mechanism is live and applied by the compiler today, it simply
-# has no members yet. Adding one is a one-line change here, not nine.
+# "spend excludes what the user excluded" is declared once and inherited by
+# every metric that sums money, rather than remembered in nine places. The
+# remaining member, `is_primary_in_group` (fingerprint dedup), arrives with B10.
+_LEDGER_DEFAULTS = (
+    # The user's own opinion about a row. Honoured everywhere, immediately:
+    # an exclusion that does not move the number on screen reads as a bug.
+    Eq("excluded_from_stats", False),
+)
+
 MEASURES: dict[str, Measure] = {
     "expense_amount": Measure(
         name="expense_amount",
         column="amount",
         agg="sum",
         direction="expense",
-        default_filters=(),
+        default_filters=_LEDGER_DEFAULTS,
     ),
     "income_amount": Measure(
         name="income_amount",
         column="amount",
         agg="sum",
         direction="income",
-        default_filters=(),
+        default_filters=_LEDGER_DEFAULTS,
     ),
     # Signed: income positive, expense negative. The only measure that may go
     # below zero, which is the point of it.
@@ -36,7 +41,7 @@ MEASURES: dict[str, Measure] = {
         column="amount",
         agg="sum",
         direction="net",
-        default_filters=(),
+        default_filters=_LEDGER_DEFAULTS,
     ),
 }
 

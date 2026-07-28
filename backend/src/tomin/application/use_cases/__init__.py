@@ -12,8 +12,15 @@ from .statements import (
     ManageStatementsUseCase,
     StatementNotFoundError,
 )
+from .update_transaction import (
+    UNSET,
+    TransactionNotFoundError,
+    UnknownCategoryError,
+    UpdateTransactionUseCase,
+)
 
 __all__ = [
+    "UNSET",
     "DeleteStatementResult",
     "DetectRecurringUseCase",
     "GetForecastUseCase",
@@ -31,4 +38,7 @@ __all__ = [
     "SaveHomeDashboardUseCase",
     "SimulateForecastUseCase",
     "StatementNotFoundError",
+    "TransactionNotFoundError",
+    "UnknownCategoryError",
+    "UpdateTransactionUseCase",
 ]

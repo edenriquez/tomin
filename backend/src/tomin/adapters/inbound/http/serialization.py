@@ -31,6 +31,9 @@ def transaction_json(t: Transaction) -> dict:
         "status": t.status.value,
         "category_id": str(t.category_id) if t.category_id else None,
         "merchant_id": str(t.merchant_id) if t.merchant_id else None,
+        "category_source": t.category_source,
+        "notes": t.notes,
+        "excluded_from_stats": t.excluded_from_stats,
     }
 
 

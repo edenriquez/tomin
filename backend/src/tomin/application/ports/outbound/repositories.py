@@ -35,6 +35,17 @@ class TransactionRepository(Protocol):
 
     def count_for_user(self, user_id: UUID, **filters) -> int: ...
 
+    def get(self, transaction_id: UUID) -> Transaction | None: ...
+
+    def update(self, transaction: Transaction) -> None:
+        """Persist the user-editable fields of an existing transaction.
+
+        Narrow by design: the statement owns date, amount, currency and
+        direction, so only description, category (+ its source), notes and the
+        stats exclusion travel through here.
+        """
+        ...
+
     def delete_for_statement(self, statement_id: UUID) -> list[UUID]:
         """Delete every transaction derived from a statement.
 

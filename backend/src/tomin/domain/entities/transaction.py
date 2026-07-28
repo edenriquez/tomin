@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID, uuid4
 
 from ..value_objects.enums import TransactionStatus, TxType
+
+#: Who chose the category. ``auto`` is the ingest classifier's guess; ``user``
+#: is a correction, and a correction is never overwritten by a later guess.
+CategorySource = Literal["auto", "user"]
 
 
 @dataclass(slots=True)
@@ -32,6 +37,11 @@ class Transaction:
     statement_id: UUID | None = None
     category_id: UUID | None = None
     merchant_id: UUID | None = None
+    category_source: CategorySource = "auto"
+    notes: str | None = None
+    #: Excluded from every analytics measure by the user's own decision.
+    excluded_from_stats: bool = False
+    updated_at: datetime | None = None
     id: UUID = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:

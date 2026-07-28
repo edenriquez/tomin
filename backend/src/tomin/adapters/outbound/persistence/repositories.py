@@ -55,6 +55,10 @@ def _to_transaction(m: TransactionModel) -> Transaction:
         status=TransactionStatus(m.status),
         category_id=UUID(m.category_id) if m.category_id else None,
         merchant_id=UUID(m.merchant_id) if m.merchant_id else None,
+        category_source=m.category_source or "auto",
+        notes=m.notes,
+        excluded_from_stats=bool(m.excluded_from_stats),
+        updated_at=m.updated_at,
     )
 
 
@@ -79,8 +83,37 @@ class SqlTransactionRepository:
                         status=t.status.value,
                         category_id=_u(t.category_id) if t.category_id else None,
                         merchant_id=_u(t.merchant_id) if t.merchant_id else None,
+                        category_source=t.category_source,
+                        notes=t.notes,
+                        excluded_from_stats=t.excluded_from_stats,
                     )
                 )
+
+    def get(self, transaction_id: UUID) -> Transaction | None:
+        with self._db.session() as s:
+            m = s.get(TransactionModel, _u(transaction_id))
+            return _to_transaction(m) if m else None
+
+    def update(self, transaction: Transaction) -> None:
+        """Persist the user-editable fields of an already-stored transaction.
+
+        Deliberately narrow: date, amount, currency and ``tx_type`` come from
+        the statement and are not the user's to rewrite here. Widening this to
+        a blanket "save the entity" would make an ingest bug indistinguishable
+        from an edit.
+        """
+        with self._db.session() as s:
+            m = s.get(TransactionModel, _u(transaction.id))
+            if m is None:
+                return
+            m.description = transaction.description
+            m.category_id = (
+                _u(transaction.category_id) if transaction.category_id else None
+            )
+            m.category_source = transaction.category_source
+            m.notes = transaction.notes
+            m.excluded_from_stats = transaction.excluded_from_stats
+            m.updated_at = transaction.updated_at
 
     def _base_query(self, user_id, start, end, category_id, search):
         stmt = select(TransactionModel).where(TransactionModel.user_id == _u(user_id))

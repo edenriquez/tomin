@@ -40,6 +40,7 @@ _COLUMN_SQL: dict[str, str] = {
     "category_id": "f.category_id",
     "merchant_id": "f.merchant_id",
     "description": "f.description",
+    "excluded_from_stats": "f.excluded_from_stats",
     "category_name": "COALESCE(d.name, 'Sin Categoria')",
     "tx_month": "strftime(f.tx_date, '%Y-%m')",
 }

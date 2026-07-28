@@ -37,6 +37,7 @@ from ..application.use_cases import (
     RunMetricQueriesUseCase,
     SaveHomeDashboardUseCase,
     SimulateForecastUseCase,
+    UpdateTransactionUseCase,
 )
 from .settings import Settings
 
@@ -144,6 +145,14 @@ class Container:
     @cached_property
     def list_transactions(self) -> ListTransactionsUseCase:
         return ListTransactionsUseCase(self.transactions)
+
+    @cached_property
+    def update_transaction(self) -> UpdateTransactionUseCase:
+        return UpdateTransactionUseCase(
+            transactions=self.transactions,
+            categories=self.categories,
+            cube=self.cube,
+        )
 
     @cached_property
     def spending_summary(self) -> GetSpendingSummaryUseCase:

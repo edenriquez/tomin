@@ -19,7 +19,7 @@ from ....domain.entities import Category, Transaction
 #: is Mexican, so MXN is the default rather than a required argument.
 DEFAULT_CURRENCY = "MXN"
 
-_UPSERT_FACT = "INSERT OR REPLACE INTO fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+_UPSERT_FACT = "INSERT OR REPLACE INTO fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 
 class DuckDbCube:
@@ -71,7 +71,8 @@ class DuckDbCube:
                 tx_type VARCHAR,
                 category_id VARCHAR,
                 merchant_id VARCHAR,
-                description VARCHAR
+                description VARCHAR,
+                excluded_from_stats BOOLEAN
             );
             """
         )
@@ -141,6 +142,7 @@ class DuckDbCube:
             str(t.category_id) if t.category_id else None,
             str(t.merchant_id) if t.merchant_id else None,
             t.description or t.raw_description,
+            t.excluded_from_stats,
         ]
 
     # --- reader ----------------------------------------------------------

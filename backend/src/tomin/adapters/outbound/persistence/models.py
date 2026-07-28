@@ -12,6 +12,8 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
+    false as sa_false,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -95,7 +97,22 @@ class TransactionModel(Base):
     status: Mapped[str] = mapped_column(String(12), default="completed")
     category_id: Mapped[str | None] = mapped_column(UUIDStr, nullable=True)
     merchant_id: Mapped[str | None] = mapped_column(UUIDStr, nullable=True)
+    # Who decided the category: the ingest classifier ("auto") or the user
+    # ("user"). Kept so a future re-classification pass can improve its own
+    # guesses without ever overwriting a correction someone made by hand.
+    category_source: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="auto", default="auto"
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # User-level exclusion from analytics. Distinct from `is_transfer`, which is
+    # a derived fact about the movement; this is an opinion about it.
+    excluded_from_stats: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sa_false(), default=False
+    )
     created_at: Mapped[datetime] = _created_at()
+    # Nullable rather than defaulted: a row that has never been edited has no
+    # meaningful update time, and now() would claim one.
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class DashboardModel(Base):

@@ -10,6 +10,7 @@ from ....application.use_cases.process_file import (
     UnsupportedFileError,
 )
 from ....application.use_cases.statements import StatementNotFoundError
+from ....application.use_cases.update_transaction import TransactionNotFoundError
 from .auth import AuthError
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,13 @@ def register_error_handlers(app: Flask) -> None:
     def _statement_missing(err: StatementNotFoundError):
         return jsonify(error="Statement not found", detail=str(err)), 404
 
+    @app.errorhandler(TransactionNotFoundError)
+    def _transaction_missing(err: TransactionNotFoundError):
+        return jsonify(error="Transaction not found", detail=str(err)), 404
+
+    # `UnknownCategoryError` deliberately has no handler of its own: it is a
+    # ValueError and the 400 below is the right answer. The transaction was
+    # found; the *category* the client named does not exist.
     @app.errorhandler(ValueError)
     def _value(err: ValueError):
         return jsonify(error="Bad request", detail=str(err)), 400
