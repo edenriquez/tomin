@@ -14,6 +14,10 @@ from ....application.dtos.analytics import (
 )
 from ....domain.entities import Category, Transaction
 
+#: Aggregates are scoped to a single currency. Everything the app ingests today
+#: is Mexican, so MXN is the default rather than a required argument.
+DEFAULT_CURRENCY = "MXN"
+
 
 class DuckDbCube:
     """DuckDB-backed analytics cube (implements CubeWriter + CubeReader).
@@ -109,9 +113,13 @@ class DuckDbCube:
 
     # --- reader ----------------------------------------------------------
     def spending_by_category(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = DEFAULT_CURRENCY,
     ) -> list[CategorySpend]:
-        clause, params = self._filter(user_id, start, end)
+        clause, params = self._filter(user_id, start, end, currency)
         with self._lock:
             rows = self._con.execute(
                 f"""
@@ -126,7 +134,7 @@ class DuckDbCube:
                 """,
                 params,
             ).fetchall()
-        total = sum((r[2] for r in rows), Decimal("0")) or Decimal("1")
+        total = sum((r[2] for r in rows), Decimal(0)) or Decimal(1)
         return [
             CategorySpend(
                 category_id=r[0],
@@ -160,9 +168,13 @@ class DuckDbCube:
         return points
 
     def spending_summary(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = DEFAULT_CURRENCY,
     ) -> SpendingSummary:
-        clause, params = self._filter(user_id, start, end)
+        clause, params = self._filter(user_id, start, end, currency)
         with self._lock:
             income, expense = self._con.execute(
                 f"""
@@ -175,7 +187,7 @@ class DuckDbCube:
                 params,
             ).fetchone()
 
-        by_category = self.spending_by_category(user_id, start, end)
+        by_category = self.spending_by_category(user_id, start, end, currency)
         monthly = self.monthly_series(user_id)
         return SpendingSummary(
             total_income=Decimal(str(income or 0)),
@@ -186,9 +198,20 @@ class DuckDbCube:
         )
 
     @staticmethod
-    def _filter(user_id: UUID, start: date | None, end: date | None):
+    def _filter(
+        user_id: UUID,
+        start: date | None,
+        end: date | None,
+        currency: str | None = DEFAULT_CURRENCY,
+    ):
         clause = "AND f.user_id = ?"
         params: list = [str(user_id)]
+        if currency:
+            # Money in different currencies does not add up. Summing MXN and
+            # USD produced a headline number in no currency at all, so every
+            # aggregate is scoped to exactly one.
+            clause += " AND f.currency = ?"
+            params.append(currency)
         if start:
             clause += " AND f.tx_date >= ?"
             params.append(start)

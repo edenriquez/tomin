@@ -34,17 +34,19 @@ class TextStatementParser:
             if not amounts:
                 continue
 
-            amount = amounts[0]
+            amount, sign_hint = amounts[0]
             # Strip the amount tokens from the description text.
             description = self._clean_description(remainder)
             if not description:
                 continue
 
-            tx_type = infer_tx_type(description, amount)
+            # `amount` is already an unsigned magnitude out of parse_amount;
+            # the sign it carried is the strongest signal for direction.
+            tx_type = infer_tx_type(description, sign_hint)
             txs.append(
                 ParsedTransaction(
                     tx_date=tx_date,
-                    amount=abs(amount),
+                    amount=amount,
                     raw_description=description,
                     tx_type=TxType(tx_type),
                 )

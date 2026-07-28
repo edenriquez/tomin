@@ -21,12 +21,22 @@ class CubeWriter(Protocol):
 class CubeReader(Protocol):
     """Fast analytical reads served from the cube."""
 
+    # `currency` is not optional in meaning, only in syntax: aggregating across
+    # currencies yields a number denominated in nothing.
     def spending_summary(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = "MXN",
     ) -> SpendingSummary: ...
 
     def spending_by_category(
-        self, user_id: UUID, start: date | None = None, end: date | None = None
+        self,
+        user_id: UUID,
+        start: date | None = None,
+        end: date | None = None,
+        currency: str = "MXN",
     ) -> list[CategorySpend]: ...
 
     def monthly_series(self, user_id: UUID, months: int = 12) -> list[MonthlyPoint]: ...
