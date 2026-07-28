@@ -1,70 +1,59 @@
 "use client";
 
+import { useState } from "react";
 import { UploadButton } from "@/components/UploadButton";
+import { Card, Field, Input, PageHeader, Tabs } from "@/components/ui";
+
+const AGGRESSIVENESS = [
+    { value: "conservative", label: "Conservador" },
+    { value: "balanced", label: "Balanceado" },
+    { value: "aggressive", label: "Agresivo" },
+];
 
 export default function SettingsPage() {
+    // Nothing here persists yet — the save path lands in F6.
+    const [advice, setAdvice] = useState("balanced");
+
     return (
         <div className="max-w-3xl">
-            <h1 className="text-2xl font-bold">Settings</h1>
-            <p className="text-slate-500 text-sm">Manage your preferences</p>
+            <PageHeader title="Ajustes" subtitle="Administra tus preferencias." />
 
-            <section className="card mt-6">
-                <h2 className="font-semibold">Personal Information</h2>
-                <div className="grid md:grid-cols-2 gap-4 mt-4">
-                    <Field label="Full Name" defaultValue="Alejandro Martinez" />
-                    <Field label="RFC (Tax ID)" defaultValue="MARS880123H20" hint="Required for SAT integration." />
-                    <Field label="Email Address" defaultValue="alejandro@example.com" />
-                    <Field label="Monthly Income Goal" defaultValue="45,000 MXN" />
+            <Card title="Informacion personal" className="mt-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Nombre completo">
+                        {(p) => <Input {...p} defaultValue="Alejandro Martinez" />}
+                    </Field>
+                    <Field label="RFC" hint="Necesario para la integracion con el SAT.">
+                        {(p) => <Input {...p} defaultValue="MARS880123H20" />}
+                    </Field>
+                    <Field label="Correo electronico">
+                        {(p) => <Input {...p} type="email" defaultValue="alejandro@example.com" />}
+                    </Field>
+                    <Field label="Meta de ingreso mensual">
+                        {(p) => <Input {...p} defaultValue="45,000 MXN" />}
+                    </Field>
                 </div>
-            </section>
+            </Card>
 
-            <section className="card mt-6">
-                <h2 className="font-semibold">Financial Data Sources</h2>
-                <p className="text-sm text-slate-500 mt-1">
-                    Upload bank statements or SAT files (PDF / XML). Files are processed and the raw
-                    document is never stored on our servers.
+            <Card title="Fuentes de datos" className="mt-6">
+                <p className="text-body-sm text-pewter">
+                    Sube estados de cuenta o archivos del SAT (PDF / XML). Los archivos se procesan
+                    y el documento original nunca se guarda en nuestros servidores.
                 </p>
-                <div className="mt-4 rounded-xl border-2 border-dashed border-slate-200 p-6">
+                <div className="mt-4 rounded-card border border-dashed border-mist p-6">
                     <UploadButton />
                 </div>
-            </section>
+            </Card>
 
-            <section className="card mt-6">
-                <h2 className="font-semibold">AI Assistant</h2>
-                <label className="mt-3 block text-sm text-slate-600">Advice Aggressiveness</label>
-                <div className="mt-2 inline-flex rounded-lg border border-slate-200 p-1 text-sm">
-                    {["Conservative", "Balanced", "Aggressive"].map((o) => (
-                        <button
-                            key={o}
-                            className="rounded-md px-3 py-1 data-[active=true]:bg-brand data-[active=true]:text-white"
-                            data-active={o === "Balanced"}
-                        >
-                            {o}
-                        </button>
-                    ))}
-                </div>
-            </section>
-        </div>
-    );
-}
-
-function Field({
-    label,
-    defaultValue,
-    hint,
-}: {
-    label: string;
-    defaultValue: string;
-    hint?: string;
-}) {
-    return (
-        <div>
-            <label className="text-sm text-slate-600">{label}</label>
-            <input
-                defaultValue={defaultValue}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-            {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
+            <Card title="Asistente" className="mt-6">
+                <p className="mb-2 text-body-sm text-graphite">Nivel de recomendaciones</p>
+                <Tabs
+                    aria-label="Nivel de recomendaciones"
+                    items={AGGRESSIVENESS}
+                    value={advice}
+                    onChange={setAdvice}
+                />
+            </Card>
         </div>
     );
 }

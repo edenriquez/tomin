@@ -3,30 +3,42 @@
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { api } from "@/lib/api";
+import { Button, useToast } from "@/components/ui";
 
 export function UploadButton({ onDone }: { onDone?: () => void }) {
     const inputRef = useRef<HTMLInputElement>(null);
-    const [status, setStatus] = useState<string | null>(null);
+    const [uploading, setUploading] = useState(false);
+    const { toast } = useToast();
 
     async function handleFile(file: File) {
-        setStatus("Procesando...");
+        setUploading(true);
         try {
             const result = await api.uploadStatement(file);
-            setStatus(`Listo: ${result.transactions_created} movimientos (${result.template})`);
+            toast(
+                `Listo: ${result.transactions_created} movimientos (${result.template})`,
+                "positive"
+            );
             onDone?.();
         } catch (e) {
-            setStatus(`Error: ${(e as Error).message}`);
+            toast(`No se pudo procesar el archivo: ${(e as Error).message}`, "negative");
+        } finally {
+            setUploading(false);
+            // Without this, re-selecting the same file fires no change event.
+            if (inputRef.current) inputRef.current.value = "";
         }
     }
 
     return (
         <div>
-            <button
+            <Button
+                variant="secondary"
+                fullWidth
+                loading={uploading}
+                icon={<Upload size={16} />}
                 onClick={() => inputRef.current?.click()}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
             >
-                <Upload size={16} /> Subir Estado de Cuenta
-            </button>
+                Subir Estado de Cuenta
+            </Button>
             <input
                 ref={inputRef}
                 type="file"
@@ -34,7 +46,6 @@ export function UploadButton({ onDone }: { onDone?: () => void }) {
                 hidden
                 onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
             />
-            {status && <p className="mt-2 text-xs text-slate-500">{status}</p>}
         </div>
     );
 }

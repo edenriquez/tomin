@@ -106,11 +106,3 @@ export const api = {
         return res.json();
     },
 };
-
-export function mxn(value: number): string {
-    return new Intl.NumberFormat("es-MX", {
-        style: "currency",
-        currency: "MXN",
-        maximumFractionDigits: 0,
-    }).format(value);
-}

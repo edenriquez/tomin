@@ -1,43 +1,32 @@
 import type { Config } from "tailwindcss";
-import { color, layout, radius, typeScale } from "./src/design/tokens";
+import {
+    borderRadius,
+    boxShadow,
+    colors,
+    fontFamily,
+    fontSize,
+    zIndex,
+} from "./src/design/tokens";
 
+/**
+ * `colors.brand` is deliberately absent and `boxShadow` is deliberately
+ * shadow-free apart from `float`. That turns every legacy `bg-brand` and
+ * `shadow-sm` into a visible error instead of a silent violation.
+ */
 const config: Config = {
     content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
     theme: {
         extend: {
-            colors: { ...color },
-            fontFamily: {
-                sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-                display: ["var(--font-display)", "Georgia", "serif"],
-            },
-            fontSize: typeScale as unknown as Record<
-                string,
-                [string, { lineHeight: string; letterSpacing: string }]
-            >,
-            borderRadius: {
-                tag: radius.tag,
-                card: radius.card,
-                input: radius.input,
-                button: radius.button,
-            },
-            borderColor: { DEFAULT: color.mist },
-            maxWidth: { page: layout.pageMaxWidth },
-            spacing: {
-                "section-sm": "48px",
-                section: "64px",
-                "section-lg": "80px",
-            },
+            colors: { ...colors },
+            fontFamily: { ...fontFamily },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            fontSize: fontSize as any,
+            borderRadius: { ...borderRadius },
+            zIndex: Object.fromEntries(
+                Object.entries(zIndex).map(([k, v]) => [k, String(v)])
+            ),
         },
-        /**
-         * Not under `extend`. Overriding the scale outright removes `shadow-sm`
-         * and friends from the build, so the "no drop shadows" rule becomes a
-         * visible error rather than a silent violation.
-         */
-        boxShadow: {
-            none: "none",
-            /** Sole exception: floating UI detached from the canvas (modals, toasts). */
-            float: "0 8px 24px -8px rgb(0 7 16 / 0.16)",
-        },
+        boxShadow: { ...boxShadow },
     },
     plugins: [],
 };

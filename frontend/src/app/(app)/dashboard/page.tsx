@@ -1,25 +1,54 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
-import { api, mxn, SpendingSummary, Transaction } from "@/lib/api";
-import { MetricCard } from "@/components/MetricCard";
+import { Inbox, Sparkles } from "lucide-react";
+import { api, SpendingSummary, Transaction } from "@/lib/api";
+import { mxn } from "@/lib/format";
 import { DistributionChart } from "@/components/charts/DistributionChart";
 import { UploadButton } from "@/components/UploadButton";
+import {
+    Card,
+    EmptyState,
+    PageHeader,
+    StatTile,
+    Table,
+    type Column,
+} from "@/components/ui";
+
+const COLUMNS: Column<Transaction>[] = [
+    { key: "concept", header: "Concepto", cell: (t) => t.description },
+    { key: "date", header: "Fecha", cell: (t) => <span className="text-pewter">{t.date}</span> },
+    {
+        key: "amount",
+        header: "Monto",
+        numeric: true,
+        cell: (t) => (
+            <span className={t.type === "income" ? "text-positive" : "text-ink"}>
+                {t.type === "expense" ? "-" : "+"}
+                {mxn(t.amount)}
+            </span>
+        ),
+    },
+];
 
 export default function DashboardPage() {
     const [summary, setSummary] = useState<SpendingSummary | null>(null);
     const [txs, setTxs] = useState<Transaction[]>([]);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
+        setLoading(true);
         try {
             const [s, t] = await Promise.all([api.summary(), api.transactions("?limit=6")]);
             setSummary(s);
             setTxs(t.items);
             setError(null);
         } catch (e) {
+            setSummary(null);
             setError((e as Error).message);
+        } finally {
+            setLoading(false);
         }
     }, []);
 
@@ -27,98 +56,85 @@ export default function DashboardPage() {
         load();
     }, [load]);
 
-    const balance = summary ? summary.total_income - summary.total_expense : 0;
+    // Undefined rather than 0 when there is no summary: a zero is a claim
+    // about someone's finances, and "the backend is down" isn't one.
+    const balance = summary ? summary.total_income - summary.total_expense : undefined;
 
     return (
         <div>
-            <h1 className="text-2xl font-bold">Hola, Alejandro</h1>
-            <p className="text-slate-500 text-sm">Tu resumen financiero</p>
+            <PageHeader title="Hola, Alejandro" subtitle="Tu resumen financiero" />
 
             {error && (
-                <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                <p className="mt-4 rounded-control border-l-2 border-ember bg-fog p-3 text-body-sm text-graphite">
                     No se pudo cargar la informacion ({error}). Verifica que el backend este
                     corriendo en el puerto 8000.
                 </p>
             )}
 
-            <div className="grid md:grid-cols-3 gap-4 mt-6">
-                <MetricCard label="Balance Total" value={mxn(balance)} hint="Ingresos - Gastos" />
-                <MetricCard
-                    label="Gastos del Mes"
-                    value={mxn(summary?.total_expense ?? 0)}
-                    hint={summary?.top_category ? `Top: ${summary.top_category}` : undefined}
-                    hintColor="text-slate-500"
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+                <StatTile
+                    label="Balance Total"
+                    value={balance !== undefined ? mxn(balance) : undefined}
+                    delta="Ingresos - Gastos"
+                    loading={loading}
                 />
-                <MetricCard
+                <StatTile
+                    label="Gastos del Mes"
+                    value={summary ? mxn(summary.total_expense) : undefined}
+                    delta={summary?.top_category ? `Top: ${summary.top_category}` : undefined}
+                    loading={loading}
+                />
+                <StatTile
                     label="Ingresos"
-                    value={mxn(summary?.total_income ?? 0)}
-                    hint="Total registrado"
+                    value={summary ? mxn(summary.total_income) : undefined}
+                    delta="Total registrado"
+                    loading={loading}
                 />
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6 mt-6">
-                <div className="md:col-span-2 space-y-6">
-                    <section className="card">
-                        <h2 className="font-semibold mb-4">Distribucion de Gastos</h2>
+            <div className="mt-6 grid gap-6 md:grid-cols-3">
+                <div className="min-w-0 space-y-6 md:col-span-2">
+                    <Card title="Distribucion de Gastos">
                         <DistributionChart data={summary?.by_category ?? []} />
-                    </section>
+                    </Card>
 
-                    <section className="card">
-                        <h2 className="font-semibold mb-4">Movimientos Recientes</h2>
-                        {txs.length === 0 ? (
-                            <p className="text-sm text-slate-500">
-                                Sube un estado de cuenta para ver tus movimientos.
-                            </p>
-                        ) : (
-                            <table className="w-full text-sm">
-                                <thead className="text-left text-slate-400 uppercase text-xs">
-                                    <tr>
-                                        <th className="pb-2">Concepto</th>
-                                        <th className="pb-2">Fecha</th>
-                                        <th className="pb-2 text-right">Monto</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {txs.map((t) => (
-                                        <tr key={t.id} className="border-t border-slate-100">
-                                            <td className="py-2">{t.description}</td>
-                                            <td className="py-2 text-slate-500">{t.date}</td>
-                                            <td
-                                                className={`py-2 text-right ${
-                                                    t.type === "income"
-                                                        ? "text-emerald-600"
-                                                        : "text-slate-900"
-                                                }`}
-                                            >
-                                                {t.type === "expense" ? "-" : "+"}
-                                                {mxn(t.amount)}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
-                    </section>
+                    <Card title="Movimientos Recientes">
+                        <Table
+                            caption="Movimientos recientes"
+                            columns={COLUMNS}
+                            rows={txs}
+                            rowKey={(t) => t.id}
+                            loading={loading}
+                            skeletonRows={4}
+                            empty={
+                                <EmptyState
+                                    icon={<Inbox size={18} />}
+                                    title="Aun no hay movimientos"
+                                    description="Sube un estado de cuenta para ver tus movimientos."
+                                />
+                            }
+                        />
+                    </Card>
                 </div>
 
-                <div className="space-y-6">
-                    <section className="card bg-brand/5 border-brand/20">
-                        <div className="flex items-center gap-2 text-brand font-semibold">
-                            <Sparkles size={18} /> Tomin AI Insight
+                <div className="min-w-0 space-y-6">
+                    <Card className="border-l-2 border-l-ember">
+                        <div className="flex items-center gap-2 font-semibold text-ink">
+                            <Sparkles size={18} className="text-ember" /> Tomin AI Insight
                         </div>
-                        <p className="mt-3 text-sm text-slate-700">
+                        <p className="mt-3 text-body-sm text-graphite">
                             {summary?.top_category
                                 ? `Tu categoria con mayor gasto es ${summary.top_category}. Considera fijar un limite mensual.`
                                 : "Sube tu primer estado de cuenta para recibir insights personalizados."}
                         </p>
-                    </section>
+                    </Card>
 
-                    <section className="card">
-                        <h3 className="text-xs font-semibold text-slate-400 uppercase mb-3">
+                    <Card>
+                        <h3 className="mb-3 text-label font-semibold text-pewter">
                             Acciones Rapidas
                         </h3>
                         <UploadButton onDone={load} />
-                    </section>
+                    </Card>
                 </div>
             </div>
         </div>
