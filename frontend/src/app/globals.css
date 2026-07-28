@@ -2,16 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-    --background: #f8fafc;
+@layer base {
+    html {
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    body {
+        background: theme(colors.fog);
+        color: theme(colors.graphite);
+        font-size: 15px;
+        line-height: 1.5;
+        letter-spacing: -0.01em;
+        /*
+         * "calt"/"liga" off is the Brex signature — an engineered, neutral
+         * feel with no contextual alternates. "tnum" is the finance-specific
+         * addition: proportional digits make columns of pesos wobble.
+         */
+        font-feature-settings: "calt" 0, "liga" 0, "tnum" 1;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        color: theme(colors.ink);
+        text-wrap: balance;
+    }
+
+    :focus-visible {
+        outline: 2px solid theme(colors.ember);
+        outline-offset: 2px;
+    }
+
+    ::selection {
+        background: theme(colors.ember);
+        color: theme(colors.ink);
+    }
 }
 
-body {
-    background: var(--background);
-    color: #0f172a;
-    -webkit-font-smoothing: antialiased;
+@layer components {
+    /* Elevation comes from Paper-on-Fog contrast plus a hairline. No shadow. */
+    .card {
+        @apply rounded-card border border-mist bg-paper p-6;
+    }
+
+    .hairline {
+        @apply border-mist;
+    }
 }
 
-.card {
-    @apply bg-white rounded-2xl border border-slate-200 p-6 shadow-sm;
+@layer utilities {
+    /* Escape hatch for numerals inside a container that disabled tnum. */
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
 }
