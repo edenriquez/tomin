@@ -1,10 +1,13 @@
 import { Sidebar } from "@/components/Sidebar";
+import { ToastProvider } from "@/components/ui";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
-        <div className="flex">
-            <Sidebar />
-            <main className="flex-1 min-h-screen p-8 max-w-6xl">{children}</main>
-        </div>
+        <ToastProvider>
+            <div className="flex">
+                <Sidebar />
+                <main className="min-h-screen max-w-6xl flex-1 p-8">{children}</main>
+            </div>
+        </ToastProvider>
     );
 }
