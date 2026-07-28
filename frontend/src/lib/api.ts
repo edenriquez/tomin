@@ -35,6 +35,16 @@ export type SpendingSummary = {
     monthly: MonthlyPoint[];
 };
 
+export type Statement = {
+    id: string;
+    source_type: string;
+    bank: string | null;
+    period_start: string | null;
+    period_end: string | null;
+    status: string;
+    uploaded_at: string | null;
+};
+
 export type RecurringItem = {
     label: string;
     average_amount: number;
@@ -78,6 +88,16 @@ export const api = {
             body: JSON.stringify(body),
         }),
     goals: () => request<{ items: Goal[] }>(`/api/goals`),
+    statements: () => request<{ items: Statement[]; total: number }>(`/api/statements`),
+    /**
+     * Deletes a statement and every transaction derived from it, in the
+     * relational store and in the analytics cube.
+     */
+    deleteStatement: (id: string) =>
+        request<{ statement_id: string; transactions_deleted: number }>(
+            `/api/statements/${id}`,
+            { method: "DELETE" }
+        ),
     uploadStatement: async (file: File) => {
         const form = new FormData();
         form.append("file", file);
@@ -86,11 +106,3 @@ export const api = {
         return res.json();
     },
 };
-
-export function mxn(value: number): string {
-    return new Intl.NumberFormat("es-MX", {
-        style: "currency",
-        currency: "MXN",
-        maximumFractionDigits: 0,
-    }).format(value);
-}

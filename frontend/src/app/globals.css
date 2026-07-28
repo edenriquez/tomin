@@ -2,16 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-    --background: #f8fafc;
+@layer base {
+    :root {
+        color-scheme: light;
+    }
+
+    /* The default border colour is Mist everywhere, so a bare `border` is
+       already correct and `border-slate-200` is never needed. */
+    *,
+    ::before,
+    ::after {
+        border-color: theme("colors.mist");
+    }
+
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-paper text-body text-graphite;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        /* Tabular numerals matter in a finance app; proportional digits make
+           columns of pesos wobble. Ligatures off keeps figures literal. */
+        font-feature-settings: "calt" 0, "liga" 0, "tnum" 1;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        @apply text-ink font-semibold;
+    }
+
+    /* Focus is a single, consistent, high-contrast ring. */
+    :focus-visible {
+        outline: 2px solid theme("colors.ember");
+        outline-offset: 2px;
+    }
+
+    ::selection {
+        background: theme("colors.ember");
+        color: theme("colors.ink");
+    }
 }
 
-body {
-    background: var(--background);
-    color: #0f172a;
-    -webkit-font-smoothing: antialiased;
+@layer components {
+    .card {
+        @apply rounded-card border border-mist bg-paper p-6;
+    }
+
+    /* Numeric columns: fixed-width figures so decimal points line up. */
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
 }
 
-.card {
-    @apply bg-white rounded-2xl border border-slate-200 p-6 shadow-sm;
+@layer utilities {
+    /* CSS grid items default to min-width:auto; an ApexCharts SVG inside one
+       will not shrink below its initial render width and the grid overflows
+       the first time the window narrows. */
+    .min-w-0-grid > * {
+        min-width: 0;
+    }
+}
+
+/* ApexCharts ships a drop shadow and its own border radius on the tooltip.
+   Zero both — elevation in this system comes from borders. */
+.apexcharts-tooltip.apexcharts-theme-light {
+    background: theme("colors.paper") !important;
+    border: 1px solid theme("colors.mist") !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    filter: none !important;
+    font-size: 13px;
+    color: theme("colors.ink");
+}
+
+.apexcharts-tooltip.apexcharts-theme-light .apexcharts-tooltip-title {
+    background: theme("colors.fog") !important;
+    border-bottom: 1px solid theme("colors.mist") !important;
+    font-size: 12px;
+    font-weight: 500;
+    color: theme("colors.pewter");
+    margin-bottom: 0;
+}
+
+.apexcharts-tooltip-series-group.apexcharts-active {
+    padding-bottom: 4px;
+}
+
+.apexcharts-xaxistooltip,
+.apexcharts-yaxistooltip {
+    background: theme("colors.paper") !important;
+    border: 1px solid theme("colors.mist") !important;
+    box-shadow: none !important;
+    color: theme("colors.ink") !important;
+}
+
+.apexcharts-xaxistooltip::before,
+.apexcharts-xaxistooltip::after {
+    display: none !important;
 }

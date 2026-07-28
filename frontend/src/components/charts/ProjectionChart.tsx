@@ -12,10 +12,12 @@ import {
     YAxis,
 } from "recharts";
 import { ForecastPoint } from "@/lib/api";
+import { chart, colors } from "@/design/tokens";
+import { monthLabelFromOffset } from "@/lib/format";
 
 export function ProjectionChart({ points }: { points: ForecastPoint[] }) {
     const data = points.map((p) => ({
-        month: `M${p.month_offset}`,
+        month: monthLabelFromOffset(p.month_offset),
         Baseline: p.baseline,
         Optimizado: p.optimized,
     }));
@@ -24,26 +26,26 @@ export function ProjectionChart({ points }: { points: ForecastPoint[] }) {
             <AreaChart data={data}>
                 <defs>
                     <linearGradient id="opt" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                        <stop offset="5%" stopColor={colors.ember} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={colors.ember} stopOpacity={0} />
                     </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
-                <YAxis stroke="#94a3b8" fontSize={12} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                <XAxis dataKey="month" stroke={chart.axisLabel} fontSize={12} />
+                <YAxis stroke={chart.axisLabel} fontSize={12} />
                 <Tooltip />
                 <Legend />
                 <Area
                     type="monotone"
                     dataKey="Optimizado"
-                    stroke="#2563eb"
+                    stroke={colors.ember}
                     strokeWidth={2}
                     fill="url(#opt)"
                 />
                 <Line
                     type="monotone"
                     dataKey="Baseline"
-                    stroke="#94a3b8"
+                    stroke={chart.neutral[4]}
                     strokeDasharray="5 5"
                     dot={false}
                 />

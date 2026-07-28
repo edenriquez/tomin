@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
-import { api, mxn, SpendingSummary, Transaction } from "@/lib/api";
+import { api, SpendingSummary, Transaction } from "@/lib/api";
+import { mxn } from "@/lib/format";
 import { MetricCard } from "@/components/MetricCard";
 import { DistributionChart } from "@/components/charts/DistributionChart";
 import { UploadButton } from "@/components/UploadButton";
@@ -31,23 +32,23 @@ export default function DashboardPage() {
 
     return (
         <div>
-            <h1 className="text-2xl font-bold">Hola, Alejandro</h1>
-            <p className="text-slate-500 text-sm">Tu resumen financiero</p>
+            <h1 className="text-title-md font-semibold text-ink">Hola, Alejandro</h1>
+            <p className="text-body-sm text-pewter">Tu resumen financiero</p>
 
             {error && (
-                <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                <p className="mt-4 rounded-control border-l-2 border-ember bg-fog p-3 text-body-sm text-graphite">
                     No se pudo cargar la informacion ({error}). Verifica que el backend este
                     corriendo en el puerto 8000.
                 </p>
             )}
 
-            <div className="grid md:grid-cols-3 gap-4 mt-6">
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
                 <MetricCard label="Balance Total" value={mxn(balance)} hint="Ingresos - Gastos" />
                 <MetricCard
                     label="Gastos del Mes"
                     value={mxn(summary?.total_expense ?? 0)}
                     hint={summary?.top_category ? `Top: ${summary.top_category}` : undefined}
-                    hintColor="text-slate-500"
+                    hintColor="text-pewter"
                 />
                 <MetricCard
                     label="Ingresos"
@@ -56,38 +57,42 @@ export default function DashboardPage() {
                 />
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6 mt-6">
-                <div className="md:col-span-2 space-y-6">
+            <div className="mt-6 grid gap-6 md:grid-cols-3">
+                <div className="space-y-6 md:col-span-2">
                     <section className="card">
-                        <h2 className="font-semibold mb-4">Distribucion de Gastos</h2>
+                        <h2 className="mb-4 text-title-sm font-semibold text-ink">
+                            Distribucion de Gastos
+                        </h2>
                         <DistributionChart data={summary?.by_category ?? []} />
                     </section>
 
                     <section className="card">
-                        <h2 className="font-semibold mb-4">Movimientos Recientes</h2>
+                        <h2 className="mb-4 text-title-sm font-semibold text-ink">
+                            Movimientos Recientes
+                        </h2>
                         {txs.length === 0 ? (
-                            <p className="text-sm text-slate-500">
+                            <p className="text-body-sm text-pewter">
                                 Sube un estado de cuenta para ver tus movimientos.
                             </p>
                         ) : (
-                            <table className="w-full text-sm">
-                                <thead className="text-left text-slate-400 uppercase text-xs">
+                            <table className="w-full text-body-sm">
+                                <thead className="text-left text-label text-pewter">
                                     <tr>
-                                        <th className="pb-2">Concepto</th>
-                                        <th className="pb-2">Fecha</th>
-                                        <th className="pb-2 text-right">Monto</th>
+                                        <th className="pb-2 font-medium">Concepto</th>
+                                        <th className="pb-2 font-medium">Fecha</th>
+                                        <th className="pb-2 text-right font-medium">Monto</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {txs.map((t) => (
-                                        <tr key={t.id} className="border-t border-slate-100">
-                                            <td className="py-2">{t.description}</td>
-                                            <td className="py-2 text-slate-500">{t.date}</td>
+                                        <tr key={t.id} className="border-t border-mist">
+                                            <td className="py-2 text-ink">{t.description}</td>
+                                            <td className="py-2 text-pewter">{t.date}</td>
                                             <td
-                                                className={`py-2 text-right ${
+                                                className={`tabular py-2 text-right ${
                                                     t.type === "income"
-                                                        ? "text-emerald-600"
-                                                        : "text-slate-900"
+                                                        ? "text-positive"
+                                                        : "text-ink"
                                                 }`}
                                             >
                                                 {t.type === "expense" ? "-" : "+"}
@@ -102,11 +107,11 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-6">
-                    <section className="card bg-brand/5 border-brand/20">
-                        <div className="flex items-center gap-2 text-brand font-semibold">
-                            <Sparkles size={18} /> Tomin AI Insight
+                    <section className="card border-l-2 border-l-ember">
+                        <div className="flex items-center gap-2 font-semibold text-ink">
+                            <Sparkles size={18} className="text-ember" /> Tomin AI Insight
                         </div>
-                        <p className="mt-3 text-sm text-slate-700">
+                        <p className="mt-3 text-body-sm text-graphite">
                             {summary?.top_category
                                 ? `Tu categoria con mayor gasto es ${summary.top_category}. Considera fijar un limite mensual.`
                                 : "Sube tu primer estado de cuenta para recibir insights personalizados."}
@@ -114,7 +119,7 @@ export default function DashboardPage() {
                     </section>
 
                     <section className="card">
-                        <h3 className="text-xs font-semibold text-slate-400 uppercase mb-3">
+                        <h3 className="mb-3 text-label font-semibold text-pewter">
                             Acciones Rapidas
                         </h3>
                         <UploadButton onDone={load} />

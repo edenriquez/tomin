@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, ForecastPoint, mxn } from "@/lib/api";
+import { api, ForecastPoint } from "@/lib/api";
+import { mxn, pct } from "@/lib/format";
 import { MetricCard } from "@/components/MetricCard";
 import { ProjectionChart } from "@/components/charts/ProjectionChart";
 
@@ -31,12 +32,12 @@ export default function ForecastsPage() {
 
     return (
         <div>
-            <h1 className="text-2xl font-bold">Your Financial Future</h1>
-            <p className="text-slate-500 text-sm">
+            <h1 className="text-title-md font-semibold text-ink">Your Financial Future</h1>
+            <p className="text-body-sm text-pewter">
                 Visualize and optimize your strategy with AI insights.
             </p>
 
-            <div className="grid md:grid-cols-3 gap-4 mt-6">
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
                 <MetricCard
                     label="Projected Net Worth"
                     value={last ? mxn(last.optimized) : "-"}
@@ -46,7 +47,7 @@ export default function ForecastsPage() {
                     label="Baseline"
                     value={last ? mxn(last.baseline) : "-"}
                     hint="Sin cambios"
-                    hintColor="text-slate-500"
+                    hintColor="text-pewter"
                 />
                 <MetricCard
                     label="Monthly Free Cash Flow"
@@ -55,21 +56,25 @@ export default function ForecastsPage() {
                 />
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6 mt-6">
-                <section className="card md:col-span-2">
-                    <h2 className="font-semibold mb-4">Net Worth Projection</h2>
+            <div className="mt-6 grid gap-6 md:grid-cols-3">
+                <section className="card md:col-span-2 min-w-0">
+                    <h2 className="mb-4 text-title-sm font-semibold text-ink">
+                        Net Worth Projection
+                    </h2>
                     {points.length ? (
                         <ProjectionChart points={points} />
                     ) : (
-                        <p className="text-sm text-slate-500">
+                        <p className="text-body-sm text-pewter">
                             Ajusta el simulador y presiona &quot;Simular&quot;.
                         </p>
                     )}
                 </section>
 
                 <section className="card">
-                    <h2 className="font-semibold mb-4">Forecast Simulator</h2>
-                    <Slider
+                    <h2 className="mb-4 text-title-sm font-semibold text-ink">
+                        Forecast Simulator
+                    </h2>
+                    <SimSlider
                         label="Monthly Savings"
                         value={sim.monthly_savings}
                         min={0}
@@ -77,7 +82,7 @@ export default function ForecastsPage() {
                         onChange={(v) => setSim({ ...sim, monthly_savings: v })}
                         format={mxn}
                     />
-                    <Slider
+                    <SimSlider
                         label="Discretionary Spending"
                         value={sim.monthly_expenses}
                         min={0}
@@ -85,18 +90,18 @@ export default function ForecastsPage() {
                         onChange={(v) => setSim({ ...sim, monthly_expenses: v })}
                         format={mxn}
                     />
-                    <Slider
+                    <SimSlider
                         label="Investment Return"
                         value={sim.annual_return_rate}
                         min={0.02}
                         max={0.15}
                         step={0.005}
                         onChange={(v) => setSim({ ...sim, annual_return_rate: v })}
-                        format={(v) => `${(v * 100).toFixed(1)}%`}
+                        format={pct}
                     />
                     <button
                         onClick={runSimulation}
-                        className="mt-4 w-full rounded-lg bg-brand px-4 py-2 text-sm text-white"
+                        className="mt-4 w-full rounded-control bg-ember px-4 py-2 text-body-sm font-semibold text-ink"
                     >
                         Simular
                     </button>
@@ -106,7 +111,7 @@ export default function ForecastsPage() {
     );
 }
 
-function Slider({
+function SimSlider({
     label,
     value,
     min,
@@ -125,9 +130,9 @@ function Slider({
 }) {
     return (
         <div className="mb-4">
-            <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">{label}</span>
-                <span className="font-medium text-brand">{format(value)}</span>
+            <div className="flex items-center justify-between text-body-sm">
+                <span className="text-graphite">{label}</span>
+                <span className="tabular font-medium text-ink">{format(value)}</span>
             </div>
             <input
                 type="range"
@@ -136,7 +141,7 @@ function Slider({
                 step={step}
                 value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full accent-brand mt-1"
+                className="mt-1 w-full accent-ember"
             />
         </div>
     );

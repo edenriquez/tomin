@@ -2,7 +2,7 @@ export function MetricCard({
     label,
     value,
     hint,
-    hintColor = "text-emerald-600",
+    hintColor = "text-positive",
 }: {
     label: string;
     value: string;
@@ -11,9 +11,9 @@ export function MetricCard({
 }) {
     return (
         <div className="card">
-            <div className="text-sm text-slate-500">{label}</div>
-            <div className="text-3xl font-bold mt-1">{value}</div>
-            {hint && <div className={`mt-2 text-sm ${hintColor}`}>{hint}</div>}
+            <div className="text-body-sm text-pewter">{label}</div>
+            <div className="tabular mt-1 text-metric font-semibold text-ink">{value}</div>
+            {hint && <div className={`mt-2 text-body-sm ${hintColor}`}>{hint}</div>}
         </div>
     );
 }

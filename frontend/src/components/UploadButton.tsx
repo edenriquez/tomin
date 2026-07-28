@@ -23,7 +23,7 @@ export function UploadButton({ onDone }: { onDone?: () => void }) {
         <div>
             <button
                 onClick={() => inputRef.current?.click()}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
+                className="flex w-full items-center justify-center gap-2 rounded-control border border-mist bg-paper px-4 py-2.5 text-body-sm font-medium text-ink hover:bg-fog"
             >
                 <Upload size={16} /> Subir Estado de Cuenta
             </button>
@@ -34,7 +34,7 @@ export function UploadButton({ onDone }: { onDone?: () => void }) {
                 hidden
                 onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
             />
-            {status && <p className="mt-2 text-xs text-slate-500">{status}</p>}
+            {status && <p className="mt-2 text-label text-pewter">{status}</p>}
         </div>
     );
 }
