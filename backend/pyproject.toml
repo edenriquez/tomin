@@ -15,6 +15,10 @@ dependencies = [
     "pyjwt>=2.8",
     "duckdb>=0.10",
     "pdfplumber>=0.11",
+    # Application-level crypto for the device ingest path (docs/custody-plan.md
+    # F1/G3): the phone seals the extracted text to the server's X25519 key, so
+    # a terminated-TLS middlebox sees an opaque body.
+    "pynacl>=1.5",
     # Runtime dependency, not dev-only: Container.bootstrap() runs
     # `alembic.command.upgrade` programmatically on startup.
     "alembic>=1.13",

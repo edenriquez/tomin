@@ -2,6 +2,10 @@
 __pycache__/
 *.pyc
 .env
+# The device-ingest keypair: a *secret*, generated on first bootstrap and
+# never committed. Losing it only costs the phones a re-pin (TOFU alert);
+# leaking it would undo the sealed-box guarantee (docs/custody-plan.md G3).
+ingest_key.json
 *.db
 *.duckdb
 .pytest_cache/

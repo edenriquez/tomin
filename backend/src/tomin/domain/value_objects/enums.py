@@ -13,6 +13,21 @@ class SourceType(str, Enum):
     SAT_XML = "sat_xml"
 
 
+class StatementSource(str, Enum):
+    """How the statement's contents reached the server.
+
+    Not a synonym for :class:`SourceType` (what kind of document it is): this
+    records *custody*. ``WEB`` means the raw file was uploaded and read
+    server-side, then discarded; ``DEVICE`` means the phone extracted the text
+    and the file never left it (docs/custody-plan.md G1/G2). The dashboard says
+    different, true things about each, so the difference has to be stored --
+    it cannot be re-derived from anything else on the row.
+    """
+
+    WEB = "web"
+    DEVICE = "device"
+
+
 class StatementStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"

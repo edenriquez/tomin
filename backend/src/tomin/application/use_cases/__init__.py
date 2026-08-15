@@ -5,7 +5,11 @@ from .get_spending_summary import GetSpendingSummaryUseCase
 from .goals import ManageGoalsUseCase
 from .list_transactions import ListTransactionsUseCase
 from .metrics import GetMetricCatalogUseCase, RunMetricQueriesUseCase
-from .process_file import ProcessFileResult, ProcessFileUseCase
+from .process_file import (
+    ProcessExtractedUseCase,
+    ProcessFileResult,
+    ProcessFileUseCase,
+)
 from .realias import RealiasResult, RealiasUseCase
 from .recategorize import InvalidLabelError, RecategorizeResult, RecategorizeUseCase
 from .rebuild_cube import RebuildCubeResult, RebuildCubeUseCase
@@ -35,6 +39,7 @@ __all__ = [
     "ManageStatementsUseCase",
     "ManageTagsUseCase",
     "InvalidLabelError",
+    "ProcessExtractedUseCase",
     "ProcessFileResult",
     "ProcessFileUseCase",
     "RealiasResult",

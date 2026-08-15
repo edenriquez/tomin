@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import cached_property
 
+from ..adapters.outbound.crypto import FileIngestKeyring
 from ..adapters.outbound.cube import DuckDbCube, DuckDbMetricEngine
 from ..adapters.outbound.extraction import (
     KeywordTemplateClassifier,
@@ -39,6 +40,7 @@ from ..application.use_cases import (
     ManageGoalsUseCase,
     ManageStatementsUseCase,
     ManageTagsUseCase,
+    ProcessExtractedUseCase,
     ProcessFileUseCase,
     RealiasUseCase,
     RebuildCubeUseCase,
@@ -90,6 +92,11 @@ class Container:
     @cached_property
     def file_storage(self) -> TransientFileStorage:
         return TransientFileStorage()
+
+    @cached_property
+    def ingest_keyring(self) -> FileIngestKeyring:
+        """The server's identity for sealed device ingest. Minted on bootstrap."""
+        return FileIngestKeyring(self.settings.ingest_key_path)
 
     # --- repositories ----------------------------------------------------
     @cached_property
@@ -161,6 +168,22 @@ class Container:
             user_aliases=self.user_aliases,
             cube=self.cube,
             file_storage=self.file_storage,
+        )
+
+    @cached_property
+    def process_extracted(self) -> ProcessExtractedUseCase:
+        # Same collaborators as `process_file` minus the two the device path
+        # has no use for: nothing to extract, nothing to store transiently.
+        return ProcessExtractedUseCase(
+            classifier=self.classifier,
+            parser_factory=self.parser_factory,
+            statements=self.statements,
+            transactions=self.transactions,
+            categories=self.categories,
+            merchants=self.merchants,
+            user_labels=self.user_labels,
+            user_aliases=self.user_aliases,
+            cube=self.cube,
         )
 
     @cached_property
@@ -252,7 +275,12 @@ class Container:
 
     # --- bootstrap -------------------------------------------------------
     def bootstrap(self) -> None:
-        """Migrate the schema, then seed reference data + cube dimensions."""
+        """Migrate the schema, mint the ingest key, seed reference data + cube."""
+        # Minted here rather than on the first `GET /api/ingest/key` so that a
+        # cold server never answers that request with a key it just generated
+        # under a request lock — and so the operator sees the file appear at
+        # startup, not at first phone contact.
+        self.ingest_keyring.ensure()
         if self.settings.run_migrations:
             upgrade_to_head(self.database, self.settings.database_url)
         else:

@@ -23,6 +23,7 @@ from ....domain.entities import (
 from ....domain.value_objects.enums import (
     AccountKind,
     SourceType,
+    StatementSource,
     StatementStatus,
     TransactionStatus,
     TxType,
@@ -341,6 +342,7 @@ class SqlStatementRepository:
             status=st.status.value,
             account_kind=st.account_kind.value if st.account_kind else None,
             file_hash=st.file_hash,
+            source=st.source.value,
             uploaded_at=st.uploaded_at,
         )
 
@@ -357,6 +359,9 @@ class SqlStatementRepository:
             status=StatementStatus(m.status),
             account_kind=AccountKind(m.account_kind) if m.account_kind else None,
             file_hash=m.file_hash,
+            # `source` is set once at ingest and never edited, so `update()`
+            # deliberately leaves it alone.
+            source=StatementSource(m.source),
             uploaded_at=m.uploaded_at,
         )
 

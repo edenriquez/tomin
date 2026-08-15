@@ -84,6 +84,14 @@ export type Statement = {
     /** User-declared; null until they label the document. */
     account_kind: AccountKind | null;
     uploaded_at: string | null;
+    /**
+     * Where the reading happened: "web" (the file was uploaded here and
+     * discarded) or "device" (the phone extracted the text and only the text
+     * travelled — the custody promise). Optional and widened to `string`
+     * deliberately: every statement ingested before the column existed answers
+     * without it, so the UI must treat "absent" as "unknown", never as "web".
+     */
+    source?: "web" | "device" | string;
 };
 
 /** A row of the global category taxonomy. */

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { FileText, Smartphone, Trash2, Upload, X } from "lucide-react";
 import {
     ACCOUNT_KINDS,
     KIND_LABELS,
@@ -13,7 +14,15 @@ import {
 import { cn } from "@/lib/cn";
 import { monthLabel } from "@/lib/format";
 import { parsePeriodKey } from "@/lib/metrics";
-import { BackendNotice, Button, EmptyState, Select, Skeleton, useToast } from "@/components/ui";
+import {
+    BackendNotice,
+    Button,
+    EmptyState,
+    Notice,
+    Select,
+    Skeleton,
+    useToast,
+} from "@/components/ui";
 import { useAppData } from "@/components/AppChrome";
 import { useBankScope } from "@/lib/banks";
 import { PanelChoice, PanelControls } from "@/components/settings/PanelControls";
@@ -46,6 +55,10 @@ const STATUS_DOT: Record<string, string> = {
     processing: "bg-ash animate-pulse",
     pending: "bg-ash",
 };
+
+/** How long the row a deep link pointed at stays washed. Long enough to find
+ *  it once the scroll settles, short enough that it never becomes a state. */
+const ARRIVAL_MS = 2000;
 
 const SORTS = ["recent", "bank", "period"] as const;
 type Sort = (typeof SORTS)[number];
@@ -135,6 +148,32 @@ export function DocumentosView() {
     // validation, the toasts and the reload are literally the same behaviour.
     const { pick, uploading, input } = useStatementUpload(load);
 
+    /**
+     * The deep link the phone hands out after a device upload:
+     * `/documentos?statement=<id>`. It is only a pointer — if the id names a
+     * document this account doesn't have (deleted, or never arrived), the page
+     * behaves like any other visit rather than apologising for a stale link.
+     */
+    const arrivalId = useSearchParams().get("statement");
+    const arrived = useMemo(
+        () => (arrivalId ? items?.find((s) => s.id === arrivalId) ?? null : null),
+        [arrivalId, items]
+    );
+    const arrivedId = arrived?.id ?? null;
+    const [faded, setFaded] = useState(false);
+    const [noticeDismissed, setNoticeDismissed] = useState(false);
+
+    // Keyed on the id rather than on `items`: the array identity changes on
+    // every optimistic label edit, and re-lighting the row minutes later would
+    // read as a glitch. Starting only once the row exists also means a slow
+    // fetch doesn't spend the whole beat on an empty list.
+    useEffect(() => {
+        if (!arrivedId) return;
+        setFaded(false);
+        const t = setTimeout(() => setFaded(true), ARRIVAL_MS);
+        return () => clearTimeout(t);
+    }, [arrivedId]);
+
     const sorted = useMemo(() => {
         if (!items) return null;
         const rows = [...items];
@@ -211,6 +250,27 @@ export function DocumentosView() {
 
             {error && <BackendNotice what="la información" detail={error} />}
 
+            {/* Custody as news, not as status: the chip on the row states the
+                permanent fact, this line only marks the arrival, and only when
+                the phone really was the reader. Dismissible for the same
+                reason — news should be closable. */}
+            {arrived?.source === "device" && !noticeDismissed && (
+                <Notice className="flex items-center justify-between gap-3">
+                    Documento recibido desde tu teléfono.
+                    <button
+                        type="button"
+                        aria-label="Ocultar aviso"
+                        onClick={() => setNoticeDismissed(true)}
+                        className={cn(
+                            "-my-1 shrink-0 rounded-control p-1 text-ash",
+                            "transition-colors duration-100 hover:bg-paper hover:text-ink"
+                        )}
+                    >
+                        <X size={14} aria-hidden />
+                    </button>
+                </Notice>
+            )}
+
             {bankScope.selected.length > 0 && (
                 <p className="text-body-sm text-graphite">
                     El filtro de bancos no aplica aquí — el archivo siempre muestra todos
@@ -273,6 +333,7 @@ export function DocumentosView() {
                             <StatementRow
                                 key={s.id}
                                 statement={s}
+                                highlighted={s.id === arrivedId && !faded}
                                 onKind={(kind) => setKind(s, kind)}
                                 onDelete={() => remove(s)}
                             />
@@ -317,10 +378,13 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function StatementRow({
     statement: s,
+    highlighted = false,
     onKind,
     onDelete,
 }: {
     statement: Statement;
+    /** This is the document a deep link pointed at, for one short beat. */
+    highlighted?: boolean;
     onKind: (kind: AccountKind | null) => void;
     onDelete: () => Promise<void>;
 }) {
@@ -330,9 +394,32 @@ function StatementRow({
     const [deleting, setDeleting] = useState(false);
     const mark = monogram(s.bank);
     const uploaded = s.uploaded_at ? uploadedLabel(s.uploaded_at) : null;
+    const ref = useRef<HTMLLIElement>(null);
+
+    // The archive can be long; a wash the user has to hunt for is no arrival at
+    // all. Centred rather than top-aligned so the row lands away from the
+    // sticky chrome, and smooth only when the OS hasn't asked otherwise.
+    useEffect(() => {
+        if (!highlighted) return;
+        const reduced =
+            typeof window !== "undefined" &&
+            window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        ref.current?.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
+    }, [highlighted]);
 
     return (
-        <li className="flex flex-wrap items-center gap-3 px-5 py-4 transition-colors duration-100 hover:bg-fog/60 sm:flex-nowrap sm:px-6">
+        <li
+            ref={ref}
+            className={cn(
+                "flex flex-wrap items-center gap-3 px-5 py-4 sm:flex-nowrap sm:px-6",
+                // The ring is always there and usually invisible: toggling
+                // `ring-1` on and off would snap the outline away at the end of
+                // the beat, while a colour can be crossfaded out with the wash.
+                "ring-1 ring-inset ring-transparent",
+                "transition-[background-color,box-shadow] duration-200",
+                highlighted ? "bg-fog ring-edge" : "hover:bg-fog/60"
+            )}
+        >
             <div
                 aria-hidden
                 className={cn(
@@ -348,6 +435,24 @@ function StatementRow({
                     <span className="truncate text-body font-medium text-ink">
                         {s.bank ?? "Banco desconocido"}
                     </span>
+                    {/* The custody fact, in the chip idiom the charts use for
+                        "Estimado": inert Fog, hairline ring, no accent. It
+                        qualifies the document the way that badge qualifies a
+                        number — and it is absent, never negated, for the web
+                        route and for everything ingested before the field
+                        existed. */}
+                    {s.source === "device" && (
+                        <span
+                            title="El archivo original vive en tu teléfono; aquí solo llegaron los datos."
+                            className={cn(
+                                "inline-flex shrink-0 items-center gap-1 rounded-tag bg-fog px-2 py-0.5",
+                                "text-label font-medium text-graphite ring-1 ring-inset ring-mist"
+                            )}
+                        >
+                            <Smartphone size={11} aria-hidden className="text-ash" />
+                            Custodiado en tu teléfono
+                        </span>
+                    )}
                     <span className="inline-flex items-center gap-1.5 text-label text-graphite">
                         <span
                             aria-hidden

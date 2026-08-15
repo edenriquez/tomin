@@ -47,11 +47,14 @@ F2:    [PDF se queda] ─▶ teléfono: extract + parse ──cifrado──▶ b
      (Android/iOS; en iOS usa Vision). Mismo output: líneas.
    - XML del SAT: es texto; se lee directo (`expo-file-system`, ya en uso).
    - El archivo original se guarda como hoy (`src/lib/storage.ts`, sin cambios).
-2. **Cifrado de aplicación**: `libsodium` (`react-native-libsodium`) —
-   *sealed box* (X25519 + XSalsa20-Poly1305) contra la llave pública del
-   servidor, obtenida de `GET /api/ingest/key` y *pinneada* en el cliente
-   tras el primer uso (TOFU + alerta si cambia). Protege contra TLS
-   terminado por terceros (proxies corporativos, logs de balanceadores) y
+2. **Cifrado de aplicación** (como quedó implementado): `tweetnacl` en el
+   móvil / `PyNaCl` en el servidor — *crypto_box* explícito
+   (X25519 + XSalsa20-Poly1305) con keypair efímero por subida y nonce de
+   24B, envelope `{v, key_id, epk, nonce, box}`, contra la llave pública de
+   `GET /api/ingest/key`, *pinneada* en el cliente tras el primer uso
+   (TOFU + consentimiento explícito si cambia). Se eligió box explícito
+   sobre sealed box para que ambos lados queden en JS/Python puros sin
+   módulos nativos de sodium. Protege contra TLS terminado por terceros y
    compromete al backend a descifrar solo en memoria.
 3. **Payload** (antes de cifrar):
    ```json
@@ -74,8 +77,8 @@ F2:    [PDF se queda] ─▶ teléfono: extract + parse ──cifrado──▶ b
 
 1. `GET /api/ingest/key` — llave pública X25519 del servidor (par generado y
    persistido por el contenedor; rotable, la respuesta incluye `key_id`).
-2. `POST /api/ingest/extracted` — cuerpo: `{key_id, sealed: base64}`.
-   Adapter descifra (libsodium `crypto_box_seal_open`) **en memoria**,
+2. `POST /api/ingest/extracted` — cuerpo: `{v, key_id, epk, nonce, box}`.
+   Adapter descifra (`crypto_box` con la epk efímera) **en memoria**,
    valida el payload y llama al nuevo
    `ProcessExtractedUseCase(user_id, ExtractedDocument)` — que es
    `ProcessFileUseCase` menos el paso extract (refactor: extraer el tramo

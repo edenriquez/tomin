@@ -8,7 +8,12 @@ import * as FileSystem from "expo-file-system";
  * locally; only transient copies are ever uploaded to the backend for parsing.
  */
 
-const STATEMENTS_DIR = `${FileSystem.documentDirectory}statements/`;
+/**
+ * Private, app-scoped directory holding the durable copies plus the local
+ * index. Exported so neighbours of the index (e.g. the pinned server key in
+ * `secure-transport.ts`) live in the same custody boundary.
+ */
+export const STATEMENTS_DIR = `${FileSystem.documentDirectory}statements/`;
 const INDEX_PATH = `${STATEMENTS_DIR}index.json`;
 
 export type StoredStatement = {
@@ -22,12 +27,14 @@ export type StoredStatement = {
     remoteId?: string;
 };
 
-async function ensureDir(): Promise<void> {
+export async function ensureStatementsDir(): Promise<void> {
     const info = await FileSystem.getInfoAsync(STATEMENTS_DIR);
     if (!info.exists) {
         await FileSystem.makeDirectoryAsync(STATEMENTS_DIR, { intermediates: true });
     }
 }
+
+const ensureDir = ensureStatementsDir;
 
 export async function listStatements(): Promise<StoredStatement[]> {
     await ensureDir();

@@ -69,6 +69,9 @@ def statement_json(s: Statement) -> dict:
         "period_end": _iso(s.period_end),
         "status": s.status.value,
         "account_kind": s.account_kind.value if s.account_kind else None,
+        # Custody, published so the UI can say the true thing per statement:
+        # "device" means the file never left the phone.
+        "source": s.source.value,
         "uploaded_at": _iso(s.uploaded_at),
     }
 

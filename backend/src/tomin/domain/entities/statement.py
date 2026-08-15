@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
-from ..value_objects.enums import AccountKind, SourceType, StatementStatus
+from ..value_objects.enums import (
+    AccountKind,
+    SourceType,
+    StatementSource,
+    StatementStatus,
+)
 
 
 @dataclass(slots=True)
@@ -19,6 +24,9 @@ class Statement:
     # User-declared account kind (see AccountKind). None = not yet labelled.
     account_kind: AccountKind | None = None
     file_hash: str | None = None
+    # How the contents got here. Defaults to WEB because that is the path that
+    # existed first and every stored row predates the device one.
+    source: StatementSource = StatementSource.WEB
     uploaded_at: datetime = None  # type: ignore[assignment]
     id: UUID = None  # type: ignore[assignment]
 

@@ -2,6 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // pdf.js is pulled in with `import()` so its bulk is only evaluated when
+    // someone actually extracts a PDF (see src/lib/extract.ts).
+    "module": "esnext",
     "paths": {
       "@/*": [
         "./src/*"

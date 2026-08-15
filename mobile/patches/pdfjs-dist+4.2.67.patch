@@ -1,0 +1,22 @@
+diff --git a/node_modules/pdfjs-dist/legacy/build/pdf.mjs b/node_modules/pdfjs-dist/legacy/build/pdf.mjs
+index 03dfd5f..2c48711 100644
+--- a/node_modules/pdfjs-dist/legacy/build/pdf.mjs
++++ b/node_modules/pdfjs-dist/legacy/build/pdf.mjs
+@@ -8576,8 +8576,15 @@ class PDFWorker {
+       if (this.#mainThreadWorkerMessageHandler) {
+         return this.#mainThreadWorkerMessageHandler;
+       }
+-      const worker = await import( /*webpackIgnore: true*/this.workerSrc);
+-      return worker.WorkerMessageHandler;
++      // TOMIN PATCH (React Native / Metro): the original line here was
++      //   `const worker = await import(this.workerSrc);`
++      // Metro can only transform `import()` calls with a literal string, so a
++      // runtime URL import fails at *bundle* time even though this branch never
++      // runs on device. We always provide the handler through
++      // `globalThis.pdfjsWorker` (see src/lib/extract.ts), which is picked up by
++      // `#mainThreadWorkerMessageHandler` above, so reaching this line means the
++      // bootstrap in extract.ts did not run.
++      throw new Error("pdf.js: globalThis.pdfjsWorker must be set before getDocument()");
+     };
+     return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_20__.shadow)(this, "_setupFakeWorkerGlobal", loader());
+   }

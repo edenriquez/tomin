@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { isMetricError, queryMetrics } from "@/lib/metrics";
 import { windowToPeriod } from "@/lib/window";
 import { Skeleton } from "@/components/ui";
@@ -26,9 +27,26 @@ import { Onboarding } from "@/components/Onboarding";
  */
 const STARTED_KEY = "tomin.started";
 
+/**
+ * The root is also the address the phone hands out. After a device upload the
+ * backend answers `dashboard_url = <web>/?statement=<id>`, so the boundary
+ * below is not ceremony: `useSearchParams` opts this tree out of static
+ * prerendering, and Next 14 wants that said out loud. The fallback is the same
+ * grey beat the probe already shows, so the handoff is invisible.
+ */
 export default function Home() {
+    return (
+        <Suspense fallback={<RootSkeleton />}>
+            <Root />
+        </Suspense>
+    );
+}
+
+function Root() {
     const [hasData, setHasData] = useState<boolean | null>(null);
     const [started, setStarted] = useState(false);
+    const router = useRouter();
+    const arrival = useSearchParams().get("statement");
 
     useEffect(() => {
         // Session, not settings: "convinced" is a per-visit fact, and reading
@@ -61,22 +79,30 @@ export default function Home() {
         probe();
     }, [probe]);
 
-    if (hasData === null) {
+    /**
+     * The `?statement=` deep link is an *arrival*, and the root has no place to
+     * point at one document — Movimientos is a ledger, not an archive. So the
+     * param is forwarded to Documentos, which owns the per-statement row, and
+     * only once the probe says there is data: a link that lands on an empty
+     * account still deserves the pitch, not an empty archive.
+     *
+     * `replace`, not `push`: Back should return to wherever the phone's browser
+     * came from, not to a URL that immediately redirects again.
+     */
+    useEffect(() => {
+        if (hasData && arrival) {
+            router.replace(`/documentos?statement=${encodeURIComponent(arrival)}`);
+        }
+    }, [hasData, arrival, router]);
+
+    // Holding the skeleton through the handoff, rather than painting a full
+    // Movimientos that is about to be replaced. One beat of grey beats a flash
+    // of the wrong screen.
+    if (hasData === null || (hasData && arrival)) {
         // A beat of grey, deliberately not the onboarding hero: flashing
         // "upload your first statement" at someone with data is worse than
         // a skeleton, and worse than a spinner too.
-        return (
-            <main className="mx-auto min-h-dvh w-full max-w-page px-5 py-6 sm:px-8 sm:py-8">
-                <Skeleton className="h-8 w-28" />
-                <Skeleton className="mt-12 h-9 w-64" />
-                <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {[0, 1, 2].map((i) => (
-                        <Skeleton key={i} className="h-28" />
-                    ))}
-                </div>
-                <Skeleton className="mt-6 h-80" />
-            </main>
-        );
+        return <RootSkeleton />;
     }
 
     if (!hasData) {
@@ -89,5 +115,21 @@ export default function Home() {
         <AppChrome withWindow onDataChanged={probe}>
             <MovimientosView />
         </AppChrome>
+    );
+}
+
+/** The waiting shape of the app: chrome, a title, three tiles, a chart. */
+function RootSkeleton() {
+    return (
+        <main className="mx-auto min-h-dvh w-full max-w-page px-5 py-6 sm:px-8 sm:py-8">
+            <Skeleton className="h-8 w-28" />
+            <Skeleton className="mt-12 h-9 w-64" />
+            <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-28" />
+                ))}
+            </div>
+            <Skeleton className="mt-6 h-80" />
+        </main>
     );
 }

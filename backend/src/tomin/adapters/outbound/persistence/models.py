@@ -76,6 +76,10 @@ class StatementModel(Base):
     # AccountKind value, user-declared via PATCH; NULL until they label it.
     account_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
     file_hash: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    # StatementSource value: how the contents reached the server ("web" upload
+    # vs "device" on-phone extraction). NOT NULL with a 'web' default, because
+    # every row that predates the device path came in through the web one.
+    source: Mapped[str] = mapped_column(String(10), server_default="web", nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime)
 
 

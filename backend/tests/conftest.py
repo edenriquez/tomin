@@ -11,6 +11,9 @@ def app(tmp_path):
     settings = Settings(
         database_url=f"sqlite:///{tmp_path/'test.db'}",
         cube_path=":memory:",
+        # Per-test keypair, so the suite never mints (or reuses) the real
+        # server's ingest key in the repo root.
+        ingest_key_path=str(tmp_path / "ingest_key.json"),
         auth_disabled=True,
         # Each test gets a brand-new SQLite file, so create_all lands on the
         # same schema Alembic would build (models.py is the source of truth for

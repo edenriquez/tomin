@@ -52,22 +52,10 @@ export const api = {
      */
     deleteStatement: (id: string) =>
         del<{ statement_id: string; transactions_deleted: number }>(`/api/statements/${id}`),
-    /**
-     * Uploads a transient copy of an on-device statement for processing.
-     * The durable copy stays on the phone (see lib/storage).
-     */
-    uploadStatement: async (uri: string, name: string, mimeType: string) => {
-        const form = new FormData();
-        // React Native FormData file shape.
-        form.append("file", { uri, name, type: mimeType } as unknown as Blob);
-        const res = await fetch(`${API_URL}/api/statements`, { method: "POST", body: form });
-        if (!res.ok) throw new Error(await res.text());
-        return res.json() as Promise<{
-            statement_id: string;
-            template: string;
-            transactions_created: number;
-        }>;
-    },
+    // NOTE: there is deliberately no `uploadStatement` here any more. Sending a
+    // statement now means extracting it on-device and sealing the result — see
+    // lib/extract.ts and lib/secure-transport.ts. The raw file never leaves the
+    // phone, so no code path should be able to hand it to `POST /api/statements`.
 };
 
 export function mxn(value: number): string {
