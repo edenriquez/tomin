@@ -37,11 +37,21 @@ from dataclasses import dataclass
 _WHITESPACE = re.compile(r"\s+")
 
 #: Explicit "I paid my own card" / "I moved money between my own accounts"
-#: wording. Nothing else. `pago tarjeta` also covers "pago tarjeta de credito".
+#: wording. Nothing else — a bare "transferencia"/"spei" to a third party is
+#: rent, or a friend: real money leaving. `pago tarjeta` also covers "pago
+#: tarjeta de credito".
+#:
+#: - "su abono" is the card statement acknowledging the payment YOU made into
+#:   it ("SU ABONO...GRACIAS") — the incoming half of a self-transfer. Salary
+#:   lines say "abono nomina", never "su abono", so the pronoun is the anchor.
+#: - "cajita" is Nu's own savings pocket: money moving to or from it never
+#:   left the user.
 _TRANSFER = re.compile(
     r"\b(?:"
     r"pago\s+(?:de\s+)?(?:tc|tdc|tarjeta)"
     r"|traspaso"
+    r"|su\s+abono"
+    r"|cajita"
     r")\b"
 )
 
@@ -85,6 +95,10 @@ def is_cash_withdrawal(description: str | None) -> bool:
     text = normalize_description(description)
     if _FEE.search(text):
         # "COMISION RETIRO CAJERO" is the bank's charge, not the cash.
+        return False
+    if _TRANSFER.search(text):
+        # "Retiro de Cajita" moves money between the user's own pockets —
+        # no bill left an ATM. A transfer is never a cash withdrawal.
         return False
     return bool(_WITHDRAWAL.search(text))
 

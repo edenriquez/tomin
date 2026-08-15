@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from uuid import UUID
+
+from flask import Blueprint, jsonify, request
 
 from ..auth import current_user_id, get_container
 from ..serialization import (
@@ -41,14 +43,25 @@ def monthly():
 @analytics_bp.get("/recurring")
 def recurring():
     user_id = current_user_id()
-    items = get_container().detect_recurring.execute(user_id=user_id)
+    statement_ids = [UUID(v) for v in request.args.getlist("statement_id")]
+    items = get_container().detect_recurring.execute(
+        user_id=user_id, statement_ids=statement_ids or None
+    )
     return jsonify(
         items=[
             {
                 "label": i.label,
-                "average_amount": float(i.average_amount),
-                "frequency": i.frequency,
                 "occurrences": i.occurrences,
+                "frequency": i.frequency,
+                "typical_amount": float(i.typical_amount),
+                "monthly_equivalent": float(i.monthly_equivalent),
+                "amount_stable": i.amount_stable,
+                "last_date": i.last_date,
+                "next_expected": i.next_expected,
+                "category_id": i.category_id,
+                "charges": [
+                    {"date": c.date, "amount": float(c.amount)} for c in i.charges
+                ],
             }
             for i in items
         ]

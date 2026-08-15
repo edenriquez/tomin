@@ -74,7 +74,79 @@ def test_classifier_routes_templates():
     clf = KeywordTemplateClassifier()
     banamex_doc = _text_doc(["CITIBANAMEX estado de cuenta", "05/01/2024 OXXO 45.50"])
     assert clf.classify(banamex_doc) == TEMPLATE_BANAMEX
+    assert clf.detect_bank(banamex_doc) == "Banamex"
     cfdi_doc = ExtractedDocument(
         kind="xml", filename="f.xml", xml="<cfdi:Comprobante/>"
     )
     assert clf.classify(cfdi_doc) == TEMPLATE_SAT_CFDI
+
+
+def test_one_counterparty_mention_does_not_claim_the_document():
+    """The reported bug: a Nubank statement with transfers touching other
+    banks classified as Banamex because 'banamex' appeared once in the body."""
+    clf = KeywordTemplateClassifier()
+    nu_doc = _text_doc(
+        [
+            "Nu México Financiera",
+            "Estado de cuenta",
+            *[f"0{d}/07/2026 Retiro de Cajita: Mis domingos 150.00" for d in range(1, 6)],
+            "15/07/2026 SPEI enviado Banamex EDUARDO 500.00",
+            "16/07/2026 EDUARDO B AZTECA Transferencia 300.00",
+        ]
+    )
+    # No dedicated Nu parser, so the template is generic — but the bank is Nu,
+    # and one Banamex counterparty line changes neither answer.
+    assert clf.classify(nu_doc) == "generic_bank"
+    assert clf.detect_bank(nu_doc) == "Nu"
+
+
+def test_counterparty_spam_in_body_does_not_outvote_the_header():
+    """Twenty transfers to Banco Azteca accounts are still Nu's statement."""
+    clf = KeywordTemplateClassifier()
+    doc = _text_doc(
+        [
+            "Nubank estado de cuenta",
+            *[f"{d:02d}/07/2026 transferencia banco azteca 100.00" for d in range(1, 21)],
+        ]
+    )
+    assert clf.detect_bank(doc) == "Nu"
+
+
+def test_accents_do_not_hide_the_issuer():
+    """The real Nu masthead says "Nu México" — with the accent. The old
+    classifier lowercased without folding and never matched "nu mexico"."""
+    clf = KeywordTemplateClassifier()
+    doc = _text_doc(
+        [
+            "Nu México Financiera, S.A. de C.V.",
+            "01/07/2026 Retiro de Cajita: Mis domingos 150.00",
+        ]
+    )
+    assert clf.detect_bank(doc) == "Nu"
+    assert clf.classify(doc) == "generic_bank"
+
+
+def test_spei_receiving_bank_in_prose_does_not_claim_a_nu_statement():
+    """The reported regression: Nu statements print the RECEIVING bank's
+    formal name in prose SPEI blocks ("Banco receptor: Banco Nacional de
+    México"). Product vocabulary — a Cajita movement — outweighs it: only
+    the issuer's own products appear on its statement."""
+    clf = KeywordTemplateClassifier()
+    doc = _text_doc(
+        [
+            "Estado de cuenta",  # masthead is an image; no bank name in text
+            "05/07/2026 Retiro de Cajita: Mis domingos 150.00",
+            "12/07/2026 SPEI enviado 500.00",
+            "Banco receptor: Banco Nacional de México",
+            "18/07/2026 EDUARDO B AZTECA Transferencia 300.00",
+        ]
+    )
+    assert clf.detect_bank(doc) == "Nu"
+    assert clf.classify(doc) == "generic_bank"
+
+
+def test_unknown_bank_stays_unnamed_and_generic():
+    clf = KeywordTemplateClassifier()
+    doc = _text_doc(["Caja Popular Los Pinos", "01/07/2026 abono 100.00"])
+    assert clf.classify(doc) == "generic_bank"
+    assert clf.detect_bank(doc) is None

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -40,12 +41,22 @@ class CategorizationService:
     and performs longest-label matching against a normalized description.
     """
 
-    def __init__(self, categories: list[Category], merchants: list[Merchant]) -> None:
+    def __init__(
+        self,
+        categories: list[Category],
+        merchants: list[Merchant],
+        extra_labels: Iterable[tuple[str, UUID]] = (),
+    ) -> None:
+        """`extra_labels` is the user's own learned vocabulary — (label,
+        category_id) pairs taught through corrections. Merged into the same
+        index as the global labels so specificity (longest-first) decides
+        between them, not provenance."""
         self._categories = categories
         self._merchants = merchants
         # Pre-compute normalized (label -> id), longest labels first for specificity.
         self._cat_index = self._build_index(
-            (lbl, c.id) for c in categories for lbl in c.categorization_labels
+            [(lbl, c.id) for c in categories for lbl in c.categorization_labels]
+            + list(extra_labels)
         )
         self._merchant_index = self._build_index(
             (lbl, m.id) for m in merchants for lbl in ([m.name] + m.labels)

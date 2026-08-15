@@ -34,6 +34,12 @@ DEV_USER = UUID("00000000-0000-0000-0000-000000000001")
         "PAGO TDC 5678",
         "TRASPASO ENTRE CUENTAS PROPIAS",
         "Pago de TC Santander",
+        # The card statement acknowledging the payment YOU made into it — the
+        # incoming half of a self-transfer (real Banamex wording).
+        "29-jun-2026 SU ABONO...GRACIAS -",
+        # Nu's own savings pocket: money to/from it never left the user.
+        "07-may-2026 Retiro de Cajita: Mis domingos",
+        "Deposito en Cajita: Vacaciones",
     ],
 )
 def test_explicit_card_payments_and_traspasos_are_transfers(description):
@@ -52,6 +58,8 @@ def test_explicit_card_payments_and_traspasos_are_transfers(description):
         "PAGO SERVICIO CFE",
         "PAGO OXXO",
         "OXXO SUC 4412",
+        # "abono nomina" is salary, not a self-transfer — the "su" is the anchor.
+        "ABONO NOMINA QUINCENA 12",
     ],
 )
 def test_plain_transfers_and_ordinary_payments_are_not_transfers(description):
@@ -103,6 +111,14 @@ def test_accents_and_spacing_do_not_change_the_answer():
 def test_atm_is_matched_as_a_word_not_a_substring():
     """An unanchored 'atm' would fire on any description containing the letters."""
     assert detect_flags("FLATMATE RENT").is_cash_withdrawal is False
+
+
+def test_a_cajita_retiro_is_a_transfer_not_a_withdrawal():
+    """'Retiro de Cajita' moves money between the user's own pockets — no
+    bill left an ATM, and counting it as cash would inflate metric 4."""
+    flags = detect_flags("07-may-2026 Retiro de Cajita: Mis domingos")
+    assert flags.is_transfer is True
+    assert flags.is_cash_withdrawal is False
 
 
 def test_a_withdrawal_is_not_also_a_transfer():

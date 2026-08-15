@@ -2,21 +2,26 @@
 const nextConfig = {
     reactStrictMode: true,
     /**
-     * The IA moved to Spanish paths in F3 (docs/redesign-plan.md §4). These are
-     * permanent: the English paths were the shipped URLs and bookmarks
-     * shouldn't 404.
+     * The UI collapsed to the root plus /documentos in the onboarding-first
+     * rebuild. Every other previously shipped path — English (pre-F3) and
+     * Spanish (F3–F7) — lands on the root so no bookmark 404s. `/statements`
+     * gets its Spanish successor back rather than the root.
      */
     async redirects() {
         return [
-            { source: "/dashboard", destination: "/inicio", permanent: true },
-            { source: "/transactions", destination: "/movimientos", permanent: true },
-            { source: "/statements", destination: "/documentos", permanent: true },
-            { source: "/settings", destination: "/ajustes", permanent: true },
-            // F4/F5: `/spending` and `/forecasts` stopped being pages and
-            // became widgets. Each lands on its own detail view, which is the
-            // same analysis with a period selector on it.
-            { source: "/spending", destination: "/w/spend_by_category", permanent: true },
-            { source: "/forecasts", destination: "/w/investment_projection", permanent: true },
+            { source: "/statements", destination: "/documentos", permanent: false },
+            ...[
+            "/dashboard",
+            "/transactions",
+            "/settings",
+            "/spending",
+            "/forecasts",
+            "/inicio/:path*",
+            "/movimientos",
+            "/ajustes",
+            "/w/:path*",
+            "/kitchen-sink",
+            ].map((source) => ({ source, destination: "/", permanent: false })),
         ];
     },
 };

@@ -17,7 +17,7 @@ export function Skeleton({
         <div
             aria-hidden
             style={{ width, height }}
-            className={cn("rounded-tag bg-fog", className)}
+            className={cn("rounded-card bg-fog", className)}
         />
     );
 }
@@ -27,7 +27,7 @@ export function ChartSkeleton({ height = 320 }: { height?: number }) {
     return (
         <div
             style={{ height }}
-            className="flex w-full items-end gap-2 rounded-control bg-fog p-4"
+            className="flex w-full items-end gap-2 rounded-card bg-fog p-4"
             aria-hidden
         />
     );

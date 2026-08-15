@@ -27,6 +27,10 @@ export type Transaction = {
     /** Kept in the ledger, left out of every metric. For the transfer between
      *  your own accounts that would otherwise show up as both income and spend. */
     excluded_from_stats?: boolean;
+    /** Derived at ingest: self-transfer wording ("pago tarjeta", "cajita",
+     *  "su abono"). The Flujo aggregate honors it like the cube does. */
+    is_transfer?: boolean;
+    is_cash_withdrawal?: boolean;
     /** Ids only — resolve names against the tag list (see `lib/tags.ts`). */
     tag_ids?: string[];
 };
@@ -48,21 +52,26 @@ export type TransactionPage = {
     offset: number;
 };
 
-export type CategorySpend = {
-    category_id: string | null;
-    category_name: string;
-    amount: number;
-    percentage: number;
+
+
+
+/** The user-declarable account kinds. Mirrors the backend `AccountKind` enum. */
+export const ACCOUNT_KINDS = ["debit", "credit", "savings", "investment", "payroll"] as const;
+export type AccountKind = (typeof ACCOUNT_KINDS)[number];
+
+/** Display names for the account kinds — one copy, both pickers. */
+export const KIND_LABELS: Record<AccountKind, string> = {
+    debit: "Débito",
+    credit: "Crédito",
+    savings: "Ahorro",
+    investment: "Inversión",
+    payroll: "Nómina",
 };
 
-export type MonthlyPoint = { month: string; income: number; expense: number };
-
-export type SpendingSummary = {
-    total_income: number;
-    total_expense: number;
-    top_category: string | null;
-    by_category: CategorySpend[];
-    monthly: MonthlyPoint[];
+/** Display names for statement sources — one copy, one wording. */
+export const SOURCE_LABELS: Record<string, string> = {
+    bank_pdf: "Estado de cuenta",
+    sat_xml: "Factura SAT",
 };
 
 export type Statement = {
@@ -72,26 +81,62 @@ export type Statement = {
     period_start: string | null;
     period_end: string | null;
     status: string;
+    /** User-declared; null until they label the document. */
+    account_kind: AccountKind | null;
     uploaded_at: string | null;
 };
 
-export type RecurringItem = {
-    label: string;
-    average_amount: number;
-    frequency: string;
-    occurrences: number;
-};
-
-export type ForecastPoint = { month_offset: number; baseline: number; optimized: number };
-
-export type Goal = {
+/** A row of the global category taxonomy. */
+export type Category = {
     id: string;
     name: string;
-    target_amount: number;
-    current_amount: number;
-    target_date: string | null;
-    progress: number;
+    /** Hex, from the seed data. May be null; charts fall back to Ash. */
+    color: string | null;
+    icon: string | null;
 };
+
+/** The user-editable surface of a statement. Omitted key = leave alone. */
+export type StatementPatch = {
+    account_kind?: AccountKind | null;
+    bank?: string | null;
+};
+
+/** What POST /api/statements answers: the parse outcome plus the statement
+ *  itself, so the onboarding review can show what the OCR understood. */
+export type UploadResult = {
+    statement_id: string;
+    template: string;
+    transactions_created: number;
+    statement: Statement;
+};
+
+/** One detected recurring series (subscription, fixed bill). */
+export type RecurringItem = {
+    label: string;
+    occurrences: number;
+    frequency: "weekly" | "biweekly" | "monthly" | "yearly";
+    /** Median charge. */
+    typical_amount: number;
+    /** What the series costs per 30 days — the ranking measure. */
+    monthly_equivalent: number;
+    /** false = recurs on a rhythm but the amount varies (a utility bill). */
+    amount_stable: boolean;
+    last_date: string;
+    next_expected: string;
+    category_id: string | null;
+    /** Every charge in the series, oldest first — the evidence the rhythm was
+     *  inferred from, and what the calendar view is drawn from. */
+    charges: RecurringCharge[];
+};
+
+/** One occurrence of a recurring series. */
+export type RecurringCharge = {
+    /** ISO date, no time. */
+    date: string;
+    amount: number;
+};
+
+
 
 /**
  * The one place a request is made. Exported so `lib/metrics.ts` speaks to the
@@ -112,8 +157,28 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-    summary: (params = "") => request<SpendingSummary>(`/api/analytics/summary${params}`),
     transactions: (query = "") => request<TransactionPage>(`/api/transactions${query}`),
+    /** The global category taxonomy: names and colors for charts and pickers. */
+    categories: () => request<{ items: Category[] }>(`/api/categories`),
+    /**
+     * Apply a category to every similar machine-categorized movement.
+     * `dry_run` reports the blast radius without writing; the real run also
+     * teaches the label so future uploads categorize themselves.
+     */
+    recategorize: (body: { category_id: string; label: string; dry_run?: boolean }) =>
+        request<{ matched: number; updated: number; label: string }>(
+            `/api/transactions/recategorize`,
+            { method: "POST", body: JSON.stringify(body) }
+        ),
+    /**
+     * Rename every similar machine-named movement and remember the alias, so
+     * ingest renames future uploads too. Hand-typed names are never touched.
+     */
+    realias: (body: { label: string; alias: string; dry_run?: boolean }) =>
+        request<{ matched: number; updated: number; label: string }>(
+            `/api/transactions/realias`,
+            { method: "POST", body: JSON.stringify(body) }
+        ),
     /** Returns the updated transaction, so the caller never has to guess what
      *  the server made of the patch. */
     updateTransaction: (id: string, patch: TransactionPatch) =>
@@ -121,21 +186,19 @@ export const api = {
             method: "PATCH",
             body: JSON.stringify(patch),
         }),
-    /**
-     * Absolute URL, not a fetch: the browser has to navigate to it for the
-     * Content-Disposition attachment to become a download. Takes the same
-     * query string the table was loaded with, so the file matches the screen.
-     */
-    transactionsExportUrl: (query = "") => `${API_URL}/api/transactions/export.csv${query}`,
-    recurring: () => request<{ items: RecurringItem[] }>(`/api/analytics/recurring`),
-    forecast: () => request<{ points: ForecastPoint[] }>(`/api/forecast`),
-    simulate: (body: Record<string, number>) =>
-        request<{ points: ForecastPoint[] }>(`/api/forecast/simulate`, {
-            method: "POST",
-            body: JSON.stringify(body),
-        }),
-    goals: () => request<{ items: Goal[] }>(`/api/goals`),
+    recurring: (query = "") =>
+        request<{ items: RecurringItem[] }>(`/api/analytics/recurring${query}`),
     statements: () => request<{ items: Statement[]; total: number }>(`/api/statements`),
+    /**
+     * The two user-editable statement fields: what kind of account it is and
+     * (for statements the parser couldn't identify) which bank. Explicit null
+     * clears a field; an omitted key leaves it alone.
+     */
+    updateStatement: (id: string, patch: StatementPatch) =>
+        request<Statement>(`/api/statements/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify(patch),
+        }),
     /**
      * Deletes a statement and every transaction derived from it, in the
      * relational store and in the analytics cube.
@@ -145,11 +208,11 @@ export const api = {
             `/api/statements/${id}`,
             { method: "DELETE" }
         ),
-    uploadStatement: async (file: File) => {
+    uploadStatement: async (file: File): Promise<UploadResult> => {
         const form = new FormData();
         form.append("file", file);
         const res = await fetch(`${API_URL}/api/statements`, { method: "POST", body: form });
         if (!res.ok) throw new Error(await res.text());
-        return res.json();
+        return res.json() as Promise<UploadResult>;
     },
 };

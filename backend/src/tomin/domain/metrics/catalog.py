@@ -23,8 +23,13 @@ SPEND_BY_CATEGORY = MetricSpec(
     unit="MXN",
     measures=("expense_amount",),
     dimensions=("category", "tx_type"),
-    filters=("category", "currency", "tx_type", "tag"),
+    filters=("category", "currency", "tx_type", "tag", "statement"),
     default_dimensions=("category",),
+    # Optional month axis alongside the category dimension: with
+    # `grain="month"` the breakdown becomes category-per-month rows, which is
+    # the stacked "where did each month go" reading. No default grain, so
+    # existing clients keep the flat breakdown.
+    grains=("month",),
     requires=("transactions",),
 )
 
@@ -49,7 +54,7 @@ TAG_TOTALS = MetricSpec(
     unit="MXN",
     measures=("expense_amount",),
     dimensions=("tag",),
-    filters=("tag", "category", "currency"),
+    filters=("tag", "category", "currency", "statement"),
     default_dimensions=("tag",),
     requires=("tags",),
 )
@@ -64,8 +69,10 @@ MONTHLY_CASH_FLOW = MetricSpec(
     unit="MXN",
     measures=("income_amount", "expense_amount"),
     dimensions=(),
-    filters=("category", "currency", "tag"),
-    grains=("month",),
+    filters=("category", "currency", "tag", "statement"),
+    # Day unlocked for short dashboard windows (7d/14d); month stays the
+    # default so existing clients see no change.
+    grains=("month", "day"),
     default_grain="month",
     requires=("transactions",),
 )
@@ -80,7 +87,7 @@ ACCUMULATED_SPEND = MetricSpec(
     unit="MXN",
     measures=("expense_amount",),
     dimensions=(),
-    filters=("category", "currency", "tag"),
+    filters=("category", "currency", "tag", "statement"),
     grains=("month", "day"),
     default_grain="month",
     cumulative=True,
@@ -104,7 +111,7 @@ CASH_WITHDRAWN = MetricSpec(
     shape="series",
     unit="MXN",
     measures=("withdrawal_amount",),
-    filters=("currency", "tag"),
+    filters=("currency", "tag", "statement"),
     grains=("month", "day"),
     default_grain="month",
     requires=("transactions",),
@@ -127,7 +134,7 @@ LIFETIME_FLOW = MetricSpec(
     shape="scalar",
     unit="MXN",
     measures=("income_amount", "expense_amount", "net_amount"),
-    filters=("currency",),
+    filters=("currency", "statement"),
     requires=("transactions",),
     ignores_period=True,
 )

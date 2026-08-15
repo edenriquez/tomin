@@ -7,18 +7,26 @@ import { cn } from "@/lib/cn";
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
+/**
+ * The filled Signal pill is the only chromatic filled element the system
+ * permits — one per viewport, on the single action that matters. Everything
+ * else is a hairline pill, which is why the accent still reads as "switched
+ * on" three screens deep.
+ *
+ * Ink on Signal, not white: white on #3ba6f1 is 2.36:1 and fails AA at every
+ * size. Ink is 5.60:1.
+ */
 const VARIANTS: Record<ButtonVariant, string> = {
-    // Ink on Ember, not white: white is 3.14:1 and fails AA at button sizes.
-    primary: "bg-ember text-ink font-semibold hover:brightness-95 active:brightness-90",
-    secondary: "bg-paper text-ink border border-mist hover:bg-fog",
+    primary: "bg-signal text-ink font-medium border border-edge hover:brightness-[0.97] active:brightness-95",
+    secondary: "bg-transparent text-ink border border-mist hover:bg-paper hover:border-muted",
     ghost: "bg-transparent text-graphite hover:bg-fog hover:text-ink",
-    danger: "bg-paper text-negative border border-negative hover:bg-fog",
+    danger: "bg-transparent text-negative border border-negative/40 hover:bg-fog hover:border-negative",
 };
 
 const SIZES: Record<ButtonSize, string> = {
     sm: "h-8 px-3 text-body-sm gap-1.5",
-    md: "h-10 px-4 text-body-sm gap-2",
-    lg: "h-12 px-6 text-body gap-2",
+    md: "h-9 px-4 text-body gap-2",
+    lg: "h-11 px-6 text-body gap-2",
 };
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -53,7 +61,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
             aria-busy={loading || undefined}
             className={cn(
                 "relative inline-flex items-center justify-center rounded-control",
-                "transition-[filter,background-color] duration-100",
+                "transition-[filter,background-color,border-color] duration-100",
                 "disabled:cursor-not-allowed disabled:opacity-50",
                 VARIANTS[variant],
                 SIZES[size],

@@ -8,7 +8,9 @@
     }
 
     /* The default border colour is Mist everywhere, so a bare `border` is
-       already correct and `border-slate-200` is never needed. */
+       already correct and `border-slate-200` is never needed. Hairlines are
+       the primary structural device in this system — used generously, in
+       place of dividers, panels and shadows. */
     *,
     ::before,
     ::after {
@@ -20,7 +22,10 @@
     }
 
     body {
-        @apply bg-paper text-body text-graphite;
+        /* Canvas, not Paper. White is a card surface; the page underneath it
+           is warm stone. Inverting these is the fastest way to lose the
+           "paper, not screen" read. */
+        @apply bg-canvas text-body text-graphite;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         /* Tabular numerals matter in a finance app; proportional digits make
@@ -28,33 +33,52 @@
         font-feature-settings: "calt" 0, "liga" 0, "tnum" 1;
     }
 
+    /* Weight 400 at large sizes is the signature: authority through restraint,
+       not through bold. Emphasis comes from size and from the highlight span,
+       never from bumping a heading to 600. */
     h1,
     h2,
     h3,
     h4 {
-        @apply text-ink font-semibold;
+        @apply font-display font-normal text-ink;
     }
 
-    /* Focus is a single, consistent, high-contrast ring. */
+    /* Focus is a single, consistent ring in the one accent colour. */
     :focus-visible {
-        outline: 2px solid theme("colors.ember");
+        outline: 2px solid theme("colors.signal");
         outline-offset: 2px;
     }
 
     ::selection {
-        background: theme("colors.ember");
+        background: theme("colors.wash");
         color: theme("colors.ink");
     }
 }
 
 @layer components {
     .card {
-        @apply rounded-card border border-mist bg-paper p-6;
+        @apply rounded-card border border-mist bg-paper p-6 shadow-card;
     }
 
     /* Numeric columns: fixed-width figures so decimal points line up. */
     .tabular {
         font-variant-numeric: tabular-nums;
+    }
+
+    /**
+     * The signature typographic move: one phrase per headline gets Edge text
+     * on a Wash pill. Exactly one per headline — never in a body paragraph,
+     * never on a nav item. It always lands on the value-prop keyword, and it
+     * carries the entire chromatic budget of that headline.
+     */
+    .highlight {
+        @apply rounded-[4px] bg-wash px-2 text-edge;
+        /* Negative margin so the pill's padding doesn't push the phrase out of
+           optical alignment with the rest of the line. */
+        margin-inline: -0.125rem;
+        padding-block: 0.125rem;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
     }
 }
 
@@ -65,15 +89,151 @@
     .min-w-0-grid > * {
         min-width: 0;
     }
+
+    /* Scrolls, without the scrollbar. For strips the user drags or swipes —
+       the calendar's year of columns, the period pills — where a permanent
+       gutter of chrome under the content is louder than the content. The
+       element still scrolls by wheel, trackpad, touch and keyboard; only the
+       bar is hidden, so nothing becomes unreachable. */
+    .scrollbar-none {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* legacy Edge */
+    }
+
+    .scrollbar-none::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Content that appears in place — the inline editor, a controls strip —
+       arrives with a 140ms settle instead of popping. Guarded: for users who
+       asked the OS for reduced motion, appearing IS the animation. */
+    @media (prefers-reduced-motion: no-preference) {
+        .animate-reveal {
+            animation: reveal 140ms ease-out;
+        }
+    }
+
+    @keyframes reveal {
+        from {
+            opacity: 0;
+            transform: translateY(-3px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------
+   The landing banner: one 10s loop telling the upload story. Every element
+   shares the same duration and stages itself by keyframe percentages, so
+   nothing can drift out of sync. The element's NON-animated styles are the
+   composed final scene — which is exactly what prefers-reduced-motion users
+   see, because the animations only attach under no-preference.
+
+   Stages: 0–8% the file appears on the phone · 14–36% it travels to the
+   processor · 38–46% it DISSOLVES there (the file is discarded) · 46–60%
+   data packets — not the file — continue to the chart · 52–72% the chart
+   draws · 70% the custody seal settles on the phone · 96–100% reset.
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+    .story-doc {
+        animation: story-doc 10s ease-in-out infinite;
+    }
+    .story-node-ring {
+        animation: story-node-ring 10s ease-in-out infinite;
+    }
+    .story-packet-a {
+        animation: story-packet-a 10s ease-in-out infinite;
+    }
+    .story-packet-b {
+        animation: story-packet-b 10s ease-in-out infinite;
+    }
+    .story-bar {
+        animation: story-bar 10s ease-in-out infinite;
+        transform-origin: bottom;
+        transform-box: fill-box;
+    }
+    .story-line {
+        stroke-dasharray: 130;
+        animation: story-line 10s ease-in-out infinite;
+    }
+    .story-seal {
+        animation: story-seal 10s ease-in-out infinite;
+        transform-box: fill-box;
+        transform-origin: center;
+    }
+    .story-dash {
+        stroke-dasharray: 3 5;
+        animation: story-dash 1.4s linear infinite;
+    }
+}
+
+@keyframes story-doc {
+    0% { opacity: 0; transform: translate(0, 8px); }
+    8% { opacity: 1; transform: translate(0, 0); }
+    14% { opacity: 1; transform: translate(0, 0); }
+    36% { opacity: 1; transform: translate(158px, -4px); }
+    40% { opacity: 1; transform: translate(158px, -4px) scale(1); }
+    46%, 100% { opacity: 0; transform: translate(158px, -4px) scale(0.7); }
+}
+
+@keyframes story-node-ring {
+    0%, 34% { opacity: 0; transform: scale(0.9); }
+    40% { opacity: 1; transform: scale(1); }
+    48% { opacity: 0.55; transform: scale(1.25); }
+    56%, 100% { opacity: 0; transform: scale(1.4); }
+}
+
+@keyframes story-packet-a {
+    0%, 44% { opacity: 0; transform: translate(0, 0); }
+    48% { opacity: 1; transform: translate(6px, -2px); }
+    58% { opacity: 1; transform: translate(120px, -6px); }
+    62%, 100% { opacity: 0; transform: translate(126px, -6px); }
+}
+
+@keyframes story-packet-b {
+    0%, 50% { opacity: 0; transform: translate(0, 0); }
+    54% { opacity: 1; transform: translate(6px, 4px); }
+    64% { opacity: 1; transform: translate(120px, 8px); }
+    68%, 100% { opacity: 0; transform: translate(126px, 8px); }
+}
+
+@keyframes story-bar {
+    0%, 50% { transform: scaleY(0); }
+    64% { transform: scaleY(1); }
+    94% { transform: scaleY(1); }
+    98%, 100% { transform: scaleY(0); }
+}
+
+@keyframes story-line {
+    0%, 56% { stroke-dashoffset: 130; opacity: 0; }
+    60% { opacity: 1; }
+    74% { stroke-dashoffset: 0; opacity: 1; }
+    94% { stroke-dashoffset: 0; opacity: 1; }
+    98%, 100% { opacity: 0; }
+}
+
+@keyframes story-seal {
+    0%, 66% { opacity: 0; transform: scale(0.6); }
+    72% { opacity: 1; transform: scale(1.08); }
+    75% { opacity: 1; transform: scale(1); }
+    94% { opacity: 1; transform: scale(1); }
+    98%, 100% { opacity: 0; transform: scale(0.9); }
+}
+
+@keyframes story-dash {
+    to { stroke-dashoffset: -8; }
 }
 
 /* ApexCharts ships a drop shadow and its own border radius on the tooltip.
-   Zero both — elevation in this system comes from borders. */
+   Zero both — elevation on a chart tooltip comes from the hairline. */
 .apexcharts-tooltip.apexcharts-theme-light {
     background: theme("colors.paper") !important;
     border: 1px solid theme("colors.mist") !important;
-    border-radius: 12px !important;
-    box-shadow: none !important;
+    border-radius: 10px !important;
+    box-shadow: theme("boxShadow.card") !important;
     filter: none !important;
     font-size: 13px;
     color: theme("colors.ink");
@@ -84,7 +244,7 @@
     border-bottom: 1px solid theme("colors.mist") !important;
     font-size: 12px;
     font-weight: 500;
-    color: theme("colors.pewter");
+    color: theme("colors.graphite");
     margin-bottom: 0;
 }
 

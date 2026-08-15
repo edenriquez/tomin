@@ -20,11 +20,26 @@ class MonthlyPoint:
 
 
 @dataclass(frozen=True)
+class RecurringCharge:
+    """One occurrence of a recurring series: the evidence behind the rhythm."""
+
+    date: str  # ISO
+    amount: Decimal
+
+
+@dataclass(frozen=True)
 class RecurringItem:
     label: str
-    average_amount: Decimal
-    frequency: str
     occurrences: int
+    frequency: str  # weekly | biweekly | monthly | yearly
+    typical_amount: Decimal
+    monthly_equivalent: Decimal
+    amount_stable: bool
+    last_date: str  # ISO
+    next_expected: str  # ISO
+    category_id: str | None
+    #: Every charge, oldest first — what the calendar view is drawn from.
+    charges: tuple[RecurringCharge, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,8 @@ from ..adapters.outbound.persistence import (
     SqlStatementRepository,
     SqlTagRepository,
     SqlTransactionRepository,
+    SqlUserAliasRepository,
+    SqlUserLabelRepository,
 )
 from ..adapters.outbound.persistence.migrator import upgrade_to_head
 from ..adapters.outbound.persistence.seed import seed_reference_data
@@ -38,7 +40,9 @@ from ..application.use_cases import (
     ManageStatementsUseCase,
     ManageTagsUseCase,
     ProcessFileUseCase,
+    RealiasUseCase,
     RebuildCubeUseCase,
+    RecategorizeUseCase,
     RunMetricQueriesUseCase,
     SaveHomeDashboardUseCase,
     SimulateForecastUseCase,
@@ -120,6 +124,14 @@ class Container:
     def merchants(self) -> SqlMerchantRepository:
         return SqlMerchantRepository(self.database)
 
+    @cached_property
+    def user_labels(self) -> SqlUserLabelRepository:
+        return SqlUserLabelRepository(self.database)
+
+    @cached_property
+    def user_aliases(self) -> SqlUserAliasRepository:
+        return SqlUserAliasRepository(self.database)
+
     # --- pipeline components --------------------------------------------
     @cached_property
     def classifier(self) -> KeywordTemplateClassifier:
@@ -145,6 +157,8 @@ class Container:
             transactions=self.transactions,
             categories=self.categories,
             merchants=self.merchants,
+            user_labels=self.user_labels,
+            user_aliases=self.user_aliases,
             cube=self.cube,
             file_storage=self.file_storage,
         )
@@ -166,6 +180,23 @@ class Container:
         return UpdateTransactionUseCase(
             transactions=self.transactions,
             categories=self.categories,
+            cube=self.cube,
+        )
+
+    @cached_property
+    def realias(self) -> RealiasUseCase:
+        return RealiasUseCase(
+            transactions=self.transactions,
+            user_aliases=self.user_aliases,
+            cube=self.cube,
+        )
+
+    @cached_property
+    def recategorize(self) -> RecategorizeUseCase:
+        return RecategorizeUseCase(
+            transactions=self.transactions,
+            categories=self.categories,
+            user_labels=self.user_labels,
             cube=self.cube,
         )
 
@@ -201,7 +232,7 @@ class Container:
 
     @cached_property
     def detect_recurring(self) -> DetectRecurringUseCase:
-        return DetectRecurringUseCase(self.transactions)
+        return DetectRecurringUseCase(self.transactions, self.user_aliases)
 
     @cached_property
     def get_forecast(self) -> GetForecastUseCase:

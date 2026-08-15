@@ -28,6 +28,7 @@ class ListTransactionsUseCase:
         end: date | None = None,
         category_id: UUID | None = None,
         search: str | None = None,
+        statement_ids: list[UUID] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> TransactionPage:
@@ -35,12 +36,18 @@ class ListTransactionsUseCase:
             user_id,
             start=start,
             end=end,
+            statement_ids=statement_ids,
             category_id=category_id,
             search=search,
             limit=limit,
             offset=offset,
         )
         total = self._transactions.count_for_user(
-            user_id, start=start, end=end, category_id=category_id, search=search
+            user_id,
+            start=start,
+            end=end,
+            category_id=category_id,
+            search=search,
+            statement_ids=statement_ids,
         )
         return TransactionPage(items=items, total=total, limit=limit, offset=offset)

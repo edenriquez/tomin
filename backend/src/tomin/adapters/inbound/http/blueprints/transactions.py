@@ -16,11 +16,16 @@ transactions_bp = Blueprint("transactions", __name__, url_prefix="/api/transacti
 
 def _filters():
     category = request.args.get("category_id")
+    # Repeatable: ?statement_id=a&statement_id=b scopes to those documents —
+    # the seam the bank filter reaches through (ids are stable; bank labels
+    # are user-editable).
+    statement_ids = [UUID(v) for v in request.args.getlist("statement_id")]
     return {
         "start": query_date("start"),
         "end": query_date("end"),
         "category_id": UUID(category) if category else None,
         "search": request.args.get("search"),
+        "statement_ids": statement_ids or None,
     }
 
 
@@ -40,6 +45,57 @@ def list_transactions():
         limit=page.limit,
         offset=page.offset,
     )
+
+
+@transactions_bp.post("/recategorize")
+def recategorize():
+    """Apply a category to every similar machine-categorized transaction.
+
+    Body: ``{"category_id", "label", "dry_run"?}``. With ``dry_run`` true,
+    nothing is written and ``matched`` reports the blast radius — the client
+    shows that number before the user commits. The real run also stores the
+    label in the user's vocabulary so future uploads categorize themselves.
+    """
+    user_id = current_user_id()
+    body = request.get_json(silent=True) or {}
+    raw_category = body.get("category_id")
+    label = body.get("label")
+    if not raw_category or not isinstance(label, str):
+        return jsonify(error="Provide 'category_id' and 'label'"), 400
+
+    result = get_container().recategorize.execute(
+        user_id=user_id,
+        category_id=UUID(raw_category),
+        label=label,
+        dry_run=bool(body.get("dry_run", False)),
+    )
+    return jsonify(matched=result.matched, updated=result.updated, label=result.label)
+
+
+@transactions_bp.post("/realias")
+def realias():
+    """Rename every similar machine-named transaction, and remember the alias.
+
+    Body: ``{"label", "alias", "dry_run"?}``. Matching is on
+    ``raw_description``; only descriptions still equal to the bank's text (or
+    to this label's previous alias) are rewritten — a name the user typed on
+    one row by hand is never steamrolled. The real run stores the alias so
+    ingest renames future uploads too.
+    """
+    user_id = current_user_id()
+    body = request.get_json(silent=True) or {}
+    label = body.get("label")
+    alias = body.get("alias")
+    if not isinstance(label, str) or not isinstance(alias, str):
+        return jsonify(error="Provide 'label' and 'alias'"), 400
+
+    result = get_container().realias.execute(
+        user_id=user_id,
+        label=label,
+        alias=alias,
+        dry_run=bool(body.get("dry_run", False)),
+    )
+    return jsonify(matched=result.matched, updated=result.updated, label=result.label)
 
 
 @transactions_bp.patch("/<transaction_id>")

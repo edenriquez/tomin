@@ -21,7 +21,7 @@ DEFAULT_CURRENCY = "MXN"
 
 _UPSERT_FACT = (
     "INSERT OR REPLACE INTO fact_transactions VALUES "
-    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
 #: Bump whenever the cube table shapes change. The cube is derived state with
@@ -29,7 +29,7 @@ _UPSERT_FACT = (
 #: tables dropped and recreated, then repopulated from the relational store.
 #: Without this, ``CREATE TABLE IF NOT EXISTS`` silently keeps the old shape
 #: and every metric that references a new column fails at read time.
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
 
 class DuckDbCube:
@@ -113,7 +113,10 @@ class DuckDbCube:
                 excluded_from_stats BOOLEAN,
                 is_transfer BOOLEAN,
                 is_cash_withdrawal BOOLEAN,
-                tag_ids VARCHAR[]
+                tag_ids VARCHAR[],
+                -- The statement the row came from: the seam every
+                -- account-scoped filter (bank, card) reaches through.
+                statement_id VARCHAR
             );
             """
         )
@@ -248,6 +251,7 @@ class DuckDbCube:
             t.is_transfer,
             t.is_cash_withdrawal,
             [str(tag_id) for tag_id in t.tag_ids],
+            str(t.statement_id) if t.statement_id else None,
         ]
 
     # --- reader ----------------------------------------------------------

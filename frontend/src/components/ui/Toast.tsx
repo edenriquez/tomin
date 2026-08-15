@@ -40,7 +40,7 @@ const TONE_ACCENT: Record<ToastTone, string> = {
 };
 
 /**
- * Bottom-left, Abyss on Paper text. Bottom-left rather than the usual
+ * Bottom-left, Soot on Paper text. Bottom-left rather than the usual
  * top-right: primary actions in this app live at the top-right, and a toast
  * that covers the button you just pressed is a bad joke.
  */
@@ -88,7 +88,7 @@ export function ToastProvider({
                                 key={t.id}
                                 className={cn(
                                     "pointer-events-auto flex items-start gap-3 rounded-card",
-                                    "border-l-2 bg-abyss px-4 py-3 text-body-sm text-paper",
+                                    "border-l-2 bg-soot px-4 py-3 text-body-sm text-paper",
                                     TONE_ACCENT[t.tone]
                                 )}
                             >
@@ -97,7 +97,7 @@ export function ToastProvider({
                                     type="button"
                                     onClick={() => dismiss(t.id)}
                                     aria-label="Cerrar aviso"
-                                    className="-mr-1 shrink-0 rounded-tag p-0.5 text-steel hover:text-paper"
+                                    className="-mr-1 shrink-0 rounded-tag p-0.5 text-ash hover:text-paper"
                                 >
                                     <X size={14} />
                                 </button>

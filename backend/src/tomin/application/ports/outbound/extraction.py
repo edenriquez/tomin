@@ -24,6 +24,15 @@ class TemplateClassifier(Protocol):
 
     def classify(self, doc: ExtractedDocument) -> str: ...
 
+    def detect_bank(self, doc: ExtractedDocument) -> str | None:
+        """The issuing bank's display name, independent of the template.
+
+        Separate from :meth:`classify` because most banks have no dedicated
+        parser — their statements parse as ``generic_bank`` — but the
+        statement should still be labelled with the right bank.
+        """
+        ...
+
 
 @runtime_checkable
 class StatementParser(Protocol):

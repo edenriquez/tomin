@@ -90,6 +90,10 @@ FILTERS: dict[str, FilterDef] = {
     # Filtering reads the denormalised array on the fact row; only *grouping*
     # by tag needs the bridge join. That is why the cube keeps both.
     "tag": FilterDef(name="tag", column="tag_ids", multivalued=True),
+    # By source statement — the seam bank/account scoping reaches through.
+    # Statement ids rather than bank names: the id is immutable while the
+    # bank label is user-editable, and a rename must not strand old facts.
+    "statement": FilterDef(name="statement", column="statement_id"),
 }
 
 GRAINS: dict[str, Grain] = {

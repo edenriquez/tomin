@@ -37,6 +37,7 @@ from .duckdb_cube import DuckDbCube
 _COLUMN_SQL: dict[str, str] = {
     "amount": "f.amount",
     "tx_date": "f.tx_date",
+    "statement_id": "f.statement_id",
     "tx_type": "f.tx_type",
     "currency": "f.currency",
     "category_id": "f.category_id",

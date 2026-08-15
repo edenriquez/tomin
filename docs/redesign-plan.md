@@ -530,3 +530,58 @@ payload drops from MB to KB, and parsing stays in one language server-side.
 - **End to end:** backend on `0.0.0.0:8000`, `npm run dev`, upload a real
   Banamex PDF plus a CFDI for a purchase on it, and confirm the total counts
   it once.
+
+---
+
+## 10. Amendment (2026-08-12) — Seline restyle
+
+§5 and §6 above describe the Ember system as shipped in F1–F7. The visual
+layer was replaced; the *architecture* of §6 (tokens as single source of
+truth, tracking baked into the scale, Apex reading the same file) is
+unchanged and is what made the swap a token edit plus a rename sweep rather
+than a rewrite.
+
+**What changed**
+
+| Was | Now | Why |
+|---|---|---|
+| Paper `#ffffff` page background | Canvas `#fafaf9`, Paper reserved for cards | Warm stone reads as paper, not screen; white is now an elevation step, not the ground |
+| Ember `#ff5900` | Signal `#3ba6f1` / Edge `#3398e1` / Wash `#c1e1f7` | One accent still, different accent |
+| `graphite` / `pewter` / `steel` | `graphite` `#78716c` + `ash` `#a8a29e` | Two recessive text values, not three — a third step only invites 3:1 captions |
+| `abyss` / `carbon` | `soot` `#1c1917` | One dark surface |
+| Headings at 600 | Display face at **400** | Weight-400 at large sizes is the brand voice; emphasis comes from size and the highlight span |
+| Body 15px / 1.5 | Body **14px / 1.64** | The dominant UI rhythm of the reference system |
+| `title-lg` 36px | 32px, `display` 52px replaces `display-md` 56px | Matches the reference scale |
+| Buttons/tags `12px` radius | Pill `9999px`; inputs `6px`; cards `10px`; panels `16px` | `rounded-control` is now genuinely a pill, so every non-button use of it was reclassified |
+| `boxShadow: { none, float }` | `subtle` / `card` / `chip` / `float` | Cards get a 16px-blur whisper on top of the hairline; `float` is still one element per screen |
+| Instrument Serif display | **Inter Tight** | Roobert is a commercial licence; Inter Tight is the named substitute |
+
+**Contrast findings that conflict with the new style guide** (same posture as
+§5's finding against the old one):
+
+| Pair | Ratio | Verdict |
+|---|---|---|
+| Signal `#3ba6f1` on Canvas | 2.36:1 | Fills, icons, borders only — never text |
+| **White on Signal** | **2.36:1** | **Fails AA.** The guide specifies it; we do not ship it |
+| **Ink on Signal** | **5.60:1** | Passes — this is the button label |
+| Edge `#3398e1` on Wash `#c1e1f7` | 4.51:1 | Passes — the highlight span, and the only place the accent is text |
+| Graphite on Canvas | 4.62:1 | Passes — body, labels, captions |
+| Ash on Canvas | 2.42:1 | Decorative and disabled only |
+
+**Deliberate deviation from the guide.** `positive` / `negative` survive, as
+`#15704a` / `#a8322a`. The guide forbids a second accent; in a ledger the sign
+of a number is information, not decoration, and rendering a loss in the same
+grey as a gain costs the user more than the restraint buys. Both are
+warm-shifted to sit inside the stone palette, and both stay scoped to deltas
+and amounts at text scale — never a chart fill, never a background.
+
+**Home screen states.** `/inicio` now branches on `useCapabilities()`:
+
+1. probing → skeleton, *not* the onboarding hero (flashing "upload your first
+   statement" at someone with three years of data is worse than a beat of grey);
+2. probe succeeded and `!capabilities.transactions` → `<FirstStatement>`;
+3. otherwise → the widget grid, which keeps its own "board is empty" state for
+   an account that *has* data but no widgets.
+
+A probe *error* falls through to the grid. An unreachable backend is not a
+claim that the account is empty.

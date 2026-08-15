@@ -6,6 +6,8 @@ from .goals import ManageGoalsUseCase
 from .list_transactions import ListTransactionsUseCase
 from .metrics import GetMetricCatalogUseCase, RunMetricQueriesUseCase
 from .process_file import ProcessFileResult, ProcessFileUseCase
+from .realias import RealiasResult, RealiasUseCase
+from .recategorize import InvalidLabelError, RecategorizeResult, RecategorizeUseCase
 from .rebuild_cube import RebuildCubeResult, RebuildCubeUseCase
 from .statements import (
     DeleteStatementResult,
@@ -32,8 +34,13 @@ __all__ = [
     "ManageGoalsUseCase",
     "ManageStatementsUseCase",
     "ManageTagsUseCase",
+    "InvalidLabelError",
     "ProcessFileResult",
     "ProcessFileUseCase",
+    "RealiasResult",
+    "RealiasUseCase",
+    "RecategorizeResult",
+    "RecategorizeUseCase",
     "RebuildCubeResult",
     "RebuildCubeUseCase",
     "RunMetricQueriesUseCase",

@@ -41,6 +41,10 @@ def transaction_json(t: Transaction) -> dict:
         "category_source": t.category_source,
         "notes": t.notes,
         "excluded_from_stats": t.excluded_from_stats,
+        # Derived facts, serialized so client-side aggregates (the Flujo
+        # chart) can honor the same ledger rules the cube does.
+        "is_transfer": t.is_transfer,
+        "is_cash_withdrawal": t.is_cash_withdrawal,
         "tag_ids": [str(tag_id) for tag_id in t.tag_ids],
     }
 
@@ -64,6 +68,7 @@ def statement_json(s: Statement) -> dict:
         "period_start": _iso(s.period_start),
         "period_end": _iso(s.period_end),
         "status": s.status.value,
+        "account_kind": s.account_kind.value if s.account_kind else None,
         "uploaded_at": _iso(s.uploaded_at),
     }
 

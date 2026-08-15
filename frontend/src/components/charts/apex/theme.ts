@@ -12,7 +12,7 @@ export const baseOptions: ApexOptions = {
         // is on <html>, and Apex writes inline font-family onto its own text.
         fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif",
         background: "transparent",
-        foreColor: colors.pewter,
+        foreColor: colors.graphite,
         toolbar: { show: false },
         zoom: { enabled: false },
         animations: { enabled: true, speed: 200 },
@@ -66,13 +66,13 @@ export const baseOptions: ApexOptions = {
 };
 
 /**
- * Nominal categories: neutral ramp ordered by value, with Ember reserved for
+ * Nominal categories: neutral ramp ordered by value, with Signal reserved for
  * the one series the chart is *about*. Position and order carry identity;
  * hue does not.
  */
 export function categoricalColors(count: number, focusIndex = -1): string[] {
     return Array.from({ length: count }, (_, i) =>
-        i === focusIndex ? colors.ember : chart.neutral[i % chart.neutral.length]
+        i === focusIndex ? colors.signal : chart.neutral[i % chart.neutral.length]
     );
 }
 
@@ -81,7 +81,7 @@ export function categoricalColors(count: number, focusIndex = -1): string[] {
  * = largest. Ordered so index 0 is the strongest value.
  */
 export function sequentialColors(count: number): string[] {
-    const ramp = chart.emberTint;
+    const ramp = chart.signalTint;
     if (count <= 1) return [ramp[0]];
     return Array.from(
         { length: count },
@@ -89,7 +89,7 @@ export function sequentialColors(count: number): string[] {
     );
 }
 
-/** Text on an Ember tint flips to Ink below the third step. */
+/** Text on a Signal tint flips to Ink below the third step. */
 export function onTint(step: number): string {
     return step >= 2 ? colors.ink : colors.paper;
 }

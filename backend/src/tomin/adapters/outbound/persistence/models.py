@@ -73,6 +73,8 @@ class StatementModel(Base):
     period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    # AccountKind value, user-declared via PATCH; NULL until they label it.
+    account_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
     file_hash: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime)
 
@@ -124,6 +126,47 @@ class TransactionModel(Base):
     # Nullable rather than defaulted: a row that has never been edited has no
     # meaningful update time, and now() would claim one.
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class UserCategoryLabelModel(Base):
+    """A categorization label the user taught the system (see migration 0010).
+
+    Per-user on purpose: categories/merchants are global reference data, and
+    one user's "deposito lalo means Ingresos" must not classify anyone else's
+    statements. `label` is stored normalized so ingest matching and the unique
+    constraint agree about case and accents.
+    """
+
+    __tablename__ = "user_category_labels"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "category_id", "label", name="uq_user_category_labels_triple"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    category_id: Mapped[str] = mapped_column(UUIDStr)
+    label: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = _created_at()
+
+
+class UserAliasModel(Base):
+    """A human name for processor gibberish (see migration 0011).
+
+    `label` is the normalized match text; `alias` is what the user wants to
+    read. Applied to `description` at ingest and by the realias bulk pass —
+    `raw_description` always keeps the bank's original text.
+    """
+
+    __tablename__ = "user_aliases"
+    __table_args__ = (UniqueConstraint("user_id", "label", name="uq_user_aliases_user_label"),)
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    label: Mapped[str] = mapped_column(String(120))
+    alias: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = _created_at()
 
 
 class TagModel(Base):

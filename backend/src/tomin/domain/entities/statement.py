@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
-from ..value_objects.enums import SourceType, StatementStatus
+from ..value_objects.enums import AccountKind, SourceType, StatementStatus
 
 
 @dataclass(slots=True)
@@ -16,6 +16,8 @@ class Statement:
     period_start: date | None = None
     period_end: date | None = None
     status: StatementStatus = StatementStatus.PENDING
+    # User-declared account kind (see AccountKind). None = not yet labelled.
+    account_kind: AccountKind | None = None
     file_hash: str | None = None
     uploaded_at: datetime = None  # type: ignore[assignment]
     id: UUID = None  # type: ignore[assignment]

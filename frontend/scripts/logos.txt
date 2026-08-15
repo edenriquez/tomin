@@ -1,0 +1,46 @@
+# Merchant logos manifest: one "slug domain" per line.
+# Run scripts/fetch-logos.sh to (re)download all of them into public/logos/.
+# Keep in sync with src/lib/merchants.ts — the slug here must match a
+# MERCHANTS entry there, or the logo will download and never render.
+3b www.tiendas3b.com
+tiendas-3b https://www.tiendas3b.com/
+oxxo oxxo.com
+seven-eleven 7-eleven.com
+mercado-pago mercadopago.com.mx
+mercado-libre mercadolibre.com.mx
+bodega-aurrera bodegaaurrera.com.mx
+walmart walmart.com.mx
+soriana soriana.com
+chedraui chedraui.com.mx
+costco costco.com.mx
+heb heb.com.mx
+coppel coppel.com
+liverpool liverpool.com.mx
+amazon amazon.com.mx
+shein shein.com.mx
+temu temu.com
+telcel telcel.com
+telmex telmex.com
+izzi izzi.mx
+totalplay totalplay.com.mx
+cfe cfe.mx
+spotify spotify.com
+netflix netflix.com
+apple apple.com
+google google.com
+steam steampowered.com
+paypal paypal.com
+uber uber.com
+didi didiglobal.com
+rappi rappi.com.mx
+starbucks starbucks.com.mx
+mcdonalds mcdonalds.com.mx
+burger-king burgerking.com.mx
+dominos dominos.com.mx
+cinepolis cinepolis.com
+cinemex cinemex.com
+fahorro fahorro.com
+aeromexico aeromexico.com
+volaris volaris.com
+autozone autozone.com.mx
+banco-azteca bancoazteca.com.mx

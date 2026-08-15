@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -21,6 +21,7 @@ from ....domain.entities import (
     Transaction,
 )
 from ....domain.value_objects.enums import (
+    AccountKind,
     SourceType,
     StatementStatus,
     TransactionStatus,
@@ -38,6 +39,8 @@ from .models import (
     TagModel,
     TransactionModel,
     TransactionTagModel,
+    UserAliasModel,
+    UserCategoryLabelModel,
 )
 
 
@@ -184,7 +187,7 @@ class SqlTransactionRepository:
             m.excluded_from_stats = transaction.excluded_from_stats
             m.updated_at = transaction.updated_at
 
-    def _base_query(self, user_id, start, end, category_id, search):
+    def _base_query(self, user_id, start, end, category_id, search, statement_ids=None):
         stmt = select(TransactionModel).where(TransactionModel.user_id == _u(user_id))
         if start:
             stmt = stmt.where(TransactionModel.tx_date >= start)
@@ -194,6 +197,10 @@ class SqlTransactionRepository:
             stmt = stmt.where(TransactionModel.category_id == _u(category_id))
         if search:
             stmt = stmt.where(TransactionModel.description.ilike(f"%{search}%"))
+        if statement_ids:
+            stmt = stmt.where(
+                TransactionModel.statement_id.in_([_u(i) for i in statement_ids])
+            )
         return stmt
 
     def list_for_user(
@@ -204,12 +211,13 @@ class SqlTransactionRepository:
         end: date | None = None,
         category_id: UUID | None = None,
         search: str | None = None,
+        statement_ids: list[UUID] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Transaction]:
         with self._db.session() as s:
             stmt = (
-                self._base_query(user_id, start, end, category_id, search)
+                self._base_query(user_id, start, end, category_id, search, statement_ids)
                 .order_by(TransactionModel.tx_date.desc())
                 .limit(limit)
                 .offset(offset)
@@ -246,6 +254,7 @@ class SqlTransactionRepository:
                 filters.get("end"),
                 filters.get("category_id"),
                 filters.get("search"),
+                filters.get("statement_ids"),
             )
             return s.scalar(select(func.count()).select_from(stmt.subquery())) or 0
 
@@ -287,6 +296,9 @@ class SqlStatementRepository:
                 m.period_start = statement.period_start
                 m.period_end = statement.period_end
                 m.bank = statement.bank
+                m.account_kind = (
+                    statement.account_kind.value if statement.account_kind else None
+                )
 
     def get(self, statement_id: UUID) -> Statement | None:
         with self._db.session() as s:
@@ -327,6 +339,7 @@ class SqlStatementRepository:
             period_start=st.period_start,
             period_end=st.period_end,
             status=st.status.value,
+            account_kind=st.account_kind.value if st.account_kind else None,
             file_hash=st.file_hash,
             uploaded_at=st.uploaded_at,
         )
@@ -342,6 +355,7 @@ class SqlStatementRepository:
             period_start=m.period_start,
             period_end=m.period_end,
             status=StatementStatus(m.status),
+            account_kind=AccountKind(m.account_kind) if m.account_kind else None,
             file_hash=m.file_hash,
             uploaded_at=m.uploaded_at,
         )
@@ -555,6 +569,65 @@ class SqlCategoryRepository:
                         categorization_labels=list(c.categorization_labels),
                     )
                 )
+
+
+class SqlUserAliasRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def list_for_user(self, user_id: UUID) -> list[tuple[str, str]]:
+        with self._db.session() as s:
+            stmt = select(UserAliasModel).where(UserAliasModel.user_id == _u(user_id))
+            return [(m.label, m.alias) for m in s.scalars(stmt).all()]
+
+    def upsert(self, user_id: UUID, label: str, alias: str) -> None:
+        with self._db.session() as s:
+            existing = s.scalars(
+                select(UserAliasModel).where(
+                    UserAliasModel.user_id == _u(user_id),
+                    UserAliasModel.label == label,
+                )
+            ).first()
+            if existing:
+                existing.alias = alias
+                return
+            s.add(
+                UserAliasModel(
+                    id=str(uuid4()), user_id=_u(user_id), label=label, alias=alias
+                )
+            )
+
+
+class SqlUserLabelRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def list_for_user(self, user_id: UUID) -> list[tuple[str, UUID]]:
+        with self._db.session() as s:
+            stmt = select(UserCategoryLabelModel).where(
+                UserCategoryLabelModel.user_id == _u(user_id)
+            )
+            return [(m.label, UUID(m.category_id)) for m in s.scalars(stmt).all()]
+
+    def add(self, user_id: UUID, category_id: UUID, label: str) -> None:
+        with self._db.session() as s:
+            exists = s.scalars(
+                select(UserCategoryLabelModel).where(
+                    UserCategoryLabelModel.user_id == _u(user_id),
+                    UserCategoryLabelModel.category_id == _u(category_id),
+                    UserCategoryLabelModel.label == label,
+                )
+            ).first()
+            if exists:
+                return
+            s.add(
+                UserCategoryLabelModel(
+                    id=str(uuid4()),
+                    user_id=_u(user_id),
+                    category_id=_u(category_id),
+                    label=label,
+                )
+            )
 
 
 class SqlTagRepository:

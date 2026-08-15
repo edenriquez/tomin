@@ -218,6 +218,33 @@ def test_monthly_cash_flow_series(client, seeded):
     assert result["value"] is None
 
 
+def test_spend_by_category_supports_month_grain(client, seeded):
+    """Grain + dimension together: category-per-month rows for stacked bars."""
+    results = _query(
+        client, [{"key": "k", "metric": "spend_by_category", "grain": "month"}]
+    ).get_json()["results"]
+    rows = results["k"]["rows"]
+
+    assert rows, "month-grain breakdown returned no rows for seeded data"
+    # Every row carries both axes: the month bucket and the category.
+    assert all("month" in r and "category" in r and "expense_amount" in r for r in rows)
+    months = {r["month"] for r in rows}
+    assert months == {"2024-01", "2024-02"}
+
+
+def test_monthly_cash_flow_supports_day_grain(client, seeded):
+    """Short dashboard windows (7d/14d) chart cash flow at day grain."""
+    results = _query(
+        client, [{"key": "k", "metric": "monthly_cash_flow", "grain": "day"}]
+    ).get_json()["results"]
+    rows = results["k"]["rows"]
+
+    assert rows, "day grain returned no rows for seeded data"
+    # Day-keyed, not month-keyed: the axis column is literally named "day".
+    assert all("day" in r and len(str(r["day"])) == 10 for r in rows)
+    assert all("income_amount" in r and "expense_amount" in r for r in rows)
+
+
 def test_accumulated_spend_is_monotonically_non_decreasing(client, seeded):
     results = _query(client, [{"key": "k", "metric": "accumulated_spend"}]).get_json()["results"]
     rows = results["k"]["rows"]

@@ -7,6 +7,8 @@ from .repositories import (
     SqlMerchantRepository,
     SqlStatementRepository,
     SqlTagRepository,
+    SqlUserAliasRepository,
+    SqlUserLabelRepository,
     SqlTransactionRepository,
 )
 
@@ -19,5 +21,7 @@ __all__ = [
     "SqlMerchantRepository",
     "SqlStatementRepository",
     "SqlTagRepository",
+    "SqlUserAliasRepository",
+    "SqlUserLabelRepository",
     "SqlTransactionRepository",
 ]

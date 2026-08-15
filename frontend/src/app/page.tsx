@@ -1,134 +1,93 @@
-import Link from "next/link";
-import { BarChart3, LineChart, Sparkles, ShieldCheck } from "lucide-react";
+"use client";
 
-export default function LandingPage() {
+import { useCallback, useEffect, useState } from "react";
+import { isMetricError, queryMetrics } from "@/lib/metrics";
+import { windowToPeriod } from "@/lib/window";
+import { Skeleton } from "@/components/ui";
+import { AppChrome } from "@/components/AppChrome";
+import { MovimientosView } from "@/components/movimientos/MovimientosView";
+import { Landing } from "@/components/Landing";
+import { Onboarding } from "@/components/Onboarding";
+
+/**
+ * The switch at the root. Three states, one URL:
+ * - no data, hasn't started → the marketing Landing (its one job: "Comenzar");
+ * - no data, clicked Comenzar → the Onboarding (the dropzone + OCR review);
+ * - has data → the app shell. The Comenzar click is remembered per session,
+ *   so a reload mid-onboarding doesn't demote the user back to the pitch.
+ *
+ * Which state shows is a claim about the user's data, so it is only ever made
+ * from a successful probe:
+ * - the probe is year-wide, not window-wide, so the answer doesn't flip when
+ *   a narrower window happens to be empty;
+ * - a probe *error* falls through to the app, which says "backend
+ *   unreachable" per view. Telling a user with three years of statements to
+ *   upload their first one is the worse failure.
+ */
+const STARTED_KEY = "tomin.started";
+
+export default function Home() {
+    const [hasData, setHasData] = useState<boolean | null>(null);
+    const [started, setStarted] = useState(false);
+
+    useEffect(() => {
+        // Session, not settings: "convinced" is a per-visit fact, and reading
+        // it in an effect keeps server and client HTML identical.
+        setStarted(sessionStorage.getItem(STARTED_KEY) === "1");
+    }, []);
+
+    function start() {
+        sessionStorage.setItem(STARTED_KEY, "1");
+        setStarted(true);
+    }
+
+    const probe = useCallback(async () => {
+        try {
+            const batch = await queryMetrics(windowToPeriod("1y"), [
+                { key: "probe", metric: "spend_by_category" },
+            ]);
+            const entry = batch.results.probe;
+            setHasData(
+                !!entry &&
+                    !isMetricError(entry) &&
+                    ((entry.meta.source_txn_count ?? 0) > 0 || entry.rows.length > 0)
+            );
+        } catch {
+            setHasData(true);
+        }
+    }, []);
+
+    useEffect(() => {
+        probe();
+    }, [probe]);
+
+    if (hasData === null) {
+        // A beat of grey, deliberately not the onboarding hero: flashing
+        // "upload your first statement" at someone with data is worse than
+        // a skeleton, and worse than a spinner too.
+        return (
+            <main className="mx-auto min-h-dvh w-full max-w-page px-5 py-6 sm:px-8 sm:py-8">
+                <Skeleton className="h-8 w-28" />
+                <Skeleton className="mt-12 h-9 w-64" />
+                <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {[0, 1, 2].map((i) => (
+                        <Skeleton key={i} className="h-28" />
+                    ))}
+                </div>
+                <Skeleton className="mt-6 h-80" />
+            </main>
+        );
+    }
+
+    if (!hasData) {
+        // `onComplete` fires after the review step (or its skip), not after
+        // the raw upload — the user confirms what the OCR understood first.
+        return started ? <Onboarding onComplete={probe} /> : <Landing onStart={start} />;
+    }
+
     return (
-        <main className="min-h-screen">
-            {/* Nav */}
-            <header className="mx-auto flex max-w-7xl items-center justify-between px-8 py-5">
-                <div className="flex items-center gap-2 text-title-sm font-semibold text-ink">
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-control bg-ember font-semibold text-ink">
-                        T
-                    </span>
-                    Tomin
-                </div>
-                <nav className="hidden items-center gap-8 text-body-sm text-graphite md:flex">
-                    <a href="#features" className="hover:text-ink">
-                        Features
-                    </a>
-                    <a href="#future" className="hover:text-ink">
-                        Pricing
-                    </a>
-                    <a href="#future" className="hover:text-ink">
-                        About
-                    </a>
-                    <Link
-                        href="/inicio"
-                        className="rounded-control bg-ember px-4 py-2 font-semibold text-ink"
-                    >
-                        Get Started
-                    </Link>
-                </nav>
-            </header>
-
-            {/* Hero */}
-            <section className="mx-auto grid max-w-7xl items-center gap-12 px-8 py-12 md:grid-cols-2">
-                <div>
-                    <h1 className="font-display text-display-md font-normal text-ink">
-                        Take Control of <br /> Your Peso.
-                        <br />
-                        <span className="text-ember">Analyze, Forecast,</span>
-                        <br />
-                        and Grow with AI.
-                    </h1>
-                    <p className="mt-6 max-w-md text-graphite">
-                        Tomin connects to your accounts to provide automated insights, helping you
-                        spot spending habits and predict your financial future without the
-                        spreadsheet headache.
-                    </p>
-                    <div className="mt-8 flex gap-3">
-                        <input
-                            className="w-64 rounded-control border border-mist bg-paper px-4 py-3 text-body text-ink placeholder:text-steel"
-                            placeholder="Enter your email address"
-                        />
-                        <Link
-                            href="/inicio"
-                            className="rounded-control bg-ember px-6 py-3 font-semibold text-ink"
-                        >
-                            Start Analyzing for Free
-                        </Link>
-                    </div>
-                    <div className="mt-4 flex items-center gap-6 text-body-sm text-pewter">
-                        <span className="flex items-center gap-1">
-                            <ShieldCheck size={16} /> Bank-level security
-                        </span>
-                        <span>No credit card required</span>
-                    </div>
-                </div>
-                <div className="rounded-card border border-abyss bg-abyss p-6 text-paper">
-                    <div className="text-body-sm text-steel">Current Net Worth</div>
-                    <div className="tabular text-metric font-semibold text-paper">$501,050</div>
-                    <div className="mt-6 flex h-48 items-end gap-1 rounded-control border border-graphite p-4">
-                        {[40, 65, 50, 80, 60, 90, 75, 100].map((h, i) => (
-                            <div
-                                key={i}
-                                className="flex-1 rounded-t bg-ember"
-                                style={{ height: `${h}%`, opacity: 0.35 + (i / 7) * 0.65 }}
-                            />
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Features */}
-            <section id="features" className="mx-auto max-w-7xl px-8 py-16">
-                <h2 className="text-title-lg font-semibold text-ink">Intelligent Finance</h2>
-                <p className="mt-2 text-graphite">
-                    Everything you need to reduce anxiety and grow your wealth, powered by local
-                    Mexican banking integrations.
-                </p>
-                <div className="mt-10 grid gap-6 md:grid-cols-3">
-                    <Feature
-                        icon={<BarChart3 className="text-ember" size={20} />}
-                        title="AI Income Analysis"
-                        body="Understand exactly where your income goes with automated categorization tailored for Mexican lifestyles."
-                    />
-                    <Feature
-                        icon={<LineChart className="text-graphite" size={20} />}
-                        title="Smart Forecasts"
-                        body="See your balance 30 days into the future based on your spending history and recurring bills."
-                    />
-                    <Feature
-                        icon={<Sparkles className="text-graphite" size={20} />}
-                        title="Habit Tracking"
-                        body="Identify the small 'gastos hormiga' eating your wallet and set smart limits to stop them early."
-                    />
-                </div>
-            </section>
-
-            <footer className="border-t border-mist py-8 text-center text-body-sm text-pewter">
-                (c) 2026 Tomin Inc. Making financial freedom accessible to every Mexican.
-            </footer>
-        </main>
-    );
-}
-
-function Feature({
-    icon,
-    title,
-    body,
-}: {
-    icon: React.ReactNode;
-    title: string;
-    body: string;
-}) {
-    return (
-        <div className="card">
-            <div className="flex h-10 w-10 items-center justify-center rounded-control bg-fog">
-                {icon}
-            </div>
-            <h3 className="mt-4 text-title-sm font-semibold text-ink">{title}</h3>
-            <p className="mt-2 text-body-sm text-graphite">{body}</p>
-        </div>
+        <AppChrome withWindow onDataChanged={probe}>
+            <MovimientosView />
+        </AppChrome>
     );
 }

@@ -116,42 +116,10 @@ export function isMetricError(entry: MetricEntry): entry is MetricErrorEntry {
 export type MetricBatch = { results: Record<string, MetricEntry> };
 
 /* -------------------------------------------------------------------------- */
-/* Dashboard                                                                   */
-/* -------------------------------------------------------------------------- */
-
-export type WidgetSize = "sm" | "md" | "lg";
-
-export type DashboardWidget = {
-    id: string;
-    metric_id: string;
-    position: number;
-    size: WidgetSize;
-    params: MetricParams;
-    title_override: string | null;
-};
-
-export type Dashboard = {
-    id: string;
-    name: string;
-    is_default: boolean;
-    widgets: DashboardWidget[];
-};
-
-/** The PUT body: no ids, no positions — order is the array. */
-export type DashboardWidgetInput = {
-    metric_id: string;
-    params: MetricParams;
-    size: WidgetSize;
-    title_override?: string | null;
-};
-
-/* -------------------------------------------------------------------------- */
 /* Calls                                                                       */
 /* -------------------------------------------------------------------------- */
 
 export const metricsApi = {
-    fetchCatalog: () => request<{ items: MetricSpec[] }>("/api/metrics").then((r) => r.items),
-
     /**
      * One HTTP request for every visible widget. N widgets × one round trip per
      * period change is not a design; the endpoint is batched precisely so the
@@ -162,17 +130,9 @@ export const metricsApi = {
             method: "POST",
             body: JSON.stringify({ period, queries }),
         }),
-
-    getHomeDashboard: () => request<Dashboard>("/api/dashboards/home"),
-
-    saveHomeDashboard: (widgets: DashboardWidgetInput[]) =>
-        request<Dashboard>("/api/dashboards/home", {
-            method: "PUT",
-            body: JSON.stringify({ widgets }),
-        }),
 };
 
-export const { fetchCatalog, queryMetrics, getHomeDashboard, saveHomeDashboard } = metricsApi;
+export const { queryMetrics } = metricsApi;
 
 /* -------------------------------------------------------------------------- */
 /* Value helpers                                                               */

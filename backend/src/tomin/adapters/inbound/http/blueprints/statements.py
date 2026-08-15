@@ -4,6 +4,8 @@ from uuid import UUID
 
 from flask import Blueprint, jsonify, request
 
+from .....application.use_cases.statements import UNSET, UnsetType
+from .....domain.value_objects.enums import AccountKind
 from ..auth import current_user_id, get_container
 from ..serialization import statement_json
 
@@ -33,20 +35,76 @@ def upload_statement():
     if not data:
         return jsonify(error="Empty file"), 400
 
-    result = get_container().process_file.execute(
+    container = get_container()
+    result = container.process_file.execute(
         user_id=user_id,
         data=data,
         filename=upload.filename or "upload",
         mime=upload.mimetype,
+    )
+    # The full statement rides along so the onboarding review step can show
+    # what the OCR understood (bank, period) without a second round trip.
+    statement = container.manage_statements.get(
+        user_id=user_id, statement_id=result.statement_id
     )
     return (
         jsonify(
             statement_id=str(result.statement_id),
             template=result.template,
             transactions_created=result.transactions_created,
+            statement=statement_json(statement),
         ),
         201,
     )
+
+
+@statements_bp.patch("/<statement_id>")
+def update_statement(statement_id: str):
+    """Update the user-editable fields of a statement.
+
+    Exactly two: ``account_kind`` and ``bank``. Explicit ``null`` clears a
+    field; an absent key leaves it alone; a body naming neither is a 400
+    rather than a silent no-op.
+    """
+    user_id = current_user_id()
+    body = request.get_json(silent=True) or {}
+    unknown = set(body) - {"account_kind", "bank"}
+    if unknown:
+        return jsonify(error=f"Unsupported fields: {sorted(unknown)}"), 400
+    if not body:
+        return jsonify(error="Provide 'account_kind' and/or 'bank'"), 400
+
+    kind: AccountKind | None | UnsetType = UNSET
+    if "account_kind" in body:
+        raw = body["account_kind"]
+        if raw is None:
+            kind = None
+        else:
+            try:
+                kind = AccountKind(raw)
+            except ValueError:
+                valid = ", ".join(k.value for k in AccountKind)
+                return (
+                    jsonify(error=f"Invalid account_kind {raw!r}; expected one of: {valid}"),
+                    400,
+                )
+
+    bank: str | None | UnsetType = UNSET
+    if "bank" in body:
+        raw_bank = body["bank"]
+        if raw_bank is not None:
+            if not isinstance(raw_bank, str) or not raw_bank.strip():
+                return jsonify(error="'bank' must be a non-empty string or null"), 400
+            if len(raw_bank.strip()) > 120:
+                return jsonify(error="'bank' must be 120 characters or fewer"), 400
+            bank = raw_bank.strip()
+        else:
+            bank = None
+
+    statement = get_container().manage_statements.update(
+        user_id=user_id, statement_id=UUID(statement_id), kind=kind, bank=bank
+    )
+    return jsonify(statement_json(statement))
 
 
 @statements_bp.delete("/<statement_id>")

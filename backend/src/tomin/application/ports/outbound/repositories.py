@@ -30,6 +30,7 @@ class TransactionRepository(Protocol):
         end=None,
         category_id: UUID | None = None,
         search: str | None = None,
+        statement_ids: list[UUID] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Transaction]: ...
@@ -175,3 +176,32 @@ class MerchantRepository(Protocol):
     def get_all(self) -> list[Merchant]: ...
 
     def add_many(self, merchants: list[Merchant]) -> None: ...
+
+
+@runtime_checkable
+class UserAliasRepository(Protocol):
+    """Per-user display aliases for matching descriptions (migration 0011)."""
+
+    def list_for_user(self, user_id: UUID) -> list[tuple[str, str]]:
+        """(label, alias) pairs. Labels arrive already normalized."""
+        ...
+
+    def upsert(self, user_id: UUID, label: str, alias: str) -> None:
+        """One alias per label: re-teaching replaces."""
+        ...
+
+
+@runtime_checkable
+class UserLabelRepository(Protocol):
+    """Per-user learned categorization vocabulary (migration 0010).
+
+    Labels arrive already normalized; this store does not re-normalize.
+    """
+
+    def list_for_user(self, user_id: UUID) -> list[tuple[str, UUID]]:
+        """(label, category_id) pairs, ready for CategorizationService."""
+        ...
+
+    def add(self, user_id: UUID, category_id: UUID, label: str) -> None:
+        """Idempotent: re-teaching the same triple is a no-op."""
+        ...

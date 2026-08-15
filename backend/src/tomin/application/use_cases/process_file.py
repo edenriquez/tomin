@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from ...domain.entities import Statement, Transaction
+from ...domain.services.aliases import AliasService
 from ...domain.services.categorization import CategorizationService
 from ...domain.services.flags import detect_flags
 from ...domain.value_objects.enums import StatementStatus
@@ -19,6 +20,8 @@ from ..ports.outbound import (
     StatementRepository,
     TemplateClassifier,
     TransactionRepository,
+    UserAliasRepository,
+    UserLabelRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +60,8 @@ class ProcessFileUseCase:
         transactions: TransactionRepository,
         categories: CategoryRepository,
         merchants: MerchantRepository,
+        user_labels: UserLabelRepository,
+        user_aliases: UserAliasRepository,
         cube: CubeWriter,
         file_storage: FileStorage,
     ) -> None:
@@ -67,6 +72,8 @@ class ProcessFileUseCase:
         self._transactions = transactions
         self._categories = categories
         self._merchants = merchants
+        self._user_labels = user_labels
+        self._user_aliases = user_aliases
         self._cube = cube
         self._file_storage = file_storage
 
@@ -91,7 +98,10 @@ class ProcessFileUseCase:
             statement = Statement(
                 user_id=user_id,
                 source_type=parsed.source_type,
-                bank=parsed.bank,
+                # The parser knows its own bank only when a dedicated template
+                # matched; for generic parses the classifier's scored
+                # detection still names the issuer.
+                bank=parsed.bank or self._classifier.detect_bank(doc),
                 period_start=parsed.period_start,
                 period_end=parsed.period_end,
                 status=StatementStatus.PROCESSING,
@@ -99,9 +109,17 @@ class ProcessFileUseCase:
             )
             self._statements.add(statement)
 
+            # The user's own learned vocabulary rides along with the global
+            # reference data, so a correction taught yesterday categorizes
+            # today's upload — no restart, no rebuild.
             categorizer = CategorizationService(
-                self._categories.get_all(), self._merchants.get_all()
+                self._categories.get_all(),
+                self._merchants.get_all(),
+                extra_labels=self._user_labels.list_for_user(user_id),
             )
+            # Same trick for display names: an alias taught yesterday renames
+            # today's upload at ingest, raw_description untouched.
+            aliaser = AliasService(self._user_aliases.list_for_user(user_id))
             domain_txs: list[Transaction] = []
             for p in parsed.transactions:
                 cls = categorizer.classify(p.raw_description)
@@ -115,6 +133,7 @@ class ProcessFileUseCase:
                         tx_date=p.tx_date,
                         amount=p.amount,
                         raw_description=p.raw_description,
+                        description=aliaser.apply(p.raw_description),
                         currency=p.currency,
                         tx_type=p.tx_type,
                         status=p.status,
