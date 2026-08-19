@@ -10,6 +10,7 @@ from .repositories import (
     SqlUserAliasRepository,
     SqlUserLabelRepository,
     SqlTransactionRepository,
+    SqlWorkstationRepository,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "SqlUserAliasRepository",
     "SqlUserLabelRepository",
     "SqlTransactionRepository",
+    "SqlWorkstationRepository",
 ]

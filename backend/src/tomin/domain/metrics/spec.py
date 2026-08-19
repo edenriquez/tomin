@@ -26,11 +26,20 @@ MetricKind = Literal["aggregation", "computed"]
 #: principles are the first: a row is a sentence plus the numbers that justify
 #: it, and calling that a "breakdown" would promise a total it does not have.
 MetricShape = Literal["scalar", "series", "breakdown", "table"]
-Aggregation = Literal["sum", "count"]
+#: ``min``/``max``/``median`` describe a *distribution* rather than a total:
+#: "what does one of these usually cost", which is the question a saved lens
+#: over a habit is really asking. Unlike the sums they cannot be expressed as a
+#: signed CASE, so they are only valid on a direction-homogeneous metric -- the
+#: compiler enforces that rather than trusting the catalog.
+Aggregation = Literal["sum", "count", "min", "max", "median"]
 #: Which side of the ledger a measure reads. ``net`` signs income positive and
 #: expense negative; ``any`` ignores direction entirely.
 Direction = Literal["expense", "income", "net", "any"]
-FilterOp = Literal["eq", "in"]
+#: ``eq``/``in`` are the historical pair and travel together: a scalar value
+#: compiles to equality, a list to membership, and the caller picks by what it
+#: sends. Every op added since names exactly **one** predicate, so a filter that
+#: declares one of them declares its whole compilation.
+FilterOp = Literal["eq", "in", "contains", "gte", "lte", "not_in"]
 ParamType = Literal["decimal", "int", "float"]
 
 
@@ -101,6 +110,58 @@ class FilterDef:
     #: equality: ``tag = "viaje"`` means "is tagged viaje", not "has exactly one
     #: tag, viaje".
     multivalued: bool = False
+
+    @property
+    def op(self) -> FilterOp | None:
+        """The single op that compiles this filter, or ``None`` for eq/in.
+
+        The compiler reads the predicate off the *declaration* rather than
+        re-deriving it from the value's Python type. That is what keeps
+        ``amount_min=500`` a ``>=`` instead of silently becoming an ``=`` the
+        day someone sends a scalar where a range was meant.
+        """
+        return self.ops[0] if len(self.ops) == 1 else None
+
+    def validate_value(self, value: Any) -> Any:
+        """Type-check a client value against this filter's op.
+
+        Returns the value the compiler should bind. Raises rather than coercing
+        loosely: ``amount_min="mucho"`` must be a 400, not a silent 0 that
+        widens the set to everything.
+        """
+        op = self.op
+        if op in ("gte", "lte"):
+            if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
+                raise MetricValidationError(
+                    "filter_invalid",
+                    f"Filter '{self.name}' takes a number, got {value!r}.",
+                )
+            try:
+                return Decimal(str(value))
+            except InvalidOperation as exc:
+                raise MetricValidationError(
+                    "filter_invalid",
+                    f"Filter '{self.name}' takes a number, got {value!r}.",
+                ) from exc
+
+        if op == "contains":
+            if not isinstance(value, str) or not value.strip():
+                raise MetricValidationError(
+                    "filter_invalid",
+                    f"Filter '{self.name}' takes a non-empty string, got {value!r}.",
+                )
+            return value.strip()
+
+        if op == "not_in":
+            values = value if isinstance(value, (list, tuple)) else [value]
+            if not all(isinstance(v, str) for v in values):
+                raise MetricValidationError(
+                    "filter_invalid",
+                    f"Filter '{self.name}' takes a list of ids, got {value!r}.",
+                )
+            return list(values)
+
+        return value
 
 
 @dataclass(frozen=True)
@@ -179,14 +240,25 @@ class MetricSpec:
                     f"Allowed: {list(self.dimensions)}.",
                 )
 
-    def validate_filters(self, filters: dict[str, Any]) -> None:
-        for name in filters:
+    def validate_filters(self, filters: dict[str, Any], vocabulary=None) -> dict[str, Any]:
+        """Reject undeclared filters, type-check the declared ones.
+
+        Returns the coerced dict the compiler should bind, so a value can never
+        reach SQL without having passed the op's own check. ``vocabulary`` is
+        injected rather than imported to keep this module free of its own
+        registry (the two would import each other otherwise).
+        """
+        coerced: dict[str, Any] = {}
+        for name, value in filters.items():
             if name not in self.filters:
                 raise MetricValidationError(
                     "filter_not_allowed",
                     f"Metric '{self.id}' does not support filter '{name}'. "
                     f"Allowed: {list(self.filters)}.",
                 )
+            filter_def = (vocabulary or {}).get(name)
+            coerced[name] = filter_def.validate_value(value) if filter_def else value
+        return coerced
 
     def validate_grain(self, grain: str | None) -> None:
         if grain is not None and grain not in self.grains:
@@ -259,8 +331,10 @@ def normalize(spec: MetricSpec, query):
     metric's definition. ``query`` is an application DTO, typed structurally to
     avoid the domain importing the application layer.
     """
+    from .vocabulary import FILTERS  # local: vocabulary imports this module
+
     spec.validate_dimensions(tuple(query.dimensions))
-    spec.validate_filters(dict(query.filters))
+    filters = spec.validate_filters(dict(query.filters), FILTERS)
     spec.validate_grain(query.grain)
     if spec.kind == "aggregation" and query.params:
         raise MetricValidationError(
@@ -270,5 +344,6 @@ def normalize(spec: MetricSpec, query):
     return replace(
         query,
         dimensions=tuple(query.dimensions) or spec.default_dimensions,
+        filters=filters,
         grain=query.grain or spec.default_grain,
     )

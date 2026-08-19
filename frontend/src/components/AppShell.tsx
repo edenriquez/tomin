@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Flame, SlidersHorizontal, Upload, type LucideIcon } from "lucide-react";
-import { FileText, LineChart, Repeat, Shapes } from "lucide-react";
+import { FileText, FlaskConical, LineChart, Repeat, Shapes } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui";
@@ -24,6 +24,9 @@ const NAV: NavItem[] = [
     { href: "/", label: "Movimientos", icon: LineChart },
     { href: "/categorias", label: "Categorías", icon: Shapes },
     { href: "/recurrentes", label: "Recurrentes", icon: Repeat },
+    // Spanish, like every other item. The route stays `/workspace` because the
+    // code of this repo is English; only the label the user reads is not.
+    { href: "/workspace", label: "Análisis", icon: FlaskConical },
     { href: "/documentos", label: "Documentos", icon: FileText },
 ];
 

@@ -19,6 +19,8 @@ from ....domain.entities import (
     Statement,
     Tag,
     Transaction,
+    Workstation,
+    WorkstationRule,
 )
 from ....domain.value_objects.enums import (
     AccountKind,
@@ -42,6 +44,7 @@ from .models import (
     TransactionTagModel,
     UserAliasModel,
     UserCategoryLabelModel,
+    WorkstationModel,
 )
 
 
@@ -543,6 +546,115 @@ class SqlDashboardRepository:
                 for w in widgets
             ],
         )
+
+
+class SqlWorkstationRepository:
+    """CRUD for a user's saved lenses.
+
+    Reads are always user-scoped at the query, not filtered after the fact:
+    ``get`` takes a user id alongside the workstation id so a wrong id is a
+    404 rather than someone else's rule.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def list_for_user(self, user_id: UUID) -> list[Workstation]:
+        with self._db.session() as s:
+            models = s.scalars(
+                select(WorkstationModel)
+                .where(WorkstationModel.user_id == _u(user_id))
+                # Newest first, so the one you just made is at the top of the
+                # sidebar. Ties break on `name`, not on `id`: `created_at` has
+                # second granularity, a user setting up three lenses in a row
+                # lands them all in the same second, and a random-UUID tiebreak
+                # would reshuffle the sidebar between reads -- which reads as
+                # the app losing track of them. Alphabetical within a second is
+                # arbitrary too, but it is *stable*, which is the property that
+                # matters for a list you navigate.
+                .order_by(WorkstationModel.created_at.desc(), WorkstationModel.name)
+            ).all()
+            return [self._to_entity(m) for m in models]
+
+    def get(self, user_id: UUID, workstation_id: UUID) -> Workstation | None:
+        with self._db.session() as s:
+            model = s.scalars(
+                select(WorkstationModel).where(
+                    WorkstationModel.id == _u(workstation_id),
+                    WorkstationModel.user_id == _u(user_id),
+                )
+            ).first()
+            return self._to_entity(model) if model else None
+
+    def add(self, workstation: Workstation) -> None:
+        with self._db.session() as s:
+            s.add(
+                WorkstationModel(
+                    id=_u(workstation.id),
+                    user_id=_u(workstation.user_id),
+                    name=workstation.name,
+                    rule=_rule_json(workstation.rule),
+                    excluded_tx_ids=[str(i) for i in workstation.excluded_tx_ids],
+                )
+            )
+
+    def replace(self, workstation: Workstation) -> None:
+        """Overwrite name, rule and exclusions in one go.
+
+        A workstation is edited as a unit -- the rule editor saves the whole
+        sheet -- so a field-by-field patch would be more code and more ways to
+        end up with a name that no longer describes the rule under it.
+        """
+        with self._db.session() as s:
+            model = s.get(WorkstationModel, _u(workstation.id))
+            if model is None or model.user_id != _u(workstation.user_id):
+                return
+            model.name = workstation.name
+            model.rule = _rule_json(workstation.rule)
+            model.excluded_tx_ids = [str(i) for i in workstation.excluded_tx_ids]
+
+    def delete(self, user_id: UUID, workstation_id: UUID) -> bool:
+        with self._db.session() as s:
+            model = s.get(WorkstationModel, _u(workstation_id))
+            if model is None or model.user_id != _u(user_id):
+                return False
+            s.delete(model)
+            return True
+
+    @staticmethod
+    def _to_entity(m: WorkstationModel) -> Workstation:
+        raw = dict(m.rule or {})
+        return Workstation(
+            id=UUID(m.id),
+            user_id=UUID(m.user_id),
+            name=m.name,
+            rule=WorkstationRule(
+                description_contains=raw.get("description_contains"),
+                amount_min=raw.get("amount_min"),
+                amount_max=raw.get("amount_max"),
+                category_id=_uuid_or_none(raw.get("category_id")),
+                tag_id=_uuid_or_none(raw.get("tag_id")),
+            ),
+            excluded_tx_ids=[UUID(i) for i in (m.excluded_tx_ids or [])],
+            created_at=m.created_at,
+            updated_at=m.updated_at,
+        )
+
+
+def _rule_json(rule: WorkstationRule) -> dict:
+    """The rule as JSON. Decimals and UUIDs go out as strings.
+
+    JSON's float would not carry an amount bound back unchanged, and a bound
+    that drifts by a centavo silently changes which movements are in the set.
+    """
+    out: dict = {}
+    for name, value in rule.conditions.items():
+        out[name] = str(value)
+    return out
+
+
+def _uuid_or_none(value) -> UUID | None:
+    return UUID(value) if value else None
 
 
 class SqlCategoryRepository:

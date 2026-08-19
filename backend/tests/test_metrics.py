@@ -95,15 +95,20 @@ def test_catalog_lists_every_metric_with_its_declaration(client):
         "lifetime_flow",
         "investment_projection",
         "financial_advice",
+        "cohort_activity",
+        "cohort_totals",
+        "cohort_profile",
     }
     for item in items:
         assert item["shape"] in {"scalar", "series", "breakdown", "table"}
         assert isinstance(item["requires"], list)
-    # Every metric is a peso figure except the advisor, whose rows are
-    # sentences: labelling that card "MXN" would name a currency for a widget
-    # that has no headline amount.
-    assert {i["unit"] for i in items if i["id"] != "financial_advice"} == {"MXN"}
-    assert by_id["financial_advice"]["unit"] == "none"
+    # Every metric is a peso figure except the two whose rows are descriptions
+    # rather than amounts: the advisor's sentences, and the cohort profile's mix
+    # of pesos, counts and days. Labelling either card "MXN" would name a
+    # currency for a widget that has no headline amount.
+    described = {"financial_advice", "cohort_profile"}
+    assert {i["unit"] for i in items if i["id"] not in described} == {"MXN"}
+    assert {i["unit"] for i in items if i["id"] in described} == {"none"}
 
     assert by_id["spend_by_category"]["shape"] == "breakdown"
     assert by_id["spend_by_category"]["requires"] == ["transactions"]
@@ -349,3 +354,162 @@ def test_legacy_analytics_endpoints_still_work(client, seeded):
     assert summary.get_json()["total_expense"] == 650.0
     assert client.get("/api/analytics/spending-by-category").status_code == 200
     assert client.get("/api/analytics/monthly").status_code == 200
+
+
+# --- the workstation predicates -------------------------------------------
+# A saved lens ("my phone top-ups") is a filtered reading of the ordinary
+# metrics, so these four ops are tested where every other predicate is.
+@pytest.fixture
+def cohort(app):
+    """Five top-ups whose wording, casing and accents all differ, plus noise.
+
+    Recargas: 15 + 15 + 15 + 200 = 245 in Jan, 15 in Feb.
+    Noise: one Uber trip that no rule here should ever catch.
+    """
+    container = app.extensions["container"]
+    txs = [
+        Transaction(
+            user_id=DEV_USER,
+            tx_date=date(2024, 1, 3),
+            amount=Decimal("15"),
+            raw_description="TELCEL*RECARGA",
+            tx_type=TxType.EXPENSE,
+        ),
+        Transaction(
+            user_id=DEV_USER,
+            tx_date=date(2024, 1, 8),
+            amount=Decimal("15"),
+            # Accented and mixed case: the fold has to work in both directions.
+            raw_description="Recargacion Telcel".replace("cion", "ci\u00f3n"),
+            tx_type=TxType.EXPENSE,
+        ),
+        Transaction(
+            user_id=DEV_USER,
+            tx_date=date(2024, 1, 15),
+            amount=Decimal("15"),
+            raw_description="recarga telcel",
+            tx_type=TxType.EXPENSE,
+        ),
+        Transaction(
+            user_id=DEV_USER,
+            tx_date=date(2024, 1, 20),
+            amount=Decimal("200"),
+            raw_description="RECARGA PLAN TELCEL",
+            tx_type=TxType.EXPENSE,
+        ),
+        Transaction(
+            user_id=DEV_USER,
+            tx_date=date(2024, 2, 4),
+            amount=Decimal("15"),
+            raw_description="Telcel Recarga",
+            tx_type=TxType.EXPENSE,
+        ),
+        Transaction(
+            user_id=DEV_USER,
+            tx_date=date(2024, 1, 9),
+            amount=Decimal("120"),
+            raw_description="UBER TRIP",
+            tx_type=TxType.EXPENSE,
+        ),
+    ]
+    container.transactions.add_many(txs)
+    container.cube.upsert_transactions(txs)
+    return txs
+
+
+def _flow(client, filters, period=None):
+    """Total expense that `monthly_cash_flow` reports under `filters`."""
+    results = _query(
+        client,
+        [{"key": "k", "metric": "monthly_cash_flow", "filters": filters}],
+        period=period,
+    ).get_json()["results"]
+    assert "error" not in results["k"], results["k"]
+    return sum(Decimal(r["expense_amount"]) for r in results["k"]["rows"])
+
+
+def test_description_contains_is_case_insensitive(client, cohort):
+    # All five top-ups, however the bank cased them.
+    assert _flow(client, {"description_contains": "recarga"}) == Decimal("260")
+    assert _flow(client, {"description_contains": "RECARGA"}) == Decimal("260")
+
+
+def test_description_contains_folds_accents_on_both_sides(client, cohort):
+    # The 15-peso "Recargacion" row carries an accent the user will not type.
+    # Folding only the column, or only the needle, makes exactly one of these
+    # two assertions fail -- which is why both are here.
+    assert _flow(client, {"description_contains": "recargacion"}) == Decimal("15")
+    assert _flow(client, {"description_contains": "recargaci\u00f3n"}) == Decimal("15")
+
+
+def test_description_contains_excludes_what_does_not_match(client, cohort):
+    assert _flow(client, {"description_contains": "uber"}) == Decimal("120")
+
+
+def test_amount_bounds_are_inclusive(client, cohort):
+    # 10-100 keeps the four 15-peso top-ups, drops the 200 plan.
+    both = {"description_contains": "recarga", "amount_min": 10, "amount_max": 100}
+    assert _flow(client, both) == Decimal("60")
+    # The bound itself is in: 200 is >= 200.
+    assert _flow(client, {"description_contains": "recarga", "amount_min": 200}) == Decimal("200")
+    assert _flow(client, {"description_contains": "recarga", "amount_max": 15}) == Decimal("60")
+
+
+def test_exclude_tx_removes_named_rows_without_touching_the_rule(client, cohort):
+    excluded = str(cohort[3].id)  # the 200-peso plan
+    rule = {"description_contains": "recarga", "exclude_tx": [excluded]}
+    assert _flow(client, rule) == Decimal("60")
+
+
+def test_exclude_tx_with_an_empty_list_excludes_nothing(client, cohort):
+    # A workstation with no manual exclusions must not silently become empty.
+    assert _flow(client, {"description_contains": "recarga", "exclude_tx": []}) == Decimal("260")
+
+
+def test_workstation_filters_compose_with_the_period(client, cohort):
+    jan = {"start": "2024-01-01", "end": "2024-01-31"}
+    assert _flow(client, {"description_contains": "recarga"}, period=jan) == Decimal("245")
+
+
+def test_like_metacharacters_in_the_needle_are_literal(client, cohort):
+    # "%" is a wildcard in LIKE. Unescaped, this would match every row; the
+    # user meant the character.
+    assert _flow(client, {"description_contains": "%"}) == Decimal("0")
+    assert _flow(client, {"description_contains": "_"}) == Decimal("0")
+
+
+def test_description_contains_does_not_reach_sql(client, cohort):
+    # The value is bound, never interpolated. A zero total is the proof: the
+    # string was searched for, not executed.
+    hostile = "\'; DROP TABLE fact_transactions; --"
+    assert _flow(client, {"description_contains": hostile}) == Decimal("0")
+    # And the table is still there.
+    assert _flow(client, {"description_contains": "recarga"}) == Decimal("260")
+
+
+def test_amount_bound_rejects_a_non_number(client, cohort):
+    results = _query(
+        client,
+        [{"key": "a", "metric": "monthly_cash_flow", "filters": {"amount_min": "mucho"}}],
+    ).get_json()["results"]
+    assert results["a"]["error"]["code"] == "filter_invalid"
+
+
+def test_empty_description_contains_is_rejected(client, cohort):
+    # An empty needle matches everything. That is never what a rule meant, and
+    # a set that silently becomes "all your money" is worse than an error.
+    results = _query(
+        client,
+        [{"key": "a", "metric": "monthly_cash_flow", "filters": {"description_contains": "  "}}],
+    ).get_json()["results"]
+    assert results["a"]["error"]["code"] == "filter_invalid"
+
+
+def test_workstation_filters_are_not_open_on_every_metric(client, cohort):
+    # The vocabulary stays closed per metric: `lifetime_flow` never declared
+    # these, so asking is an error rather than a quietly ignored filter.
+    results = _query(
+        client,
+        [{"key": "a", "metric": "lifetime_flow", "filters": {"description_contains": "recarga"}}],
+    ).get_json()["results"]
+    assert results["a"]["error"]["code"] == "filter_not_allowed"

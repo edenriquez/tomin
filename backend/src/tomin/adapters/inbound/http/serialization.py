@@ -12,6 +12,7 @@ from ....domain.entities import (
     Statement,
     Tag,
     Transaction,
+    Workstation,
 )
 from ....domain.metrics.spec import MetricSpec
 from ....domain.services.forecasting import ForecastPoint
@@ -199,6 +200,26 @@ def dashboard_json(d: Dashboard) -> dict:
         "is_default": d.is_default,
         "updated_at": _iso(d.updated_at),
         "widgets": [dashboard_widget_json(w) for w in d.widgets],
+    }
+
+
+def workstation_json(w: Workstation) -> dict:
+    """A lens as the client sees it.
+
+    `filters` is the rule already translated into a metric query. It is derived,
+    not stored, but it ships anyway: without it every client would reimplement
+    `WorkstationRule.to_filters`, and the day one of them disagreed about what
+    "between 10 and 300" means, the chart and the tiles would quietly describe
+    different sets.
+    """
+    return {
+        "id": str(w.id),
+        "name": w.name,
+        "rule": {name: str(value) for name, value in w.rule.conditions.items()},
+        "excluded_tx_ids": [str(i) for i in w.excluded_tx_ids],
+        "filters": w.to_filters(),
+        "created_at": _iso(w.created_at),
+        "updated_at": _iso(w.updated_at),
     }
 
 

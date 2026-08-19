@@ -1,3 +1,4 @@
+from .chat import ChatMessage, ChatPort, ChatUnavailable
 from .cube import CubeReader, CubeWriter
 from .extraction import Extractor, ParserFactory, StatementParser, TemplateClassifier
 from .metrics import MetricEngine, MetricResolver
@@ -13,11 +14,15 @@ from .repositories import (
     StatementRepository,
     TagRepository,
     TransactionRepository,
+    WorkstationRepository,
 )
 from .storage import FileStorage
 
 __all__ = [
     "AccountRepository",
+    "ChatMessage",
+    "ChatPort",
+    "ChatUnavailable",
     "CategoryRepository",
     "DashboardRepository",
     "DuplicateTagError",
@@ -28,6 +33,7 @@ __all__ = [
     "StatementRepository",
     "TagRepository",
     "TransactionRepository",
+    "WorkstationRepository",
     "Extractor",
     "TemplateClassifier",
     "StatementParser",
