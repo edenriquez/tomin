@@ -257,6 +257,34 @@ class DashboardWidgetModel(Base):
     title_override: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
+class WorkstationModel(Base):
+    """A user's saved lens over the ledger.
+
+    The rule is one JSON column rather than five typed ones. That is a
+    deliberate trade: the rule's *shape* is enforced by
+    ``domain.entities.WorkstationRule`` and re-validated against the metric
+    catalog on every save, so the column never holds something the query layer
+    would reject -- and adding a sixth condition stays a domain change instead
+    of a migration.
+    """
+
+    __tablename__ = "workstations"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    rule: Mapped[dict] = mapped_column(JSON, default=dict)
+    #: Transaction ids the user struck out by hand. Ids rather than a foreign
+    #: key: a deleted statement takes its transactions with it, and a stale id
+    #: in here is harmless (it excludes a row that no longer exists) while a
+    #: cascade would silently rewrite the user's exceptions.
+    excluded_tx_ids: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class GoalModel(Base):
     __tablename__ = "goals"
 

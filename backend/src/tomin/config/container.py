@@ -27,6 +27,7 @@ from ..adapters.outbound.persistence import (
     SqlTransactionRepository,
     SqlUserAliasRepository,
     SqlUserLabelRepository,
+    SqlWorkstationRepository,
 )
 from ..adapters.outbound.persistence.migrator import upgrade_to_head
 from ..adapters.outbound.persistence.seed import seed_reference_data
@@ -41,6 +42,7 @@ from ..application.use_cases import (
     ManageGoalsUseCase,
     ManageStatementsUseCase,
     ManageTagsUseCase,
+    ManageWorkstations,
     ProcessExtractedUseCase,
     ProcessFileUseCase,
     RealiasUseCase,
@@ -124,6 +126,10 @@ class Container:
     @cached_property
     def tags(self) -> SqlTagRepository:
         return SqlTagRepository(self.database)
+
+    @cached_property
+    def workstations(self) -> SqlWorkstationRepository:
+        return SqlWorkstationRepository(self.database)
 
     @cached_property
     def categories(self) -> SqlCategoryRepository:
@@ -224,6 +230,12 @@ class Container:
             user_labels=self.user_labels,
             cube=self.cube,
         )
+
+    @cached_property
+    def manage_workstations(self) -> ManageWorkstations:
+        # No cube and no engine: a workstation stores a *question*. Reading it
+        # is the ordinary metric path with the rule handed over as filters.
+        return ManageWorkstations(workstations=self.workstations)
 
     @cached_property
     def manage_tags(self) -> ManageTagsUseCase:

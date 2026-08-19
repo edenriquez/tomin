@@ -14,6 +14,7 @@ from .metrics import metrics_bp
 from .statements import statements_bp
 from .tags import tags_bp
 from .transactions import transactions_bp
+from .workstations import workstations_bp
 
 
 def register_blueprints(app: Flask) -> None:
@@ -26,6 +27,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(analytics_bp)
     app.register_blueprint(metrics_bp)
     app.register_blueprint(dashboards_bp)
+    app.register_blueprint(workstations_bp)
     app.register_blueprint(forecast_bp)
     app.register_blueprint(goals_bp)
     app.register_blueprint(admin_bp)

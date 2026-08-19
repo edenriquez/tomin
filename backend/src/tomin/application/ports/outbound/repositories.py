@@ -14,6 +14,7 @@ from ....domain.entities import (
     Statement,
     Tag,
     Transaction,
+    Workstation,
 )
 from ...dtos.extraction import ParsedTransaction  # noqa: F401  (re-exported convenience)
 
@@ -118,6 +119,28 @@ class DashboardRepository(Protocol):
 
     def replace_widgets(self, dashboard_id: UUID, widgets: list[DashboardWidget]) -> None:
         """Swap a dashboard's whole widget list. A layout is saved as a unit."""
+        ...
+
+
+class WorkstationRepository(Protocol):
+    """A user's saved lenses. Every read is user-scoped at the query.
+
+    ``get`` takes the user id alongside the workstation id rather than
+    filtering afterwards, so a wrong id is a 404 and never someone else's rule.
+    """
+
+    def list_for_user(self, user_id: UUID) -> list[Workstation]: ...
+
+    def get(self, user_id: UUID, workstation_id: UUID) -> Workstation | None: ...
+
+    def add(self, workstation: Workstation) -> None: ...
+
+    def replace(self, workstation: Workstation) -> None:
+        """Overwrite name, rule and exclusions. A lens is edited as a unit."""
+        ...
+
+    def delete(self, user_id: UUID, workstation_id: UUID) -> bool:
+        """True when a row was removed, False when there was nothing to remove."""
         ...
 
 

@@ -13,6 +13,7 @@ from .repositories import (
     StatementRepository,
     TagRepository,
     TransactionRepository,
+    WorkstationRepository,
 )
 from .storage import FileStorage
 
@@ -28,6 +29,7 @@ __all__ = [
     "StatementRepository",
     "TagRepository",
     "TransactionRepository",
+    "WorkstationRepository",
     "Extractor",
     "TemplateClassifier",
     "StatementParser",
