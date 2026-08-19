@@ -94,6 +94,27 @@ FILTERS: dict[str, FilterDef] = {
     # Statement ids rather than bank names: the id is immutable while the
     # bank label is user-editable, and a rename must not strand old facts.
     "statement": FilterDef(name="statement", column="statement_id"),
+    # --- the workstation predicates -------------------------------------
+    # A saved lens over the ledger ("my phone top-ups") cannot be expressed in
+    # ids alone: the thing that makes a top-up a top-up is its wording. These
+    # four are what let a user define a set the product never anticipated,
+    # while the vocabulary stays closed — a client still sends a declared name,
+    # never an expression.
+    #
+    # Matches `description`, the alias the user sees and can rewrite, not
+    # `raw_description`. Someone who renamed "TELCEL*RECARGA" to "Recarga
+    # Telcel" must find their set by what they typed.
+    "description_contains": FilterDef(
+        name="description_contains", column="description", ops=("contains",)
+    ),
+    # Both bounds inclusive, over the magnitude — `amount` is unsigned here, so
+    # these read the same for spend and income and never need a sign caveat.
+    "amount_min": FilterDef(name="amount_min", column="amount", ops=("gte",)),
+    "amount_max": FilterDef(name="amount_max", column="amount", ops=("lte",)),
+    # The escape hatch every rule needs: a predicate over free text will catch
+    # something it shouldn't, and the user must be able to say so per row
+    # without abandoning the rule that got them 95% there.
+    "exclude_tx": FilterDef(name="exclude_tx", column="tx_id", ops=("not_in",)),
 }
 
 GRAINS: dict[str, Grain] = {

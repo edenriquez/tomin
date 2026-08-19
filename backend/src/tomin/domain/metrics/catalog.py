@@ -69,7 +69,18 @@ MONTHLY_CASH_FLOW = MetricSpec(
     unit="MXN",
     measures=("income_amount", "expense_amount"),
     dimensions=(),
-    filters=("category", "currency", "tag", "statement"),
+    # The four workstation predicates are opened here and on accumulated spend:
+    # a saved lens is a filtered reading of these two, not a metric of its own.
+    filters=(
+        "category",
+        "currency",
+        "tag",
+        "statement",
+        "description_contains",
+        "amount_min",
+        "amount_max",
+        "exclude_tx",
+    ),
     # Day unlocked for short dashboard windows (7d/14d); month stays the
     # default so existing clients see no change.
     grains=("month", "day"),
@@ -87,7 +98,16 @@ ACCUMULATED_SPEND = MetricSpec(
     unit="MXN",
     measures=("expense_amount",),
     dimensions=(),
-    filters=("category", "currency", "tag", "statement"),
+    filters=(
+        "category",
+        "currency",
+        "tag",
+        "statement",
+        "description_contains",
+        "amount_min",
+        "amount_max",
+        "exclude_tx",
+    ),
     grains=("month", "day"),
     default_grain="month",
     cumulative=True,

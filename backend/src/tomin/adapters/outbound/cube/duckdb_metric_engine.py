@@ -15,6 +15,7 @@ request body to SQL text.
 
 from __future__ import annotations
 
+import unicodedata
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -35,6 +36,7 @@ from .duckdb_cube import DuckDbCube
 #: ``bridge_transaction_tag`` and `g` is ``dim_tag`` -- the last two are joined
 #: in only when tag is a *dimension* (see :meth:`DuckDbMetricEngine._from`).
 _COLUMN_SQL: dict[str, str] = {
+    "tx_id": "f.tx_id",
     "amount": "f.amount",
     "tx_date": "f.tx_date",
     "statement_id": "f.statement_id",
@@ -57,6 +59,17 @@ _COLUMN_SQL: dict[str, str] = {
 _GRAIN_FORMAT = {"month": "%Y-%m", "day": "%Y-%m-%d"}
 
 _ROW_COUNT = "row_count"
+
+
+def _fold(text: str) -> str:
+    """Drop accents, the same way DuckDB's ``strip_accents`` does.
+
+    Both sides of a ``contains`` comparison have to be folded or neither is:
+    folding only the column would make "recargación" findable but "recargacion"
+    not, which is the failure a user would read as "search is broken".
+    Mirrors ``domain/entities/tag.slugify``'s NFKD fold.
+    """
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
 
 class MetricCompilationError(RuntimeError):
@@ -200,6 +213,36 @@ class DuckDbMetricEngine:
                 continue  # already applied as the currency scope
             filter_def = FILTERS[name]
             column = self._sql(filter_def.column)
+
+            # Ops that name exactly one predicate compile off the declaration.
+            # Every value below is bound, never interpolated -- the property the
+            # closed vocabulary exists to protect.
+            op = filter_def.op
+            if op == "contains":
+                # Case- and accent-insensitive: a user typing "recarga" must
+                # match "RECARGA" and "Recargación" alike, or the rule silently
+                # drops rows and every number under it is quietly wrong.
+                # LIKE metacharacters in the needle are escaped so a search for
+                # "50%" means 50 percent, not "50 followed by anything".
+                needle = _fold(str(value)).lower()
+                for meta in ("\\", "%", "_"):
+                    needle = needle.replace(meta, f"\\{meta}")
+                clauses.append(f"lower(strip_accents({column})) LIKE ? ESCAPE '\\'")
+                params.append(f"%{needle}%")
+                continue
+            if op in ("gte", "lte"):
+                clauses.append(f"{column} {'>=' if op == 'gte' else '<='} ?")
+                params.append(value)
+                continue
+            if op == "not_in":
+                values = value if isinstance(value, (list, tuple)) else [value]
+                if not values:
+                    continue  # excluding nothing is not a predicate
+                placeholders = ", ".join("?" * len(values))
+                clauses.append(f"{column} NOT IN ({placeholders})")
+                params.extend(str(v) for v in values)
+                continue
+
             if filter_def.multivalued:
                 # The column is an array, so the predicate is membership. A list
                 # of values is an OR ("tagged viaje *or* deducible"), which is
