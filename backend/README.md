@@ -35,6 +35,34 @@ Defaults to a local SQLite DB and disabled auth so it runs offline. Point
 `DATABASE_URL` at Supabase Postgres and set `SUPABASE_JWT_SECRET` +
 `AUTH_DISABLED=false` for a real deployment.
 
+## The chat is optional, and provider-agnostic
+
+Workspace can answer questions about one saved lens in words. It is the only
+part of Tomin that is not deterministic, so it is deliberately the only thing
+behind an optional integration:
+
+```bash
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=...            # yours; never committed
+LLM_MODEL=nvidia/nemotron-3-super-120b-a12b:free
+```
+
+Any endpoint speaking OpenAI-shaped Chat Completions works — OpenRouter, Groq,
+Together, a local Ollama (`http://localhost:11434/v1`). One adapter covers all
+of them (`adapters/outbound/chat/`), so switching providers is these three
+values and no code, and no vendor name appears above the adapter line.
+
+**All three empty is a supported state**, not a broken one: the container
+injects a null object, the chat band renders disabled with its reason, and every
+other part of Workspace reads as normal. No test needs a key.
+
+The model only ever sees one lens: that lens's own aggregates plus its
+movements (date, description, amount), capped at 300 rows. `docs/custody-plan.md`
+covers the statement PDF, not the extracted ledger — so this is not a
+contradiction, but it *is* a disclosure, and the UI makes it before the first
+question rather than after. Note that free tiers on some gateways train on
+conversations; check the policy before pointing this at a real ledger.
+
 ## The analytics cube is disposable
 
 The DuckDB cube holds only *derived* state; the relational tables are the
