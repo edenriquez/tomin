@@ -152,11 +152,26 @@ export type RecurringCharge = {
  * that drifts on headers, caching or error shape.
  */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${API_URL}${path}`, {
-        ...init,
-        headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-        cache: "no-store",
-    });
+    let res: Response;
+    try {
+        res = await fetch(`${API_URL}${path}`, {
+            ...init,
+            headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+            cache: "no-store",
+        });
+    } catch (cause) {
+        // `fetch` rejects with a bare "Failed to fetch" for every reason the
+        // request never completed: nothing listening, DNS, a CORS preflight
+        // that 404'd. The browser withholds which on purpose, so the one thing
+        // we *can* say — the address we tried — has to come from here. Without
+        // it the message is unactionable, and the most common cause is exactly
+        // the one it would reveal: the app pointed at the wrong backend.
+        throw new Error(
+            `No se pudo contactar al backend en ${API_URL} (${path}). ` +
+                `Revisa que esté corriendo y que NEXT_PUBLIC_API_URL apunte ahí.`,
+            { cause }
+        );
+    }
     if (!res.ok) {
         const detail = await res.text();
         throw new Error(`API ${res.status}: ${detail}`);
