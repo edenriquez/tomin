@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 # Template keys understood by the parser factory.
 TEMPLATE_SAT_CFDI = "sat_cfdi"
 TEMPLATE_BANAMEX = "banamex"
+TEMPLATE_BANCO_AZTECA = "banco_azteca"
 TEMPLATE_GENERIC = "generic_bank"
 TEMPLATE_UNKNOWN = "unknown"
 
@@ -18,6 +19,21 @@ TEMPLATE_UNKNOWN = "unknown"
 #: movement is likely a *counterparty* ("SPEI enviado Banamex"), weak evidence
 #: of the issuer.
 _TRANSACTION_LINE = re.compile(r"^\s*\d{1,2}[-/]")
+
+#: A labelled detail line inside a transfer block. These name the *other* party
+#: by definition, and they are prose by shape — no leading date — so before this
+#: existed they scored as if they were the masthead.
+#:
+#: A real Banco Azteca statement is what forced this: every SPEI credit prints
+#: "EMISOR: NU MEXICO" under it, ten of them, so "Nu" collected a 50-point legal
+#: hit in prose while the actual issuer only had a 30-point brand ceiling. The
+#: statement came out labelled Nu. Counting these as movement-class evidence
+#: keeps a genuine issuer mention from being thrown away while denying a
+#: counterparty the weight of a masthead.
+_COUNTERPARTY_LINE = re.compile(
+    r"^\s*(?:emisor|receptor|ordenante|beneficiario|cliente"
+    r"|nom\s+origi|nom\s+benef|banco\s+(?:emisor|receptor))\s*:"
+)
 
 #: Signature classes, by how much a hit proves the issuer:
 #:
@@ -88,12 +104,19 @@ class KeywordTemplateClassifier:
         "HSBC": (("hsbc mexico", "legal"), ("hsbc", "brand")),
         "Scotiabank": (("scotiabank", "brand"),),
         "Banregio": (("banregio", "brand"),),
-        "Banco Azteca": (("banco azteca", "brand"),),
+        # "legal", not "brand": "Banco Azteca" is a two-word institution name,
+        # exactly like "banco santander" and "banco mercantil del norte" above,
+        # and it appears on the masthead and in the footer's R.F.C. block. As a
+        # brand its 30-point ceiling lost to any counterparty's legal name.
+        "Banco Azteca": (("banco azteca", "legal"),),
         "Hey Banco": (("hey banco", "brand"),),
     }
 
     #: Banks with a dedicated parser template. Everyone else parses generic.
-    _TEMPLATES: dict[str, str] = {"Banamex": TEMPLATE_BANAMEX}
+    _TEMPLATES: dict[str, str] = {
+        "Banamex": TEMPLATE_BANAMEX,
+        "Banco Azteca": TEMPLATE_BANCO_AZTECA,
+    }
 
     def classify(self, doc: ExtractedDocument) -> str:
         if doc.kind == "xml":
@@ -125,7 +148,8 @@ class KeywordTemplateClassifier:
         prose_lines: list[str] = []
         movement_lines: list[str] = []
         for line in text.splitlines():
-            (movement_lines if _TRANSACTION_LINE.match(line) else prose_lines).append(line)
+            is_weak = _TRANSACTION_LINE.match(line) or _COUNTERPARTY_LINE.match(line)
+            (movement_lines if is_weak else prose_lines).append(line)
 
         scores: dict[str, int] = {}
         for bank, signatures in self.BANK_SIGNATURES.items():

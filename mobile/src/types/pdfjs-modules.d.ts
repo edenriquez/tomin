@@ -8,6 +8,14 @@ declare module "pdfjs-dist/legacy/build/pdf.mjs" {
     export * from "pdfjs-dist";
 }
 
+/**
+ * The streams ponyfill keeps its declarations in `dist/types/`, which node10
+ * module resolution will not find from the deep `dist/*.js` path we import.
+ */
+declare module "web-streams-polyfill/dist/ponyfill.es6.js" {
+    export * from "web-streams-polyfill/dist/types/ponyfill";
+}
+
 declare module "pdfjs-dist/legacy/build/pdf.worker.mjs" {
     /**
      * The worker entry point. Assigning the whole module namespace to

@@ -3,10 +3,12 @@ from __future__ import annotations
 from ....application.ports.outbound.extraction import StatementParser
 from ..extraction.classifier import (
     TEMPLATE_BANAMEX,
+    TEMPLATE_BANCO_AZTECA,
     TEMPLATE_GENERIC,
     TEMPLATE_SAT_CFDI,
 )
 from .banamex import BanamexParser
+from .banco_azteca import BancoAztecaParser
 from .generic_bank import GenericBankParser
 from .sat_cfdi import SatCfdiParser
 
@@ -26,6 +28,7 @@ class DefaultParserFactory:
         self._parsers: dict[str, StatementParser] = {
             TEMPLATE_SAT_CFDI: SatCfdiParser(),
             TEMPLATE_BANAMEX: BanamexParser(),
+            TEMPLATE_BANCO_AZTECA: BancoAztecaParser(),
             TEMPLATE_GENERIC: GenericBankParser(),
         }
 

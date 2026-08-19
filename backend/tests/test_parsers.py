@@ -4,6 +4,7 @@ from decimal import Decimal
 from tomin.adapters.outbound.extraction.classifier import (
     KeywordTemplateClassifier,
     TEMPLATE_BANAMEX,
+    TEMPLATE_BANCO_AZTECA,
     TEMPLATE_SAT_CFDI,
 )
 from tomin.adapters.outbound.parsing import (
@@ -11,6 +12,7 @@ from tomin.adapters.outbound.parsing import (
     GenericBankParser,
     SatCfdiParser,
 )
+from tomin.adapters.outbound.parsing.banco_azteca import BancoAztecaParser
 from tomin.application.dtos.extraction import ExtractedDocument
 from tomin.domain.value_objects.enums import SourceType, TxType
 
@@ -150,3 +152,88 @@ def test_unknown_bank_stays_unnamed_and_generic():
     doc = _text_doc(["Caja Popular Los Pinos", "01/07/2026 abono 100.00"])
     assert clf.classify(doc) == "generic_bank"
     assert clf.detect_bank(doc) is None
+
+
+# --------------------------------------------------------------------------- #
+# Banco Azteca                                                                #
+# --------------------------------------------------------------------------- #
+
+#: A trimmed Banco Azteca statement, keeping the shapes that matter: the amount
+#: on the line *after* the date, on the line *before* it, and merged into it.
+#: Taken from a real 8-page statement whose totals are reproduced below.
+_AZTECA_LINES = [
+    "Banco Azteca S. A. Institución de Banca Múltiple",
+    "Saldo Inicial al 11 de febrero 2026 = $6.59",
+    "( + ) Depósitos del Periodo + $1,442.00",
+    "( - ) Retiros del Periodo - $576.00",
+    "Fecha Concepto Monto de la Operación",
+    # amount BEFORE the date line
+    "(+) $700.00 SPEI",
+    "11/02/2026 TRANSFERENCIA SPEI A SU FAVOR",
+    "EMISOR: NU MEXICO",
+    "CUENTA: 638180010129397879",
+    # amount AFTER the date line
+    "13/02/2026 TRANSFERENCIA SPEI A SU FAVOR",
+    "(+) $500.00 SPEI",
+    "EMISOR: NU MEXICO",
+    # amount merged INTO the date line
+    "22/02/2026 TRANSFERENCIA SPEI A SU FAVOR (+) $242.00 SPEI",
+    "25/02/2026 Retiro en ATM con celular (-) $500.00 BANCO AZTECA",
+    "01/03/2026 COMPRA GAS TLALMANALCO 2",
+    "(-) $76.00 COMPRA CON",
+    # a date that is not a movement: no amount anywhere near it
+    "10/03/2026 Saldo Final",
+    "Banco Azteca, S.A., Institución de Banca Múltiple recibe las consultas",
+]
+
+
+def test_banco_azteca_parser_pairs_amounts_on_either_side_of_the_date():
+    """generic_bank only sees the merged lines; this parser must find all five."""
+    result = BancoAztecaParser().parse(_text_doc(_AZTECA_LINES))
+
+    assert result.bank == "Banco Azteca"
+    assert result.source_type == SourceType.BANK_PDF
+    assert len(result.transactions) == 5
+
+    by_date = {tx.tx_date: tx for tx in result.transactions}
+    # Amount on the preceding line.
+    assert by_date[date(2026, 2, 11)].amount == Decimal("700.00")
+    assert by_date[date(2026, 2, 11)].raw_description == "TRANSFERENCIA SPEI A SU FAVOR"
+    # Amount on the following line.
+    assert by_date[date(2026, 2, 13)].amount == Decimal("500.00")
+    # Amount merged into the date line, with the channel kept out of the concept.
+    assert by_date[date(2026, 2, 22)].amount == Decimal("242.00")
+    assert by_date[date(2026, 2, 22)].raw_description == "TRANSFERENCIA SPEI A SU FAVOR"
+
+
+def test_banco_azteca_reads_direction_from_the_statements_own_marker():
+    """(+)/(-) is a fact about the line and must beat any wording heuristic."""
+    result = BancoAztecaParser().parse(_text_doc(_AZTECA_LINES))
+    by_date = {tx.tx_date: tx for tx in result.transactions}
+
+    assert by_date[date(2026, 2, 11)].tx_type is TxType.INCOME
+    assert by_date[date(2026, 2, 25)].tx_type is TxType.EXPENSE
+    # "COMPRA GAS" reads like an expense and is marked as one; the marker agrees.
+    assert by_date[date(2026, 3, 1)].tx_type is TxType.EXPENSE
+
+    income = sum(t.amount for t in result.transactions if t.tx_type is TxType.INCOME)
+    expense = sum(t.amount for t in result.transactions if t.tx_type is TxType.EXPENSE)
+    # The totals the statement itself declares, to the cent.
+    assert income == Decimal("1442.00")
+    assert expense == Decimal("576.00")
+
+
+def test_banco_azteca_ignores_a_date_with_no_amount():
+    """"10/03/2026 Saldo Final" is a cut-off date, not a movement."""
+    result = BancoAztecaParser().parse(_text_doc(_AZTECA_LINES))
+    assert date(2026, 3, 10) not in {tx.tx_date for tx in result.transactions}
+    assert result.period_end == date(2026, 3, 1)
+
+
+def test_azteca_statement_is_not_claimed_by_the_spei_counterparty():
+    """EMISOR: NU MEXICO under every credit must not outvote the masthead."""
+    classifier = KeywordTemplateClassifier()
+    doc = _text_doc(_AZTECA_LINES)
+
+    assert classifier.detect_bank(doc) == "Banco Azteca"
+    assert classifier.classify(doc) == TEMPLATE_BANCO_AZTECA

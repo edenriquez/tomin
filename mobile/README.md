@@ -67,9 +67,35 @@ exactly the interception this layer exists to catch.
 
 ## Native / device notes
 
-- `pdfjs-dist` is patched (`patches/pdfjs-dist+4.2.67.patch`) to remove a
-  runtime `import(workerSrc)` Metro cannot bundle. pdf.js runs its worker on the
-  JS thread via `globalThis.pdfjsWorker`; see `src/lib/extract.ts`.
+- `pdfjs-dist` is patched (`patches/pdfjs-dist+4.2.67.patch`) four times, all of
+  them found by running it on a device — none reproduce under Node:
+  1. Remove a runtime `import(workerSrc)` Metro cannot bundle. pdf.js runs its
+     worker on the JS thread via `globalThis.pdfjsWorker`; see
+     `src/lib/extract.ts`.
+  2. Remove the entry's *top-level await*, which Hermes reads as a call to a
+     function named `await`; the namespace arrives via
+     `globalThis.pdfjsLibPromise` instead.
+  3. Expand the `\p{Mn}` / `\p{Cf}` classes in `SpecialCharRegExp` into explicit
+     ranges. Hermes implements no Unicode property escapes, so building that
+     regex threw while the worker module was still loading — the crash landed
+     the moment a user picked a file. `verify-extraction.mjs` re-derives the
+     ranges from Node's Unicode tables and fails if they ever drift.
+  4. Stop `fetchStandardFontData` from asking the main thread for a font file.
+     That `sendWithPromise` is the only *worker -> main thread* request pdf.js
+     makes; over the fake worker's `LoopbackPort` on Hermes the reply never
+     arrives, so `getTextContent()` hung forever on any PDF whose fonts are not
+     embedded — a spinner with no error. We ship no standard font data, so the
+     answer was always going to be a rejection; the patch skips to the fallback
+     pdf.js already takes, and the extracted text is unchanged.
+
+  The same worker -> main thread path is used by `FetchBuiltInCMap`, which is
+  therefore still able to hang. No statement seen so far needs external CMaps,
+  and the underlying reason that direction fails is not yet understood.
+- `src/lib/polyfills.ts` fills what Hermes lacks: `structuredClone`,
+  `TextDecoder`, `DOMException` (core-js inside pdf.js dereferences it while
+  loading) and `ReadableStream` (`getTextContent` is delivered over a stream).
+  `verify-extraction.mjs` deletes these from Node before loading pdf.js, so the
+  script fails the same way a phone would.
 - `metro.config.js` shims Node built-ins for the dead Node branches inside
   pdfjs-dist / tweetnacl / js-sha256.
 - Scanned PDFs are refused with an honest message rather than uploaded. OCR on

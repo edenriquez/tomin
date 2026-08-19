@@ -27,9 +27,25 @@
  * - `TextDecoder` — pdf.js decodes UTF-8 / UTF-16 PDF strings with it, relying
  *   on `{ fatal: true }` throwing on malformed input to fall back to PDFDocEncoding.
  *
+ * - `DOMException` — not used by us at all, but core-js's
+ *   `web.dom-exception.stack` module is bundled inside the pdf.js legacy build
+ *   and runs `$DOMException.prototype = NativeDOMException.prototype` at import
+ *   time. core-js assumes every non-Node host has `DOMException`; React Native
+ *   does not, so loading the pdf.js worker died with
+ *   "Cannot read property 'prototype' of undefined" before a single line of our
+ *   code ran.
+ *
+ * - `ReadableStream` — `page.getTextContent()` is delivered over
+ *   `MessageHandler.sendWithStream`, which builds a real stream with
+ *   backpressure. React Native's fetch is XHR-based and ships no streams at
+ *   all. Rather than hand-roll one, this uses the `web-streams-polyfill`
+ *   ponyfill (pure JS, no globals touched by the package itself).
+ *
  * None of this is a security primitive: randomness comes from expo-crypto (see
  * `secure-transport.ts`) and hashing from js-sha256.
  */
+
+import { ReadableStream as ReadableStreamPonyfill } from "web-streams-polyfill/dist/ponyfill.es6.js";
 
 const g = globalThis as unknown as Record<string, unknown>;
 
@@ -358,10 +374,64 @@ class TextDecoderPolyfill {
 
 if (typeof g.TextDecoder !== "function") g.TextDecoder = TextDecoderPolyfill;
 
+/* -------------------------------------------------------------------------- */
+/* DOMException                                                                */
+/* -------------------------------------------------------------------------- */
+
+/** Legacy `code` values, kept so the polyfill is not subtly wrong. */
+const DOM_EXCEPTION_CODES: Record<string, number> = {
+    IndexSizeError: 1,
+    HierarchyRequestError: 3,
+    WrongDocumentError: 4,
+    InvalidCharacterError: 5,
+    NoModificationAllowedError: 7,
+    NotFoundError: 8,
+    NotSupportedError: 9,
+    InUseAttributeError: 10,
+    InvalidStateError: 11,
+    SyntaxError: 12,
+    InvalidModificationError: 13,
+    NamespaceError: 14,
+    InvalidAccessError: 15,
+    TypeMismatchError: 17,
+    SecurityError: 18,
+    NetworkError: 19,
+    AbortError: 20,
+    URLMismatchError: 21,
+    QuotaExceededError: 22,
+    TimeoutError: 23,
+    InvalidNodeTypeError: 24,
+    DataCloneError: 25,
+};
+
+class DOMExceptionPolyfill extends Error {
+    readonly code: number;
+
+    constructor(message = "", name = "Error") {
+        super(message);
+        this.name = name;
+        this.code = DOM_EXCEPTION_CODES[name] ?? 0;
+        Object.setPrototypeOf(this, DOMExceptionPolyfill.prototype);
+    }
+}
+
+// Extending Error means instances carry `stack`, which is what core-js's
+// feature test looks for; finding it, core-js leaves this constructor alone
+// instead of wrapping it.
+if (typeof g.DOMException !== "function") g.DOMException = DOMExceptionPolyfill;
+
+/* -------------------------------------------------------------------------- */
+/* ReadableStream                                                              */
+/* -------------------------------------------------------------------------- */
+
+if (typeof g.ReadableStream !== "function") g.ReadableStream = ReadableStreamPonyfill;
+
 /** Exported only so the polyfills can be exercised from a plain Node script. */
 export const __polyfills = {
     atob: atobPolyfill,
     btoa: btoaPolyfill,
     structuredClone: (value: unknown) => cloneValue(value, new Map()),
     TextDecoder: TextDecoderPolyfill,
+    DOMException: DOMExceptionPolyfill,
+    ReadableStream: ReadableStreamPonyfill,
 };

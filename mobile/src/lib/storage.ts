@@ -88,6 +88,26 @@ export async function markProcessed(id: string, remoteId: string): Promise<void>
 }
 
 /**
+ * Destroys this device's durable copy and drops it from the index.
+ *
+ * Every other operation here is additive precisely because the phone is the
+ * source of truth: once this runs, the file is gone from the custody boundary
+ * and only whatever was already extracted survives, on the server. Callers must
+ * have said that out loud to the user first — see `confirmDeleteSelected` in
+ * `app/upload.tsx`.
+ *
+ * Deleting the file is idempotent so a half-finished delete (file gone, index
+ * entry left behind) still clears on a retry.
+ */
+export async function forgetStatement(id: string): Promise<void> {
+    const items = await listStatements();
+    const target = items.find((item) => item.id === id);
+    if (!target) return;
+    await FileSystem.deleteAsync(target.localUri, { idempotent: true });
+    await writeIndex(items.filter((item) => item.id !== id));
+}
+
+/**
  * Forgets the backend statement after it has been deleted server-side. The
  * local file stays put, so it can be re-processed later.
  */
