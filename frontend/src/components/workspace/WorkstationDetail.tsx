@@ -16,6 +16,7 @@ import { CohortStats } from "./CohortStats";
 import { RuleEditorSheet } from "./RuleEditorSheet";
 import { ScenarioControls, monthlyCost, type Scenario } from "./ScenarioControls";
 import { useWorkspace } from "./WorkspaceProvider";
+import { WorkstationChat } from "./WorkstationChat";
 
 const PROFILE_KEY = "profile";
 const ACTIVITY_KEY = "activity";
@@ -148,13 +149,27 @@ export function WorkstationDetail({ workstation }: { workstation: Workstation })
                     )}
 
                     {profile && profile.count > 0 && (
-                        <div className="mt-6">
-                            <ScenarioControls
-                                profile={profile}
-                                scenario={scenario}
-                                onChange={setScenario}
-                            />
-                        </div>
+                        <>
+                            <div className="mt-6">
+                                <ScenarioControls
+                                    profile={profile}
+                                    scenario={scenario}
+                                    onChange={setScenario}
+                                />
+                            </div>
+
+                            {/* Last on the page, deliberately. The tiles and
+                                the chart answer what the product anticipated;
+                                this is for what it did not. A chat box above
+                                them would suggest the numbers need
+                                interpreting. */}
+                            <div className="mt-6">
+                                <WorkstationChat
+                                    workstationId={workstation.id}
+                                    period={period}
+                                />
+                            </div>
+                        </>
                     )}
                 </>
             )}

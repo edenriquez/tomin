@@ -29,6 +29,15 @@ class Settings(BaseSettings):
 
     cors_origins: str = "*"
 
+    # The one optional integration. Provider-agnostic on purpose: any endpoint
+    # that speaks OpenAI-shaped Chat Completions works (OpenRouter, Groq, a
+    # local Ollama), so switching is these three values and no code. All three
+    # empty is the normal state of a fresh clone -- the Workspace view still
+    # reads and only its chat band renders disabled.
+    llm_base_url: str = ""
+    llm_api_key: str = ""
+    llm_model: str = ""
+
     # Where the web dashboard lives, so the phone can hand the user a link to
     # the statement it just sealed and sent. The backend has no other reason to
     # know the frontend's address, which is exactly why it is configuration.

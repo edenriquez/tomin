@@ -9,6 +9,7 @@ from ..adapters.outbound.extraction import (
     PdfExtractor,
     SatXmlExtractor,
 )
+from ..adapters.outbound.chat import NullChat, OpenAiCompatibleChat
 from ..adapters.outbound.metrics import (
     CohortProfileResolver,
     FinancialAdviceResolver,
@@ -42,6 +43,7 @@ from ..application.use_cases import (
     ManageGoalsUseCase,
     ManageStatementsUseCase,
     ManageTagsUseCase,
+    AnswerWorkstationQuestion,
     ManageWorkstations,
     ProcessExtractedUseCase,
     ProcessFileUseCase,
@@ -229,6 +231,32 @@ class Container:
             categories=self.categories,
             user_labels=self.user_labels,
             cube=self.cube,
+        )
+
+    @cached_property
+    def chat(self):
+        """The LLM seam, or a null object when nothing is configured.
+
+        Injected rather than constructed at the call site so "no key set" is a
+        wiring decision made once, and every caller sees the same `available`
+        flag instead of each re-reading the environment.
+        """
+        settings = self.settings
+        if settings.llm_base_url and settings.llm_api_key and settings.llm_model:
+            return OpenAiCompatibleChat(
+                base_url=settings.llm_base_url,
+                api_key=settings.llm_api_key,
+                model=settings.llm_model,
+            )
+        return NullChat()
+
+    @cached_property
+    def answer_workstation_question(self) -> AnswerWorkstationQuestion:
+        return AnswerWorkstationQuestion(
+            chat=self.chat,
+            engine=self.metric_engine,
+            profile_resolver=CohortProfileResolver(self.metric_engine),
+            transactions=self.transactions,
         )
 
     @cached_property

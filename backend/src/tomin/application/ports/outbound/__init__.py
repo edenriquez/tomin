@@ -1,3 +1,4 @@
+from .chat import ChatMessage, ChatPort, ChatUnavailable
 from .cube import CubeReader, CubeWriter
 from .extraction import Extractor, ParserFactory, StatementParser, TemplateClassifier
 from .metrics import MetricEngine, MetricResolver
@@ -19,6 +20,9 @@ from .storage import FileStorage
 
 __all__ = [
     "AccountRepository",
+    "ChatMessage",
+    "ChatPort",
+    "ChatUnavailable",
     "CategoryRepository",
     "DashboardRepository",
     "DuplicateTagError",

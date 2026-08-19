@@ -13,10 +13,13 @@ vocabulary exists to prevent.
 
 from __future__ import annotations
 
+import json
 from uuid import UUID
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
+from .....application.dtos.metrics import Period
+from .....application.ports.outbound.chat import ChatMessage, ChatUnavailable
 from .....application.use_cases.workstations import WorkstationNotFound
 from .....domain.entities import WorkstationRule
 from ..auth import current_user_id, get_container
@@ -100,6 +103,87 @@ def delete_workstation(workstation_id: str):
         return jsonify(error="Workstation not found"), 404
     # The movements survive; only the lens is gone.
     return jsonify(workstation_id=workstation_id, deleted=True)
+
+
+@workstations_bp.get("/chat/status")
+def chat_status():
+    """Whether a model is configured, and which one.
+
+    A GET of its own so the client can render the chat band disabled *with its
+    reason* on first paint, rather than discovering the absence by asking a
+    question and getting an error. `model` is named so the disclosure can say
+    which third party the user's movements would be described to -- they are
+    entitled to know before they type, not after.
+    """
+    chat = get_container().answer_workstation_question
+    return jsonify(available=chat.available, model=chat.model_label)
+
+
+@workstations_bp.post("/<workstation_id>/chat")
+def chat(workstation_id: str):
+    """Answer a question about this lens, streamed.
+
+    Server-sent events rather than one JSON body: a grounded answer over six
+    months of movements takes seconds, and a blank panel for that long reads as
+    a hang. Streaming also keeps the request under any proxy's idle timeout.
+    """
+    body = request.get_json(silent=True) or {}
+    question = (body.get("question") or "").strip()
+    if not question:
+        return jsonify(error="question is required"), 400
+
+    container = get_container()
+    user_id = current_user_id()
+    try:
+        workstation = container.manage_workstations.get(
+            user_id=user_id, workstation_id=UUID(workstation_id)
+        )
+    except WorkstationNotFound:
+        return jsonify(error="Workstation not found"), 404
+
+    answerer = container.answer_workstation_question
+    if not answerer.available:
+        # 503 rather than 500: nothing is broken, the integration is simply not
+        # set up, and the client renders that as a disabled band with a reason.
+        return jsonify(error="No hay un modelo configurado.", available=False), 503
+
+    period = Period(start=body.get("start") or None, end=body.get("end") or None)
+    history = [
+        ChatMessage(role=m["role"], content=m["content"])
+        for m in (body.get("history") or [])
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant") and m.get("content")
+    ]
+
+    def events():
+        try:
+            for piece in answerer.stream(
+                user_id=user_id,
+                workstation=workstation,
+                period=period,
+                question=question,
+                history=history,
+            ):
+                yield _sse({"delta": piece})
+        except ChatUnavailable as exc:
+            # The stream has already started, so the status code is spent. The
+            # failure travels as a frame the client can render in place instead.
+            yield _sse({"error": str(exc)})
+        yield _sse({"done": True})
+
+    return Response(
+        events(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # nginx buffers text/event-stream by default and would hold the
+            # whole answer until the end, undoing the streaming entirely.
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _rule(raw) -> WorkstationRule:
