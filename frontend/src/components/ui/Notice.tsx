@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { API_URL } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
 /**
@@ -19,12 +20,20 @@ export function Notice({ children, className }: { children: ReactNode; className
     );
 }
 
-/** The standard "backend unreachable" copy, parameterized by what failed. */
+/**
+ * The standard "backend unreachable" copy, parameterized by what failed.
+ *
+ * The address comes from `API_URL`, never from a literal. It used to say "el
+ * puerto 8000" unconditionally, which is right until someone runs the backend
+ * anywhere else — and then the banner confidently contradicts the very detail
+ * printed next to it, sending the reader to check a port nothing was ever
+ * asked of.
+ */
 export function BackendNotice({ what, detail }: { what: string; detail: string }) {
     return (
         <Notice>
-            No pudimos cargar {what} ({detail}). Revisa que el backend esté corriendo en el
-            puerto 8000.
+            No pudimos cargar {what} ({detail}). Revisa que el backend esté corriendo en{" "}
+            {API_URL}.
         </Notice>
     );
 }
