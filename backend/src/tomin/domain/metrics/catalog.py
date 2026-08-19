@@ -210,6 +210,100 @@ FINANCIAL_ADVICE = MetricSpec(
     ignores_period=True,
 )
 
+# --- the workstation trio -------------------------------------------------
+# A "workstation" is a saved lens: a rule that names a subset of the ledger, and
+# the reading of that subset. Nothing here is a new *kind* of number -- it is
+# the ordinary measures under a client-supplied predicate, which is exactly what
+# the filter vocabulary was widened for.
+
+COHORT_ACTIVITY = MetricSpec(
+    id="cohort_activity",
+    title="Actividad del conjunto",
+    description=(
+        "Gasto y numero de movimientos por periodo, dentro del conjunto que "
+        "define la regla."
+    ),
+    group="Gasto",
+    kind="aggregation",
+    shape="series",
+    unit="MXN",
+    # The count travels with the total on purpose: 260 pesos is four top-ups or
+    # one plan, and a chart that cannot tell them apart is decoration.
+    measures=("expense_amount", "tx_count"),
+    filters=(
+        "category",
+        "currency",
+        "tag",
+        "statement",
+        "description_contains",
+        "amount_min",
+        "amount_max",
+        "exclude_tx",
+    ),
+    grains=("month", "day"),
+    default_grain="month",
+    requires=("transactions",),
+)
+
+COHORT_TOTALS = MetricSpec(
+    id="cohort_totals",
+    title="Totales del conjunto",
+    description=(
+        "Total, numero de movimientos y la distribucion de montos (minimo, "
+        "maximo, mediana) del conjunto."
+    ),
+    group="Gasto",
+    kind="aggregation",
+    shape="scalar",
+    unit="MXN",
+    measures=("expense_amount", "tx_count", "expense_min", "expense_max", "expense_median"),
+    filters=(
+        "category",
+        "currency",
+        "tag",
+        "statement",
+        "description_contains",
+        "amount_min",
+        "amount_max",
+        "exclude_tx",
+    ),
+    requires=("transactions",),
+)
+
+# Computed. The rhythm ("cada 1.8 dias", "3.8 por semana") is a function of the
+# gaps between movements, which has no expression in the measure x dimension x
+# filter grammar -- the same reason the advisor is a resolver.
+#
+# It reads the two metrics above through the engine rather than issuing its own
+# SQL, so "spend excludes transfers and excluded rows" stays declared once.
+COHORT_PROFILE = MetricSpec(
+    id="cohort_profile",
+    title="Perfil del conjunto",
+    description=(
+        "Como se comporta el conjunto: cuanto, cada cuanto y con que "
+        "regularidad. Los promedios se omiten cuando hay muy pocos movimientos "
+        "o muy poca historia."
+    ),
+    group="Gasto",
+    kind="computed",
+    shape="table",
+    # `none` for the same reason the advisor carries it: the row holds pesos,
+    # counts and days side by side, and labelling the whole card "MXN" would
+    # put a currency on a number of days.
+    unit="none",
+    filters=(
+        "category",
+        "currency",
+        "tag",
+        "statement",
+        "description_contains",
+        "amount_min",
+        "amount_max",
+        "exclude_tx",
+    ),
+    requires=("transactions",),
+)
+
 METRIC_CATALOG: dict[str, MetricSpec] = {
     spec.id: spec
     for spec in (
@@ -221,5 +315,8 @@ METRIC_CATALOG: dict[str, MetricSpec] = {
         LIFETIME_FLOW,
         INVESTMENT_PROJECTION,
         FINANCIAL_ADVICE,
+        COHORT_ACTIVITY,
+        COHORT_TOTALS,
+        COHORT_PROFILE,
     )
 }

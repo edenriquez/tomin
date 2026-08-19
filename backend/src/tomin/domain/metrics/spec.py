@@ -26,7 +26,12 @@ MetricKind = Literal["aggregation", "computed"]
 #: principles are the first: a row is a sentence plus the numbers that justify
 #: it, and calling that a "breakdown" would promise a total it does not have.
 MetricShape = Literal["scalar", "series", "breakdown", "table"]
-Aggregation = Literal["sum", "count"]
+#: ``min``/``max``/``median`` describe a *distribution* rather than a total:
+#: "what does one of these usually cost", which is the question a saved lens
+#: over a habit is really asking. Unlike the sums they cannot be expressed as a
+#: signed CASE, so they are only valid on a direction-homogeneous metric -- the
+#: compiler enforces that rather than trusting the catalog.
+Aggregation = Literal["sum", "count", "min", "max", "median"]
 #: Which side of the ledger a measure reads. ``net`` signs income positive and
 #: expense negative; ``any`` ignores direction entirely.
 Direction = Literal["expense", "income", "net", "any"]

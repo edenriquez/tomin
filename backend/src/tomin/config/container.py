@@ -10,6 +10,7 @@ from ..adapters.outbound.extraction import (
     SatXmlExtractor,
 )
 from ..adapters.outbound.metrics import (
+    CohortProfileResolver,
     FinancialAdviceResolver,
     InvestmentProjectionResolver,
 )
@@ -87,6 +88,7 @@ class Container:
         return [
             InvestmentProjectionResolver(),
             FinancialAdviceResolver(self.metric_engine),
+            CohortProfileResolver(self.metric_engine),
         ]
 
     @cached_property

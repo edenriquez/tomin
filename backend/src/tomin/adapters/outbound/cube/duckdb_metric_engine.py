@@ -150,9 +150,24 @@ class DuckDbMetricEngine:
         explicit = query.filters.get("currency")
         return str(explicit) if explicit else DEFAULT_CURRENCY
 
+    #: Aggregations that cannot be written as a signed CASE over both sides of
+    #: the ledger. MIN over `CASE WHEN expense THEN amount ELSE 0` is 0 the
+    #: moment one income row is in scope, which is a confident wrong answer
+    #: rather than an error -- so these are refused unless the metric already
+    #: reads one side and `_where` has filtered the other out.
+    _DISTRIBUTION_AGGS = {"min": "MIN", "max": "MAX", "median": "MEDIAN"}
+
     def _measure_sql(self, measure: Measure) -> str:
         column = self._sql(measure.column)
         tx_type = self._sql("tx_type")
+        if measure.agg in self._DISTRIBUTION_AGGS:
+            if measure.direction not in ("expense", "income"):
+                raise MetricCompilationError(
+                    f"Measure '{measure.name}' aggregates with {measure.agg.upper()} but "
+                    f"reads direction '{measure.direction}'. MIN/MAX/MEDIAN have no signed "
+                    "form; declare the measure on one side of the ledger."
+                )
+            return f"{self._DISTRIBUTION_AGGS[measure.agg]}({column})"
         if measure.agg == "count":
             return f"COUNT({column})"
         if measure.direction == "expense":

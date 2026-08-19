@@ -48,6 +48,42 @@ MEASURES: dict[str, Measure] = {
         direction="net",
         default_filters=_LEDGER_DEFAULTS,
     ),
+    # How many rows the set actually has. `expense_amount` alone cannot answer
+    # "what does one of these usually cost" -- a total of 260 is four top-ups or
+    # one plan, and the whole point of a saved lens is telling those apart.
+    "tx_count": Measure(
+        name="tx_count",
+        column="tx_id",
+        agg="count",
+        direction="expense",
+        default_filters=_LEDGER_DEFAULTS,
+    ),
+    # The shape of the habit, not its size. Together with the mean these are
+    # what a "how much should I put in each time" question is actually about.
+    "expense_min": Measure(
+        name="expense_min",
+        column="amount",
+        agg="min",
+        direction="expense",
+        default_filters=_LEDGER_DEFAULTS,
+    ),
+    "expense_max": Measure(
+        name="expense_max",
+        column="amount",
+        agg="max",
+        direction="expense",
+        default_filters=_LEDGER_DEFAULTS,
+    ),
+    # Median rather than mean for the typical charge: one 200-peso plan among
+    # twenty 15-peso top-ups moves the mean by a quarter and the median not at
+    # all, and it is the median that describes the habit.
+    "expense_median": Measure(
+        name="expense_median",
+        column="amount",
+        agg="median",
+        direction="expense",
+        default_filters=_LEDGER_DEFAULTS,
+    ),
     # Cash out of an ATM. Its own measure rather than a client-supplied filter,
     # because "which rows count as withdrawn cash" is a definition (fees are
     # not cash) and definitions belong to the measure, not to the caller.
