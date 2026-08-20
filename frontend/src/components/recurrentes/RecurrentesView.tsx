@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Repeat } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRight, Repeat, X } from "lucide-react";
 import { api, type RecurringItem } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { dayLabel, mxn, mxn2 } from "@/lib/format";
+import { dayLabel, monthLabel, mxn, mxn2 } from "@/lib/format";
 import { categoryName, useCategories } from "@/lib/categories";
 import { useBankScope } from "@/lib/banks";
 import { useAppData } from "@/components/AppChrome";
@@ -12,9 +12,10 @@ import { parsePeriodKey } from "@/lib/metrics";
 import { BackendNotice, EmptyState, NumberField, Skeleton } from "@/components/ui";
 import { ChartCard } from "@/components/ChartCard";
 import { usePanelSettings } from "@/components/settings/usePanelSettings";
+import { RangeBrush, type BucketRange } from "@/components/charts/RangeBrush";
 import { ChargeCalendar, type CalendarCharge } from "./ChargeCalendar";
 import { LoadTimelineChart } from "./LoadTimelineChart";
-import { buildTimeline, isStale, ledgerEnd, type Timeline } from "./projection";
+import { buildTimeline, isStale, ledgerEnd, monthKeyToDate, type Timeline } from "./projection";
 import { buildSeriesColors } from "./seriesColors";
 import { rhythmCopy } from "./rhythm";
 
@@ -150,6 +151,71 @@ export function RecurrentesView() {
         [selected, horizon]
     );
 
+    // A dragged run of months on the timeline. Stored as month KEYS, not bar
+    // indices: the axis moves when the horizon changes, the question ("what
+    // charges in feb–abr?") must not.
+    const [monthRange, setMonthRange] = useState<{ start: string; end: string } | null>(null);
+
+    // What the chart draws: the full timeline, or the dragged months as a
+    // zoom-in. Values are sliced in lockstep with the month axis, and the
+    // measured/projected boundary index shifts with the cut so the dashed
+    // rule and the Fog band keep marking the same moment.
+    const timelineView: Timeline = useMemo(() => {
+        if (!monthRange) return timeline;
+        const start = timeline.months.findIndex((m) => m >= monthRange.start);
+        let end = -1;
+        for (let i = timeline.months.length - 1; i >= 0; i--) {
+            if (timeline.months[i] <= monthRange.end) {
+                end = i;
+                break;
+            }
+        }
+        if (start < 0 || end < start) return timeline;
+        return {
+            ...timeline,
+            months: timeline.months.slice(start, end + 1),
+            firstFutureIndex: timeline.firstFutureIndex - start,
+            series: timeline.series.map((s) => ({
+                ...s,
+                values: s.values.slice(start, end + 1),
+            })),
+        };
+    }, [timeline, monthRange]);
+
+    // The brush maps drag pixels into whatever axis is on screen, so a drag
+    // inside a zoom narrows further. The chip is the way back out.
+    const handleBrush = useCallback(
+        (r: BucketRange) => {
+            const start = timelineView.months[r.start];
+            const end = timelineView.months[r.end];
+            if (start && end) setMonthRange({ start, end });
+        },
+        [timelineView.months]
+    );
+
+    const monthRangeLabel = useMemo(() => {
+        if (!monthRange) return null;
+        const label = (key: string) => monthLabel(monthKeyToDate(key), true);
+        return monthRange.start === monthRange.end
+            ? label(monthRange.start)
+            : `${label(monthRange.start)} – ${label(monthRange.end)}`;
+    }, [monthRange]);
+
+    // The table under the charts, narrowed to series that actually touch the
+    // dragged months — a real charge inside the range, or the expected next
+    // one landing there (the projected bars ARE those expectations).
+    const listedSeries = useMemo(() => {
+        if (items === null) return null;
+        if (!monthRange) return items;
+        const inRange = (iso: string | null | undefined) => {
+            const m = (iso ?? "").slice(0, 7);
+            return m >= monthRange.start && m <= monthRange.end;
+        };
+        return items.filter(
+            (i) => (i.charges ?? []).some((c) => inRange(c.date)) || inRange(i.next_expected)
+        );
+    }, [items, monthRange]);
+
     function togglePicked(i: RecurringItem) {
         const key = seriesKey(i);
         setPicked((cur) => {
@@ -196,10 +262,25 @@ export function RecurrentesView() {
                                     </span>
                                 </div>
 
-                                <LoadTimelineChart
-                                    timeline={timeline}
-                                    colorFor={colorOf}
-                                />
+                                {/* The zoom is the feedback (range={null}):
+                                    the axis narrows to the dragged months. */}
+                                <RangeBrush
+                                    buckets={timelineView.months.length}
+                                    range={null}
+                                    onRange={handleBrush}
+                                    disabled={timelineView.series.length === 0}
+                                >
+                                    <LoadTimelineChart
+                                        timeline={timelineView}
+                                        colorFor={colorOf}
+                                    />
+                                </RangeBrush>
+                                {timelineView.series.length > 0 && (
+                                    <p className="text-label text-ash">
+                                        Arrastra sobre los meses para acercarte y ver qué
+                                        series caen ahí.
+                                    </p>
+                                )}
 
                                 <Projection
                                     timeline={timeline}
@@ -246,21 +327,48 @@ export function RecurrentesView() {
                     </ChartCard>
 
                     <div className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
-                        <h2 className="font-display text-title-sm font-normal text-ink">
-                            Cada serie
-                        </h2>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <h2 className="font-display text-title-sm font-normal text-ink">
+                                Cada serie
+                                {listedSeries && monthRange && (
+                                    <span className="ml-2 font-sans text-body-sm text-graphite">
+                                        {listedSeries.length} de {items?.length ?? 0}
+                                    </span>
+                                )}
+                            </h2>
+                            {/* The dragged months, visible where they act. */}
+                            {monthRange && (
+                                <button
+                                    type="button"
+                                    title="Quitar el filtro de rango"
+                                    onClick={() => setMonthRange(null)}
+                                    className={cn(
+                                        "inline-flex items-center gap-1.5 rounded-control px-2.5 py-1",
+                                        "bg-soot text-label font-medium text-paper",
+                                        "transition-opacity duration-100 hover:opacity-80"
+                                    )}
+                                >
+                                    {monthRangeLabel}
+                                    <X size={12} aria-hidden />
+                                </button>
+                            )}
+                        </div>
                         <p className="mt-1 text-body-sm text-graphite">
                             Abre una serie para ver en qué días cae.
                         </p>
                         <div className="mt-4">
-                            {loading ? (
+                            {loading || listedSeries === null ? (
                                 <div className="space-y-2">
                                     {[0, 1, 2, 3].map((i) => (
                                         <Skeleton key={i} className="h-12" />
                                     ))}
                                 </div>
+                            ) : listedSeries.length === 0 ? (
+                                <p className="py-6 text-body text-graphite">
+                                    Ninguna serie cae en esos meses.
+                                </p>
                             ) : (
-                                <SeriesList items={items} />
+                                <SeriesList items={listedSeries} />
                             )}
                         </div>
                     </div>

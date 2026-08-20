@@ -45,11 +45,22 @@ export const COLOR_MODE_LABELS: Record<ColorMode, string> = {
 };
 
 /** Local-midnight ms, parsed by hand: Date.parse("2026-08-12") is UTC
- *  midnight, which is the previous evening in Mexico City. */
-function toMs(isoDate: string): number {
+ *  midnight, which is the previous evening in Mexico City.
+ *
+ *  Exported because the range filter compares against the chart's own x
+ *  values: the caller must place a transaction on the axis exactly the way
+ *  the chart did, or a selection edge would include a dot it visibly excludes. */
+export function dateToMs(isoDate: string): number {
     const [y, m, d] = isoDate.split("-").map(Number);
     return new Date(y, (m ?? 1) - 1, d ?? 1).getTime();
 }
+
+const toMs = dateToMs;
+
+/** A dragged x-range, in the same local-midnight ms as the marks. */
+export type ChartRange = { start: number; end: number };
+
+const HOUR_MS = 3_600_000;
 
 /**
  * Selection is two-way with the table:
@@ -68,6 +79,8 @@ export function TransactionsChart({
     windowId,
     selectedId,
     onSelect,
+    onRangeSelect,
+    zoomRange = null,
     height = 320,
 }: {
     /** Already window+search filtered, `tx_date DESC` from the API. */
@@ -82,6 +95,17 @@ export function TransactionsChart({
     windowId: WindowId;
     selectedId: string | null;
     onSelect: (id: string | null) => void;
+    /** Drag a horizontal range over the scatter → this fires with its bounds.
+     *  Scatter only: an aggregate bucket is many movements, and `flujo`'s axis
+     *  is categories, not time. Absent = dragging does nothing. */
+    onRangeSelect?: (range: ChartRange | null) => void;
+    /** The selected range, applied back to the axis as a zoom: the x domain
+     *  narrows to these bounds, so the drag reads as "open these weeks up",
+     *  not just "filter the table below". Scatter only. The chart REMOUNTS
+     *  when this changes (it is part of the key): a remount both applies the
+     *  new axis cleanly and erases the drawn rectangle — zoomed in, the
+     *  selection would cover the whole plot and say nothing. */
+    zoomRange?: ChartRange | null;
     height?: number;
 }) {
     const byCategory = colorMode === "categoria" && categories !== null;
@@ -197,6 +221,18 @@ export function TransactionsChart({
         throw new Error(`unknown chart mode: ${mode}`);
     }, [transactions, showIncome, mode, byCategory, categories, windowId]);
 
+    // Both handlers live in refs so the options memo does not rebuild every
+    // time the parent re-renders (parents pass inline functions). This is
+    // load-bearing, not an optimization: a rebuilt options object makes
+    // react-apexcharts call updateOptions, which tears down and redraws the
+    // chart's internals — and if that happens while a drag-selection gesture
+    // has a debounce timer pending, the timer fires against a destroyed
+    // gridRect and crashes with "Cannot read properties of null".
+    const onRangeSelectRef = useRef(onRangeSelect);
+    onRangeSelectRef.current = onRangeSelect;
+    const onSelectRef = useRef(onSelect);
+    onSelectRef.current = onSelect;
+
     // Refs shared between the event handler and the row→mark effect.
     const suppressEvent = useRef(false);
     const lastExeced = useRef<[number, number] | null>(null);
@@ -211,7 +247,7 @@ export function TransactionsChart({
     // declaration order — so the effect re-applies onto the fresh chart.
     useEffect(() => {
         lastExeced.current = null;
-    }, [mode, showIncome, colorMode]);
+    }, [mode, showIncome, colorMode, zoomRange]);
 
     // Row → mark. Data or mode changes rebuild the chart, so re-run then too.
     useEffect(() => {
@@ -250,6 +286,12 @@ export function TransactionsChart({
         };
     }, [selectedId, series]);
 
+    // Drag-to-filter, scatter only. `autoSelected: "selection"` is what makes
+    // a drag draw the range rectangle instead of zooming — Apex gates the
+    // gesture on that flag plus the (hidden) toolbar's selection tool, not on
+    // zoom.enabled.
+    const brushable = mode === "scatter" && onRangeSelect !== undefined;
+
     const options: ApexOptions = useMemo(() => {
         const neutral = chartTokens.neutral[3];
 
@@ -259,7 +301,35 @@ export function TransactionsChart({
                 // Animations off: hundreds of SVG marks re-tweening on every
                 // window change stutters on phones.
                 animations: { enabled: false },
+                ...(brushable && {
+                    toolbar: { show: false, autoSelected: "selection" as const },
+                    zoom: { enabled: false },
+                    selection: {
+                        enabled: true,
+                        type: "x" as const,
+                        fill: { color: colors.signal, opacity: 0.08 },
+                        stroke: {
+                            width: 1,
+                            color: colors.signal,
+                            opacity: 0.5,
+                            dashArray: 3,
+                        },
+                    },
+                }),
                 events: {
+                    ...(brushable && {
+                        selection: (
+                            _ctx: unknown,
+                            { xaxis }: { xaxis?: { min?: number; max?: number } }
+                        ) => {
+                            const { min, max } = xaxis ?? {};
+                            onRangeSelectRef.current?.(
+                                Number.isFinite(min) && Number.isFinite(max)
+                                    ? { start: min!, end: max! }
+                                    : null
+                            );
+                        },
+                    }),
                     dataPointSelection: (_e, _ctx, ctx) => {
                         if (suppressEvent.current) return;
                         const { seriesIndex, dataPointIndex, selectedDataPoints } = ctx;
@@ -270,7 +340,7 @@ export function TransactionsChart({
                             ? pointIdsRef.current[seriesIndex]?.[dataPointIndex] ?? null
                             : null;
                         lastExeced.current = still ? [seriesIndex, dataPointIndex] : null;
-                        onSelect(id);
+                        onSelectRef.current(id);
                     },
                 },
             },
@@ -343,6 +413,12 @@ export function TransactionsChart({
                 markers: { size: 4, strokeWidth: 0, hover: { size: 6 } },
                 xaxis: {
                     type: "datetime",
+                    // The dragged range, applied as the axis domain. A hair of
+                    // padding keeps the boundary dots off the plot's edges.
+                    ...(zoomRange && {
+                        min: zoomRange.start - HOUR_MS * 12,
+                        max: zoomRange.end + HOUR_MS * 12,
+                    }),
                     // Points are local-midnight ms; UTC rendering shifts them.
                     labels: {
                         datetimeUTC: false,
@@ -380,7 +456,7 @@ export function TransactionsChart({
 
         // Unreachable: both modes return above.
         throw new Error(`unknown chart mode: ${mode}`);
-    }, [mode, windowId, showIncome, byCategory, categories, transactions, seriesColors, stackedBuckets, onSelect]);
+    }, [mode, windowId, showIncome, byCategory, categories, transactions, seriesColors, stackedBuckets, brushable, zoomRange]);
 
     const type = mode === "scatter" ? "scatter" : "line";
     return (
@@ -391,7 +467,7 @@ export function TransactionsChart({
         <ApexChart
             // showIncome and colorMode are in the key too: both change the
             // series structure or color strategy, both remount-worthy.
-            key={`${mode}-${showIncome}-${colorMode}`}
+            key={`${mode}-${showIncome}-${colorMode}-${zoomRange?.start ?? "all"}-${zoomRange?.end ?? "all"}`}
             type={type}
             series={series}
             options={options}

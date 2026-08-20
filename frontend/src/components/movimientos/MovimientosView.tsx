@@ -19,9 +19,12 @@ import {
     COLOR_MODE_LABELS,
     COLOR_MODES,
     TransactionsChart,
+    dateToMs,
     type ChartMode,
+    type ChartRange,
     type ColorMode,
 } from "@/components/charts/TransactionsChart";
+import { dayLabel } from "@/lib/format";
 import { useCategories } from "@/lib/categories";
 import { useBankScope } from "@/lib/banks";
 import { FETCH_CAP, useTransactions } from "./useTransactions";
@@ -79,13 +82,28 @@ export function MovimientosView() {
     // The work queue: only machine-categorized rows. Session state, not a
     // setting — a filter you leave on forever is a different view.
     const [onlyAuto, setOnlyAuto] = useState(false);
+    // A range dragged over the chart. It narrows the list AND zooms the
+    // chart's x axis to the same bounds — the drag means "open this stretch
+    // up", and the two readings must answer for the same days. Dragging again
+    // inside the zoom narrows further; the chip's × is the way back out.
+    const [range, setRange] = useState<ChartRange | null>(null);
+
+    function clearRange() {
+        setRange(null);
+    }
 
     // A new window, search or page size is a new reading: selection and paging
     // reset.
     useEffect(() => {
         setSelectedId(null);
         setVisibleCount(page);
-    }, [windowId, search, dataVersion, page, onlyAuto, statementIds]);
+    }, [windowId, search, dataVersion, page, onlyAuto, statementIds, range]);
+
+    // New window or new data: the dragged dates may not even be on the axis
+    // any more. The zoom must not keep answering for a question nobody asked.
+    useEffect(() => {
+        setRange(null);
+    }, [windowId, dataVersion, statementIds]);
 
     const filtered = useMemo(() => {
         if (items === null) return null;
@@ -102,6 +120,18 @@ export function MovimientosView() {
         return out;
     }, [items, search, onlyAuto]);
 
+    // What the table shows: the chart's dataset, narrowed to the dragged
+    // range. Compared in the chart's own x values (local-midnight ms), so a
+    // dot visibly inside the rectangle is in the list, always.
+    const listed = useMemo(() => {
+        if (filtered === null) return null;
+        if (!range) return filtered;
+        return filtered.filter((t) => {
+            const ms = dateToMs(t.date);
+            return ms >= range.start && ms <= range.end;
+        });
+    }, [filtered, range]);
+
     // The queue size ignores the search — it is a fact about the window.
     const pendingCount = useMemo(
         () => (items ?? []).filter((t) => t.category_source === "auto").length,
@@ -109,18 +139,19 @@ export function MovimientosView() {
     );
 
     // Chart → list: make sure the selected row is inside the visible page
-    // before the list tries to scroll to it.
+    // before the list tries to scroll to it. Indexed against what the list
+    // actually shows — a dot outside the dragged range has no row to reveal.
     function handleSelect(id: string | null) {
         setSelectedId(id);
-        if (id && filtered) {
-            const index = filtered.findIndex((t) => t.id === id);
+        if (id && listed) {
+            const index = listed.findIndex((t) => t.id === id);
             if (index >= visibleCount) {
                 setVisibleCount(Math.ceil((index + 1) / page) * page);
             }
         }
     }
 
-    const loading = filtered === null;
+    const loading = filtered === null || listed === null;
 
     return (
         <div className="space-y-4 sm:space-y-6">
@@ -179,6 +210,8 @@ export function MovimientosView() {
                         windowId={windowId}
                         selectedId={selectedId}
                         onSelect={handleSelect}
+                        onRangeSelect={setRange}
+                        zoomRange={range}
                     />
                 )}
             </ChartCard>
@@ -188,12 +221,30 @@ export function MovimientosView() {
                     <div className="flex items-center gap-3">
                         <h2 className="flex items-baseline gap-2 font-display text-title-sm font-normal text-ink">
                             Movimientos
-                            {filtered && (
+                            {listed && (
                                 <span className="tabular font-sans text-body-sm text-graphite">
-                                    {filtered.length.toLocaleString("es-MX")}
+                                    {listed.length.toLocaleString("es-MX")}
                                 </span>
                             )}
                         </h2>
+                        {/* The dragged range as a removable chip: the filter
+                            must be visible where it acts (on the list), not
+                            only as a rectangle two cards up. */}
+                        {range && (
+                            <button
+                                type="button"
+                                title="Quitar el filtro de rango"
+                                onClick={clearRange}
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-control px-2.5 py-1",
+                                    "bg-soot text-label font-medium text-paper",
+                                    "transition-opacity duration-100 hover:opacity-80"
+                                )}
+                            >
+                                {rangeChipLabel(range)}
+                                <X size={12} aria-hidden />
+                            </button>
+                        )}
                         {pendingCount > 0 && (
                             <button
                                 type="button"
@@ -282,18 +333,20 @@ export function MovimientosView() {
                                 </div>
                             ))}
                         </div>
-                    ) : filtered.length === 0 ? (
+                    ) : listed.length === 0 ? (
                         <EmptyNote
                             search={search}
                             filtered={onlyAuto}
+                            ranged={range !== null}
                             onClear={() => {
                                 setSearch("");
                                 setOnlyAuto(false);
+                                clearRange();
                             }}
                         />
                     ) : (
                         <TransactionsList
-                            items={filtered}
+                            items={listed}
                             visibleCount={visibleCount}
                             onShowMore={() => setVisibleCount((c) => c + page)}
                             selectedId={selectedId}
@@ -310,17 +363,27 @@ export function MovimientosView() {
     );
 }
 
+/** "12 mar – 28 abr", or the single day when the drag stayed inside one. */
+function rangeChipLabel(range: ChartRange): string {
+    const from = dayLabel(new Date(range.start));
+    const to = dayLabel(new Date(range.end));
+    return from === to ? from : `${from} – ${to}`;
+}
+
 function EmptyNote({
     search,
     filtered,
+    ranged = false,
     onClear,
 }: {
     search: string;
     /** The "por revisar" filter is on — the emptiness may be its doing. */
     filtered: boolean;
+    /** A chart-dragged range is on — same suspicion. */
+    ranged?: boolean;
     onClear: () => void;
 }) {
-    const narrowed = Boolean(search.trim()) || filtered;
+    const narrowed = Boolean(search.trim()) || filtered || ranged;
     return (
         <EmptyState
             icon={narrowed ? SearchX : Inbox}
@@ -329,7 +392,9 @@ function EmptyNote({
                     ? `Nada coincide con «${search.trim()}»`
                     : filtered
                       ? "Nada por revisar aquí"
-                      : "Sin movimientos en este periodo"
+                      : ranged
+                        ? "Sin movimientos en ese rango"
+                        : "Sin movimientos en este periodo"
             }
             action={
                 narrowed && (

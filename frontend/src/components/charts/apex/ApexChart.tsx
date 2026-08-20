@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { ApexOptions } from "apexcharts";
 import { ChartSkeleton } from "@/components/ui";
 import { baseOptions } from "./theme";
@@ -51,7 +51,20 @@ export type ApexChartProps = {
     className?: string;
 };
 
-export function ApexChart({
+/**
+ * Memoized on props identity, and that is load-bearing: react-apexcharts
+ * calls updateOptions/updateSeries on effectively every re-render it
+ * receives (its own deep compare is against the chart's already-merged
+ * internal options, which never equal the incoming props). An update tears
+ * down and redraws the chart's internals, so a parent re-render during a
+ * drag-selection gesture — the selection handler setting state IS such a
+ * re-render — would destroy the gridRect a pending debounce timer still
+ * points at. Callers keep `options` and `series` referentially stable via
+ * useMemo; this memo turns that stability into "Apex is not touched at all".
+ */
+export const ApexChart = memo(ApexChartInner);
+
+function ApexChartInner({
     type,
     series,
     options,

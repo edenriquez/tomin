@@ -105,13 +105,15 @@ export function LoadTimelineChart({
     }
 
     return (
-        // Keyed by the series identity: react-apexcharts MUTATES the mounted
-        // chart on update and does not reliably re-apply a changed `colors`
-        // array when the series set changes — select-all would add bars in
-        // stale palette colors. A different selection is a different chart;
-        // remount it (animations are off, so the swap is invisible).
+        // Keyed by the series identity AND the month span: react-apexcharts
+        // MUTATES the mounted chart on update and does not reliably re-apply
+        // a changed `colors` array when the series set changes — nor the axis
+        // categories when only the series values change (a zoomed month range
+        // would keep the old month labels). A different selection is a
+        // different chart; remount it (animations are off, so the swap is
+        // invisible).
         <ApexChart
-            key={timeline.series.map((s) => s.item.label).join("|")}
+            key={`${timeline.series.map((s) => s.item.label).join("|")}·${timeline.months[0]}·${timeline.months.length}`}
             type="bar"
             series={timeline.series.map((s) => ({
                 name: s.item.label,

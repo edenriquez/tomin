@@ -20,6 +20,7 @@ import { resolveWindow, windowToPeriod } from "@/lib/window";
 import { useAppData } from "@/components/AppChrome";
 import { BackendNotice, EmptyState, Skeleton } from "@/components/ui";
 import { ChartCard } from "@/components/ChartCard";
+import { RangeBrush, type BucketRange } from "@/components/charts/RangeBrush";
 import { TransactionsList } from "@/components/movimientos/TransactionsList";
 import { useTransactions } from "@/components/movimientos/useTransactions";
 import { CategorySpendChart, type MonthlyCategoryPoint } from "./CategorySpendChart";
@@ -75,8 +76,12 @@ export function CategoriasView() {
 
     // What the list is showing. Both come from the chart or the chips, and
     // both are session state — a filter is a question, not a preference.
+    // Months are a RANGE ("2026-02".."2026-04"): a layer click asks about one
+    // month (start === end), a drag across the columns asks about several.
     const [pickedCategory, setPickedCategory] = useState<string | null>(null);
-    const [pickedMonth, setPickedMonth] = useState<string | null>(null);
+    const [pickedMonths, setPickedMonths] = useState<{ start: string; end: string } | null>(
+        null
+    );
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(PAGE);
 
@@ -125,7 +130,7 @@ export function CategoriasView() {
     // silently applying to data the user hasn't looked at yet.
     useEffect(() => {
         setPickedCategory(null);
-        setPickedMonth(null);
+        setPickedMonths(null);
         setSelectedId(null);
         setVisibleCount(PAGE);
     }, [windowId]);
@@ -194,11 +199,14 @@ export function CategoriasView() {
                 sameCategory(categoryName(categories, t.category_id), pickedCategory)
             );
         }
-        if (pickedMonth) {
-            out = out.filter((t) => t.date.slice(0, 7) === pickedMonth);
+        if (pickedMonths) {
+            out = out.filter((t) => {
+                const m = t.date.slice(0, 7);
+                return m >= pickedMonths.start && m <= pickedMonths.end;
+            });
         }
         return out;
-    }, [items, categories, pickedCategory, pickedMonth]);
+    }, [items, categories, pickedCategory, pickedMonths]);
 
     const filteredTotal = useMemo(
         () => (filtered ?? []).reduce((sum, t) => sum + t.amount, 0),
@@ -212,13 +220,14 @@ export function CategoriasView() {
             const same =
                 pickedCategory !== null &&
                 sameCategory(pickedCategory, category) &&
-                pickedMonth === month;
+                pickedMonths?.start === month &&
+                pickedMonths?.end === month;
             setPickedCategory(same ? null : category);
-            setPickedMonth(same ? null : month);
+            setPickedMonths(same ? null : { start: month, end: month });
             setSelectedId(null);
             setVisibleCount(PAGE);
         },
-        [pickedCategory, pickedMonth]
+        [pickedCategory, pickedMonths]
     );
 
     function pickCategory(name: string | null) {
@@ -228,19 +237,50 @@ export function CategoriasView() {
     }
 
     // The chart answers the same filter the list does: one category picked →
-    // its own monthly columns, in its color, on its own scale. The stack is
-    // for "where did each month go"; a single series is for "how does THIS
-    // one move" — the click that narrows the question narrows the drawing.
+    // its own monthly columns; a month range dragged → only those months, a
+    // zoom-in. The click or drag that narrows the question narrows the
+    // drawing — chart and list always describe the same set.
     const chartPoints = useMemo(() => {
-        if (!pickedCategory) return points;
-        return points.filter((pt) => sameCategory(pt.category, pickedCategory));
-    }, [points, pickedCategory]);
+        let out = points;
+        if (pickedCategory) out = out.filter((pt) => sameCategory(pt.category, pickedCategory));
+        if (pickedMonths) {
+            out = out.filter(
+                (pt) => pt.month >= pickedMonths.start && pt.month <= pickedMonths.end
+            );
+        }
+        return out;
+    }, [points, pickedCategory, pickedMonths]);
+
+    // The drawn chart's month axis, chronological — the brush maps drag
+    // pixels to indices into exactly this.
+    const monthKeys = useMemo(() => {
+        const keys: string[] = [];
+        for (const p of chartPoints) if (!keys.includes(p.month)) keys.push(p.month);
+        return keys;
+    }, [chartPoints]);
+
+    const handleBrush = useCallback(
+        (r: BucketRange) => {
+            const start = monthKeys[r.start];
+            const end = monthKeys[r.end];
+            if (!start || !end) return;
+            setPickedMonths({ start, end });
+            setSelectedId(null);
+            setVisibleCount(PAGE);
+        },
+        [monthKeys]
+    );
 
     const pickedMonthLabel = useMemo(() => {
-        if (!pickedMonth) return undefined;
-        const d = parsePeriodKey(pickedMonth);
-        return d ? monthLabel(d, true) : pickedMonth;
-    }, [pickedMonth]);
+        if (!pickedMonths) return undefined;
+        const label = (key: string) => {
+            const d = parsePeriodKey(key);
+            return d ? monthLabel(d, true) : key;
+        };
+        return pickedMonths.start === pickedMonths.end
+            ? label(pickedMonths.start)
+            : `${label(pickedMonths.start)} – ${label(pickedMonths.end)}`;
+    }, [pickedMonths]);
 
     return (
         <div className="space-y-4 sm:space-y-6">
@@ -257,19 +297,32 @@ export function CategoriasView() {
                             <Skeleton className="h-[360px]" />
                         ) : (
                             <>
-                                <CategorySpendChart
-                                    // Keyed by the filter: react-apexcharts
-                                    // mutates the mounted chart and keeps
-                                    // stale colors when the series set
-                                    // changes — a different selection is a
-                                    // different chart.
-                                    key={pickedCategory ?? "todas"}
-                                    points={chartPoints}
-                                    categoryColors={categoryColors}
-                                    onPick={handlePick}
-                                />
+                                {/* The zoom IS the feedback: the axis narrows
+                                    to the dragged months, so no persistent
+                                    highlight is drawn (range={null}) — it
+                                    would cover the whole plot. A drag inside
+                                    the zoom narrows further; the month chip
+                                    below is the way back out. */}
+                                <RangeBrush
+                                    buckets={monthKeys.length}
+                                    range={null}
+                                    onRange={handleBrush}
+                                >
+                                    <CategorySpendChart
+                                        // Keyed by the filters: react-apexcharts
+                                        // mutates the mounted chart and keeps
+                                        // stale colors and axes when the series
+                                        // or month set changes — a different
+                                        // selection is a different chart.
+                                        key={`${pickedCategory ?? "todas"}-${pickedMonths?.start ?? ""}-${pickedMonths?.end ?? ""}`}
+                                        points={chartPoints}
+                                        categoryColors={categoryColors}
+                                        onPick={handlePick}
+                                    />
+                                </RangeBrush>
                                 <p className="text-label text-ash">
-                                    Haz clic en una capa para ver sus movimientos.
+                                    Haz clic en una capa para ver sus movimientos, o
+                                    arrastra sobre los meses para acotar un rango.
                                     {untouched.length > 0 &&
                                         ` · Sin gasto: ${untouched.join(" · ")}`}
                                 </p>
@@ -299,9 +352,9 @@ export function CategoriasView() {
                                 chips={chips}
                                 picked={pickedCategory}
                                 onPick={pickCategory}
-                                month={pickedMonth}
+                                month={pickedMonths?.start ?? null}
                                 monthLabel={pickedMonthLabel}
-                                onClearMonth={() => setPickedMonth(null)}
+                                onClearMonth={() => setPickedMonths(null)}
                             />
                         </div>
 
@@ -320,7 +373,7 @@ export function CategoriasView() {
                                 </div>
                             ) : filtered.length === 0 ? (
                                 <p className="py-6 text-body text-graphite">
-                                    {pickedCategory || pickedMonth
+                                    {pickedCategory || pickedMonths
                                         ? "Ningún movimiento con este filtro."
                                         : "Sin movimientos en este periodo."}
                                 </p>
