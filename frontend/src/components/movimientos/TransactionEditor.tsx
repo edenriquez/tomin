@@ -411,9 +411,14 @@ function InlineNote({
 }
 
 /**
- * A first guess at the reusable text inside a noisy bank description: drop
- * date shapes, then tokens that are mostly digits, and keep the words —
- * always from the RAW text. Mirrors the backend's `series_key`.
+ * A first guess at the reusable text inside a noisy bank description —
+ * always from the RAW text. The backend matches the label as a *contiguous
+ * substring* of the normalized description, so the label must be a
+ * contiguous window of it: skipping over an interior "a", "de" or a
+ * reference number would produce a label that matches nothing, not even the
+ * row it came from. The window starts and ends on meaningful words, may
+ * carry short filler words along, and never crosses a date or a digit-heavy
+ * token (reference numbers differ per row and would kill the siblings).
  */
 const MONTHS =
     "enero|febrero|marzo|abril|mayo|junio|julio|agosto" +
@@ -427,15 +432,63 @@ const DATE_SHAPES = new RegExp(
     "gi"
 );
 
+/** The backend's `normalize`: lowercase, strip accents and punctuation,
+ *  collapse whitespace. Windowing over this text is what guarantees the
+ *  label survives the server's own normalization as a substring. */
+function normalizeText(text: string): string {
+    return text
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+/** A word worth matching on: long enough to mean something, not mostly a
+ *  number (account fragments, folios). */
+function isAnchor(w: string): boolean {
+    const digits = (w.match(/\d/g) ?? []).length;
+    return w.length >= 3 && digits <= w.length / 2;
+}
+
 function suggestLabel(t: Transaction): string {
     const source = t.raw_description || t.description || "";
-    const words = source
-        .replace(DATE_SHAPES, " ")
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((w) => {
-            const digits = (w.match(/\d/g) ?? []).length;
-            return w.length >= 3 && digits <= w.length / 2;
-        });
-    return words.slice(0, 4).join(" ");
+    let best = "";
+    let bestAnchors = 0;
+    // Dates split the text into segments a window may not cross: the raw
+    // description keeps its date, but a label spanning one would have to
+    // reproduce it verbatim — true for this row, false for its siblings.
+    for (const segment of source.split(DATE_SHAPES)) {
+        const tokens = normalizeText(segment ?? "").split(" ").filter(Boolean);
+        let i = 0;
+        while (i < tokens.length) {
+            if (!isAnchor(tokens[i])) {
+                i += 1;
+                continue;
+            }
+            const window: string[] = [];
+            let anchors = 0;
+            let j = i;
+            while (j < tokens.length && anchors < 4) {
+                const w = tokens[j];
+                if (isAnchor(w)) {
+                    window.push(w);
+                    anchors += 1;
+                } else if (w.length < 3 && !/\d/.test(w)) {
+                    window.push(w); // filler ("a", "de", "y") rides along
+                } else {
+                    break; // a digit-heavy token ends the window
+                }
+                j += 1;
+            }
+            while (window.length && !isAnchor(window[window.length - 1])) window.pop();
+            if (anchors > bestAnchors) {
+                bestAnchors = anchors;
+                best = window.join(" ");
+            }
+            i = j > i ? j : i + 1;
+        }
+    }
+    return best;
 }
