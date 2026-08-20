@@ -80,6 +80,45 @@ export const workstationsApi = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Conversations                                                               */
+/* -------------------------------------------------------------------------- */
+
+/** One persisted chat thread under a workstation. */
+export type Conversation = {
+    id: string;
+    workstation_id: string;
+    title: string;
+    created_at: string | null;
+    updated_at: string | null;
+};
+
+export type ConversationMessage = {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    created_at: string | null;
+};
+
+export const conversationsApi = {
+    list: (workstationId: string) =>
+        request<{ items: Conversation[]; total: number }>(
+            `/api/workstations/${workstationId}/conversations`
+        ),
+
+    /** The thread with its full transcript, oldest message first. */
+    get: (conversationId: string) =>
+        request<Conversation & { messages: ConversationMessage[] }>(
+            `/api/workstations/conversations/${conversationId}`
+        ),
+
+    remove: (conversationId: string) =>
+        request<{ conversation_id: string; deleted: boolean }>(
+            `/api/workstations/conversations/${conversationId}`,
+            { method: "DELETE" }
+        ),
+};
+
+/* -------------------------------------------------------------------------- */
 /* The profile row                                                             */
 /* -------------------------------------------------------------------------- */
 

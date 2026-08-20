@@ -7,6 +7,8 @@ from uuid import UUID
 from ....domain.entities import (
     Account,
     Category,
+    Conversation,
+    ConversationTurn,
     Dashboard,
     DashboardWidget,
     Goal,
@@ -141,6 +143,39 @@ class WorkstationRepository(Protocol):
 
     def delete(self, user_id: UUID, workstation_id: UUID) -> bool:
         """True when a row was removed, False when there was nothing to remove."""
+        ...
+
+
+class ConversationRepository(Protocol):
+    """Chat threads under a workstation, and their messages.
+
+    Same scoping rule as workstations: every read carries the user id in the
+    query, so a guessed conversation id is a 404 and never someone else's
+    questions about their money.
+    """
+
+    def list_for_workstation(
+        self, user_id: UUID, workstation_id: UUID
+    ) -> list[Conversation]: ...
+
+    def get(self, user_id: UUID, conversation_id: UUID) -> Conversation | None: ...
+
+    def add(self, conversation: Conversation) -> None: ...
+
+    def delete(self, user_id: UUID, conversation_id: UUID) -> bool:
+        """Remove the thread and its messages. True when a row was removed."""
+        ...
+
+    def delete_for_workstation(self, user_id: UUID, workstation_id: UUID) -> None:
+        """A deleted lens takes its conversations with it."""
+        ...
+
+    def turns(self, user_id: UUID, conversation_id: UUID) -> list[ConversationTurn]:
+        """The thread's messages, oldest first."""
+        ...
+
+    def append(self, user_id: UUID, turn: ConversationTurn) -> None:
+        """Store one message and bump the conversation's ``updated_at``."""
         ...
 
 

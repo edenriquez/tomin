@@ -2,6 +2,7 @@ from .db import Database
 from .repositories import (
     SqlAccountRepository,
     SqlCategoryRepository,
+    SqlConversationRepository,
     SqlDashboardRepository,
     SqlGoalRepository,
     SqlMerchantRepository,
@@ -17,6 +18,7 @@ __all__ = [
     "Database",
     "SqlAccountRepository",
     "SqlCategoryRepository",
+    "SqlConversationRepository",
     "SqlDashboardRepository",
     "SqlGoalRepository",
     "SqlMerchantRepository",

@@ -285,6 +285,50 @@ class WorkstationModel(Base):
     )
 
 
+class WorkstationConversationModel(Base):
+    """One chat thread under a workstation.
+
+    ``user_id`` is denormalized onto the thread (and onto every message) even
+    though the workstation already carries it: it is what lets RLS and every
+    query stay owner-scoped without a join, the same property every other
+    user-owned table here has.
+
+    No foreign keys, matching ``workstations`` itself: deletion cascades are
+    the application's job (``delete_for_workstation``), where they are visible
+    in code review instead of hidden in DDL.
+    """
+
+    __tablename__ = "workstation_conversations"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    workstation_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    title: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = _created_at()
+    #: Bumped on every appended message, so "most recently touched" — the order
+    #: the picker lists — is a column read, not a subquery over messages.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+
+class WorkstationChatMessageModel(Base):
+    """One stored chat message. Append-only; edits are not a thing chats do."""
+
+    __tablename__ = "workstation_chat_messages"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    conversation_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    role: Mapped[str] = mapped_column(String(12))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created_at()
+    #: Explicit order within the thread. ``created_at`` has second granularity
+    #: and a question and its answer land in the same second; sorting on time
+    #: alone could show an answer above its question.
+    position: Mapped[int] = mapped_column(Integer)
+
+
 class GoalModel(Base):
     __tablename__ = "goals"
 

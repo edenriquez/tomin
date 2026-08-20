@@ -5,6 +5,7 @@ from .metrics import MetricEngine, MetricResolver
 from .repositories import (
     AccountRepository,
     CategoryRepository,
+    ConversationRepository,
     DashboardRepository,
     DuplicateTagError,
     GoalRepository,
@@ -24,6 +25,7 @@ __all__ = [
     "ChatPort",
     "ChatUnavailable",
     "CategoryRepository",
+    "ConversationRepository",
     "DashboardRepository",
     "DuplicateTagError",
     "GoalRepository",

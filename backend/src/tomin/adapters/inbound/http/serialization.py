@@ -6,6 +6,8 @@ from decimal import Decimal
 from ....application.dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
 from ....application.dtos.metrics import MetricError, MetricResult
 from ....domain.entities import (
+    Conversation,
+    ConversationTurn,
     Dashboard,
     DashboardWidget,
     Goal,
@@ -220,6 +222,25 @@ def workstation_json(w: Workstation) -> dict:
         "filters": w.to_filters(),
         "created_at": _iso(w.created_at),
         "updated_at": _iso(w.updated_at),
+    }
+
+
+def conversation_json(c: Conversation) -> dict:
+    return {
+        "id": str(c.id),
+        "workstation_id": str(c.workstation_id),
+        "title": c.title,
+        "created_at": _iso(c.created_at),
+        "updated_at": _iso(c.updated_at),
+    }
+
+
+def conversation_turn_json(t: ConversationTurn) -> dict:
+    return {
+        "id": str(t.id),
+        "role": t.role,
+        "content": t.content,
+        "created_at": _iso(t.created_at),
     }
 
 

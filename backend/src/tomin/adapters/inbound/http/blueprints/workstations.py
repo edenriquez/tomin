@@ -19,11 +19,12 @@ from uuid import UUID
 from flask import Blueprint, Response, jsonify, request
 
 from .....application.dtos.metrics import Period
-from .....application.ports.outbound.chat import ChatMessage, ChatUnavailable
+from .....application.ports.outbound.chat import ChatUnavailable
+from .....application.use_cases.conversations import ConversationNotFound
 from .....application.use_cases.workstations import WorkstationNotFound
 from .....domain.entities import WorkstationRule
 from ..auth import current_user_id, get_container
-from ..serialization import workstation_json
+from ..serialization import conversation_json, conversation_turn_json, workstation_json
 
 workstations_bp = Blueprint("workstations", __name__, url_prefix="/api/workstations")
 
@@ -119,13 +120,66 @@ def chat_status():
     return jsonify(available=chat.available, model=chat.model_label)
 
 
+@workstations_bp.get("/<workstation_id>/conversations")
+def list_conversations(workstation_id: str):
+    """This lens's chat threads, most recently touched first.
+
+    Existence of the workstation is checked so an unknown lens is a 404 and
+    not an empty list — the client tells those apart.
+    """
+    user_id = current_user_id()
+    container = get_container()
+    try:
+        container.manage_workstations.get(
+            user_id=user_id, workstation_id=UUID(workstation_id)
+        )
+    except WorkstationNotFound:
+        return jsonify(error="Workstation not found"), 404
+    items = container.manage_conversations.list(
+        user_id=user_id, workstation_id=UUID(workstation_id)
+    )
+    return jsonify(items=[conversation_json(c) for c in items], total=len(items))
+
+
+@workstations_bp.get("/conversations/<conversation_id>")
+def get_conversation(conversation_id: str):
+    """One thread with its full transcript, oldest message first."""
+    user_id = current_user_id()
+    manager = get_container().manage_conversations
+    try:
+        conversation = manager.get(user_id=user_id, conversation_id=UUID(conversation_id))
+        turns = manager.turns(user_id=user_id, conversation_id=UUID(conversation_id))
+    except ConversationNotFound:
+        return jsonify(error="Conversation not found"), 404
+    return jsonify(
+        **conversation_json(conversation),
+        messages=[conversation_turn_json(t) for t in turns],
+    )
+
+
+@workstations_bp.delete("/conversations/<conversation_id>")
+def delete_conversation(conversation_id: str):
+    try:
+        get_container().manage_conversations.delete(
+            user_id=current_user_id(), conversation_id=UUID(conversation_id)
+        )
+    except ConversationNotFound:
+        return jsonify(error="Conversation not found"), 404
+    return jsonify(conversation_id=conversation_id, deleted=True)
+
+
 @workstations_bp.post("/<workstation_id>/chat")
 def chat(workstation_id: str):
-    """Answer a question about this lens, streamed.
+    """Answer a question about this lens, streamed, and remember the exchange.
 
     Server-sent events rather than one JSON body: a grounded answer over six
     months of movements takes seconds, and a blank panel for that long reads as
     a hang. Streaming also keeps the request under any proxy's idle timeout.
+
+    The thread is durable. ``conversation_id`` continues an existing one; when
+    absent, a new conversation is opened and announced in the first frame so
+    the client can adopt its id. History comes from storage, never from the
+    request — the stored thread is the one record of what was actually said.
     """
     body = request.get_json(silent=True) or {}
     question = (body.get("question") or "").strip()
@@ -148,13 +202,44 @@ def chat(workstation_id: str):
         return jsonify(error="No hay un modelo configurado.", available=False), 503
 
     period = Period(start=body.get("start") or None, end=body.get("end") or None)
-    history = [
-        ChatMessage(role=m["role"], content=m["content"])
-        for m in (body.get("history") or [])
-        if isinstance(m, dict) and m.get("role") in ("user", "assistant") and m.get("content")
-    ]
+
+    manager = container.manage_conversations
+    raw_conversation_id = body.get("conversation_id")
+    created = None
+    if raw_conversation_id:
+        try:
+            conversation = manager.get(
+                user_id=user_id, conversation_id=UUID(raw_conversation_id)
+            )
+        except (ConversationNotFound, ValueError):
+            return jsonify(error="Conversation not found"), 404
+        if str(conversation.workstation_id) != str(workstation.id):
+            # A thread about one set continued under another would ground the
+            # model in numbers the transcript never saw.
+            return jsonify(error="Conversation belongs to another workstation"), 400
+    else:
+        conversation = manager.start(
+            user_id=user_id,
+            workstation_id=workstation.id,
+            first_question=question,
+        )
+        created = conversation
+
+    history = manager.history(user_id=user_id, conversation_id=conversation.id)
+    # The question is stored before the model speaks: a stream that dies
+    # mid-answer still leaves the thread showing what was asked.
+    manager.append(
+        user_id=user_id,
+        conversation_id=conversation.id,
+        role="user",
+        content=question,
+    )
 
     def events():
+        if created is not None:
+            # First frame, so the client can adopt the id before any token.
+            yield _sse({"conversation": conversation_json(created)})
+        answer_pieces: list[str] = []
         try:
             for piece in answerer.stream(
                 user_id=user_id,
@@ -163,11 +248,20 @@ def chat(workstation_id: str):
                 question=question,
                 history=history,
             ):
+                answer_pieces.append(piece)
                 yield _sse({"delta": piece})
         except ChatUnavailable as exc:
             # The stream has already started, so the status code is spent. The
             # failure travels as a frame the client can render in place instead.
             yield _sse({"error": str(exc)})
+        # Whatever arrived is what the user read; a partial answer on a dropped
+        # stream is still part of the record. An empty one is not stored.
+        manager.append(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            role="assistant",
+            content="".join(answer_pieces),
+        )
         yield _sse({"done": True})
 
     return Response(

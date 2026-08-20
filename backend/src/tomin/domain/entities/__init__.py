@@ -1,5 +1,6 @@
 from .account import Account
 from .category import Category
+from .conversation import Conversation, ConversationTurn, title_from_question
 from .dashboard import WIDGET_SIZES, Dashboard, DashboardWidget
 from .goal import Goal
 from .merchant import Merchant
@@ -14,6 +15,8 @@ __all__ = [
     "WIDGET_SIZES",
     "Account",
     "Category",
+    "Conversation",
+    "ConversationTurn",
     "Dashboard",
     "DashboardWidget",
     "Goal",
@@ -25,4 +28,5 @@ __all__ = [
     "Workstation",
     "WorkstationRule",
     "slugify",
+    "title_from_question",
 ]

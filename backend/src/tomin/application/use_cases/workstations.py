@@ -21,7 +21,7 @@ from ...domain.entities import Workstation, WorkstationRule
 from ...domain.metrics.catalog import COHORT_PROFILE, METRIC_CATALOG
 from ...domain.metrics.spec import MetricSpec, MetricValidationError
 from ...domain.metrics.vocabulary import FILTERS
-from ..ports.outbound import WorkstationRepository
+from ..ports.outbound import ConversationRepository, WorkstationRepository
 
 
 class WorkstationNotFound(LookupError):
@@ -54,8 +54,15 @@ def validate_rule(
 class ManageWorkstations:
     """List, read, create, update and delete a user's workstations."""
 
-    def __init__(self, workstations: WorkstationRepository) -> None:
+    def __init__(
+        self,
+        workstations: WorkstationRepository,
+        conversations: ConversationRepository | None = None,
+    ) -> None:
         self._workstations = workstations
+        # Optional so the many tests that construct this use case bare keep
+        # working; production wiring always passes it.
+        self._conversations = conversations
 
     def list(self, *, user_id: UUID) -> list[Workstation]:
         return self._workstations.list_for_user(user_id)
@@ -128,6 +135,10 @@ class ManageWorkstations:
     def delete(self, *, user_id: UUID, workstation_id: UUID) -> None:
         if not self._workstations.delete(user_id, workstation_id):
             raise WorkstationNotFound(str(workstation_id))
+        # The lens takes its conversations with it: a thread about a set that
+        # no longer exists has nothing left to be about.
+        if self._conversations is not None:
+            self._conversations.delete_for_workstation(user_id, workstation_id)
 
 
 __all__ = [

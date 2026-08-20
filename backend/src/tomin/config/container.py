@@ -28,6 +28,7 @@ from ..adapters.outbound.persistence import (
     SqlTransactionRepository,
     SqlUserAliasRepository,
     SqlUserLabelRepository,
+    SqlConversationRepository,
     SqlWorkstationRepository,
 )
 from ..adapters.outbound.persistence.migrator import upgrade_to_head
@@ -44,6 +45,7 @@ from ..application.use_cases import (
     ManageStatementsUseCase,
     ManageTagsUseCase,
     AnswerWorkstationQuestion,
+    ManageConversations,
     ManageWorkstations,
     ProcessExtractedUseCase,
     ProcessFileUseCase,
@@ -132,6 +134,10 @@ class Container:
     @cached_property
     def workstations(self) -> SqlWorkstationRepository:
         return SqlWorkstationRepository(self.database)
+
+    @cached_property
+    def conversations(self) -> SqlConversationRepository:
+        return SqlConversationRepository(self.database)
 
     @cached_property
     def categories(self) -> SqlCategoryRepository:
@@ -263,7 +269,15 @@ class Container:
     def manage_workstations(self) -> ManageWorkstations:
         # No cube and no engine: a workstation stores a *question*. Reading it
         # is the ordinary metric path with the rule handed over as filters.
-        return ManageWorkstations(workstations=self.workstations)
+        return ManageWorkstations(
+            workstations=self.workstations,
+            # So deleting a lens also deletes its chat threads.
+            conversations=self.conversations,
+        )
+
+    @cached_property
+    def manage_conversations(self) -> ManageConversations:
+        return ManageConversations(conversations=self.conversations)
 
     @cached_property
     def manage_tags(self) -> ManageTagsUseCase:

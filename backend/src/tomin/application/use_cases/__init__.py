@@ -19,6 +19,7 @@ from .statements import (
     StatementNotFoundError,
 )
 from .tags import ManageTagsUseCase, TagNotFoundError
+from .conversations import ConversationNotFound, ManageConversations
 from .workstation_chat import AnswerWorkstationQuestion
 from .workstations import (
     ManageWorkstations,
@@ -62,6 +63,8 @@ __all__ = [
     "UnknownCategoryError",
     "UpdateTransactionUseCase",
     "AnswerWorkstationQuestion",
+    "ConversationNotFound",
+    "ManageConversations",
     "ManageWorkstations",
     "WorkstationNotFound",
 ]

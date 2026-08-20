@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -12,6 +12,8 @@ from ....application.ports.outbound.repositories import DuplicateTagError
 from ....domain.entities import (
     Account,
     Category,
+    Conversation,
+    ConversationTurn,
     Dashboard,
     DashboardWidget,
     Goal,
@@ -44,6 +46,8 @@ from .models import (
     TransactionTagModel,
     UserAliasModel,
     UserCategoryLabelModel,
+    WorkstationChatMessageModel,
+    WorkstationConversationModel,
     WorkstationModel,
 )
 
@@ -636,6 +640,155 @@ class SqlWorkstationRepository:
                 tag_id=_uuid_or_none(raw.get("tag_id")),
             ),
             excluded_tx_ids=[UUID(i) for i in (m.excluded_tx_ids or [])],
+            created_at=m.created_at,
+            updated_at=m.updated_at,
+        )
+
+
+class SqlConversationRepository:
+    """Chat threads under a workstation, and their messages.
+
+    Same discipline as the workstation repo: every read is user-scoped in the
+    query itself, so a guessed id is a 404 and never someone else's questions.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def list_for_workstation(
+        self, user_id: UUID, workstation_id: UUID
+    ) -> list[Conversation]:
+        with self._db.session() as s:
+            models = s.scalars(
+                select(WorkstationConversationModel)
+                .where(
+                    WorkstationConversationModel.user_id == _u(user_id),
+                    WorkstationConversationModel.workstation_id == _u(workstation_id),
+                )
+                # Most recently touched first: the thread you were just in is
+                # the one you most likely want back.
+                .order_by(
+                    WorkstationConversationModel.updated_at.desc(),
+                    WorkstationConversationModel.id,
+                )
+            ).all()
+            return [self._to_entity(m) for m in models]
+
+    def get(self, user_id: UUID, conversation_id: UUID) -> Conversation | None:
+        with self._db.session() as s:
+            model = s.scalars(
+                select(WorkstationConversationModel).where(
+                    WorkstationConversationModel.id == _u(conversation_id),
+                    WorkstationConversationModel.user_id == _u(user_id),
+                )
+            ).first()
+            return self._to_entity(model) if model else None
+
+    def add(self, conversation: Conversation) -> None:
+        with self._db.session() as s:
+            s.add(
+                WorkstationConversationModel(
+                    id=_u(conversation.id),
+                    user_id=_u(conversation.user_id),
+                    workstation_id=_u(conversation.workstation_id),
+                    title=conversation.title,
+                )
+            )
+
+    def delete(self, user_id: UUID, conversation_id: UUID) -> bool:
+        with self._db.session() as s:
+            model = s.get(WorkstationConversationModel, _u(conversation_id))
+            if model is None or model.user_id != _u(user_id):
+                return False
+            s.execute(
+                delete(WorkstationChatMessageModel).where(
+                    WorkstationChatMessageModel.conversation_id == _u(conversation_id)
+                )
+            )
+            s.delete(model)
+            return True
+
+    def delete_for_workstation(self, user_id: UUID, workstation_id: UUID) -> None:
+        with self._db.session() as s:
+            ids = s.scalars(
+                select(WorkstationConversationModel.id).where(
+                    WorkstationConversationModel.user_id == _u(user_id),
+                    WorkstationConversationModel.workstation_id == _u(workstation_id),
+                )
+            ).all()
+            if not ids:
+                return
+            s.execute(
+                delete(WorkstationChatMessageModel).where(
+                    WorkstationChatMessageModel.conversation_id.in_(ids)
+                )
+            )
+            s.execute(
+                delete(WorkstationConversationModel).where(
+                    WorkstationConversationModel.id.in_(ids)
+                )
+            )
+
+    def turns(self, user_id: UUID, conversation_id: UUID) -> list[ConversationTurn]:
+        with self._db.session() as s:
+            models = s.scalars(
+                select(WorkstationChatMessageModel)
+                .where(
+                    WorkstationChatMessageModel.conversation_id == _u(conversation_id),
+                    WorkstationChatMessageModel.user_id == _u(user_id),
+                )
+                .order_by(WorkstationChatMessageModel.position)
+            ).all()
+            return [
+                ConversationTurn(
+                    id=UUID(m.id),
+                    conversation_id=UUID(m.conversation_id),
+                    role=m.role,
+                    content=m.content,
+                    created_at=m.created_at,
+                )
+                for m in models
+            ]
+
+    def append(self, user_id: UUID, turn: ConversationTurn) -> None:
+        with self._db.session() as s:
+            # The ownership check and the position are read inside the same
+            # session as the write, so two appends cannot mint one position.
+            conversation = s.get(
+                WorkstationConversationModel, _u(turn.conversation_id)
+            )
+            if conversation is None or conversation.user_id != _u(user_id):
+                return
+            position = s.scalar(
+                select(func.count())
+                .select_from(WorkstationChatMessageModel)
+                .where(
+                    WorkstationChatMessageModel.conversation_id
+                    == _u(turn.conversation_id)
+                )
+            )
+            s.add(
+                WorkstationChatMessageModel(
+                    id=_u(turn.id),
+                    user_id=_u(user_id),
+                    conversation_id=_u(turn.conversation_id),
+                    role=turn.role,
+                    content=turn.content,
+                    position=position or 0,
+                )
+            )
+            # Python time, not func.now(): SQL now() has second granularity on
+            # SQLite, and two threads touched in the same second would tie —
+            # the picker's "most recent first" needs microseconds to be true.
+            conversation.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    @staticmethod
+    def _to_entity(m: WorkstationConversationModel) -> Conversation:
+        return Conversation(
+            id=UUID(m.id),
+            user_id=UUID(m.user_id),
+            workstation_id=UUID(m.workstation_id),
+            title=m.title,
             created_at=m.created_at,
             updated_at=m.updated_at,
         )
