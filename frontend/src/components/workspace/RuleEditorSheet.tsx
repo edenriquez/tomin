@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { Button, Checkbox, EmptyState, Sheet, Skeleton } from "@/components/ui";
+import { Button, Checkbox, EmptyState, Select, Sheet, Skeleton } from "@/components/ui";
 import { useAppData } from "@/components/AppChrome";
 import { useTransactions } from "@/components/movimientos/useTransactions";
 import { useBankScope } from "@/lib/banks";
+import { useCategories } from "@/lib/categories";
 import { mxn } from "@/lib/format";
 import { dayLabel } from "@/lib/format";
 import type { Workstation, WorkstationDraft, WorkstationRule } from "@/lib/workstations";
@@ -15,10 +16,10 @@ import type { Workstation, WorkstationDraft, WorkstationRule } from "@/lib/works
  * Define a set by watching it form.
  *
  * The whole design of this sheet is step one: the user types what they want to
- * isolate and the matching movements filter **underneath them, as they type**.
- * A rule builder that only shows its result after you apply it is a form; one
- * that shows it while you write is a search, and people are already fluent in
- * search.
+ * isolate — or picks a category — and the matching movements filter
+ * **underneath them, as they choose**. A rule builder that only shows its
+ * result after you apply it is a form; one that shows it while you write is a
+ * search, and people are already fluent in search.
  *
  * Everything else — the amount bounds, the per-row exclusions — is refinement
  * on a set the user can already see.
@@ -41,8 +42,10 @@ export function RuleEditorSheet({
     const { bounds, dataVersion } = useAppData();
     const { statementIds } = useBankScope(dataVersion);
     const { items } = useTransactions(bounds, dataVersion, statementIds);
+    const categories = useCategories();
 
     const [needle, setNeedle] = useState("");
+    const [categoryId, setCategoryId] = useState<string | null>(null);
     const [min, setMin] = useState("");
     const [max, setMax] = useState("");
     const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -55,6 +58,7 @@ export function RuleEditorSheet({
     useEffect(() => {
         if (!open) return;
         setNeedle(existing?.rule.description_contains ?? seed);
+        setCategoryId(existing?.rule.category_id ?? null);
         setMin(existing?.rule.amount_min ?? "");
         setMax(existing?.rule.amount_max ?? "");
         setExcluded(new Set(existing?.excluded_tx_ids ?? []));
@@ -67,26 +71,42 @@ export function RuleEditorSheet({
     // round-tripping per keystroke. It mirrors the backend's `contains`
     // predicate — folded and lowercased on both sides — so what the user sees
     // here is what the saved rule will select.
+    // A rule needs a subject: something typed, a category chosen, or both.
+    // Amount bounds alone stay disabled — "everything between 10 and 300" is
+    // not a set anyone means, and the backend rejects a rule with no anchor.
+    const hasSubject = Boolean(needle.trim() || categoryId);
+
     const matches = useMemo(() => {
-        if (!items || !needle.trim()) return [];
-        const q = fold(needle);
+        if (!items || !(needle.trim() || categoryId)) return [];
+        const q = fold(needle.trim());
         const lo = min.trim() ? Number(min) : null;
         const hi = max.trim() ? Number(max) : null;
         return items.filter((t) => {
             if (t.type !== "expense") return false;
-            if (!fold(t.description).includes(q)) return false;
+            if (categoryId && t.category_id !== categoryId) return false;
+            if (q && !fold(t.description).includes(q)) return false;
             if (lo !== null && t.amount < lo) return false;
             if (hi !== null && t.amount > hi) return false;
             return true;
         });
-    }, [items, needle, min, max]);
+    }, [items, needle, categoryId, min, max]);
 
     const kept = matches.filter((t) => !excluded.has(t.id));
     const boundsInverted = Boolean(min.trim() && max.trim() && Number(min) > Number(max));
-    const canSave = needle.trim().length > 0 && name.trim().length > 0 && !boundsInverted;
+    const canSave = hasSubject && name.trim().length > 0 && !boundsInverted;
+
+    /** The name that follows the rule until the user takes it over: the needle
+     *  while there is one, else the chosen category's name. */
+    function autoName(nextNeedle: string, nextCategoryId: string | null): string {
+        if (nextNeedle.trim()) return capitalize(nextNeedle);
+        if (nextCategoryId) return categories?.get(nextCategoryId)?.name ?? "";
+        return "";
+    }
 
     async function save() {
-        const rule: WorkstationRule = { description_contains: needle.trim() };
+        const rule: WorkstationRule = {};
+        if (needle.trim()) rule.description_contains = needle.trim();
+        if (categoryId) rule.category_id = categoryId;
         if (min.trim()) rule.amount_min = min.trim();
         if (max.trim()) rule.amount_max = max.trim();
 
@@ -108,7 +128,7 @@ export function RuleEditorSheet({
             open={open}
             onClose={onClose}
             title={existing ? "Editar análisis" : "Nuevo análisis"}
-            description="Escribe lo que quieres aislar y mira cómo se forma el conjunto."
+            description="Escribe o elige una categoría y mira cómo se forma el conjunto."
             width={560}
             footer={
                 <>
@@ -130,7 +150,7 @@ export function RuleEditorSheet({
                         setNeedle(e.target.value);
                         // The name follows the search until the user takes it
                         // over. Naming a thing you just described is busywork.
-                        if (!nameTouched) setName(capitalize(e.target.value));
+                        if (!nameTouched) setName(autoName(e.target.value, categoryId));
                     }}
                     placeholder="recarga"
                     className={cn(
@@ -141,6 +161,27 @@ export function RuleEditorSheet({
             </label>
 
             <div className="mt-4 flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-label text-graphite">Categoría</span>
+                    <Select<string>
+                        aria-label="Categoría"
+                        value={categoryId}
+                        options={
+                            categories
+                                ? Array.from(categories.entries()).map(([id, c]) => ({
+                                      value: id,
+                                      label: c.name,
+                                  }))
+                                : []
+                        }
+                        placeholder="cualquiera"
+                        onChange={(v) => {
+                            setCategoryId(v);
+                            if (!nameTouched) setName(autoName(needle, v));
+                        }}
+                        className="w-44"
+                    />
+                </div>
                 <label className="flex flex-col gap-1.5">
                     <span className="text-label text-graphite">Monto desde</span>
                     <Bound value={min} onChange={setMin} placeholder="cualquiera" />
@@ -175,7 +216,7 @@ export function RuleEditorSheet({
             <div className="mt-6 border-t border-mist pt-4">
                 <div className="flex items-baseline justify-between gap-3">
                     <span className="text-body font-medium text-ink">
-                        {needle.trim() ? countLabel(kept.length) : "Escribe algo arriba"}
+                        {hasSubject ? countLabel(kept.length) : "Escribe o elige una categoría"}
                     </span>
                     {excluded.size > 0 && (
                         <button
@@ -196,9 +237,11 @@ export function RuleEditorSheet({
                     </div>
                 )}
 
-                {items !== null && needle.trim() && matches.length === 0 && (
+                {items !== null && hasSubject && matches.length === 0 && (
                     <EmptyState icon={SearchX} title="Nada coincide">
-                        Ningún movimiento del periodo contiene «{needle.trim()}».
+                        {needle.trim() && !categoryId
+                            ? `Ningún movimiento del periodo contiene «${needle.trim()}».`
+                            : "Ningún movimiento del periodo cumple estas condiciones."}
                     </EmptyState>
                 )}
 

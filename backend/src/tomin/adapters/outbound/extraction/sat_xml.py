@@ -14,6 +14,14 @@ class SatXmlExtractor:
         name = filename.lower()
         return name.endswith(".xml") or (mime or "").endswith("xml")
 
-    def extract(self, data: bytes, filename: str, mime: str | None) -> ExtractedDocument:
+    def extract(
+        self,
+        data: bytes,
+        filename: str,
+        mime: str | None,
+        password: str | None = None,
+    ) -> ExtractedDocument:
+        # `password` is part of the Extractor contract for encrypted PDFs;
+        # SAT XML has no such thing, so it is accepted and ignored.
         xml = data.decode("utf-8", errors="replace")
         return ExtractedDocument(kind="xml", filename=filename, xml=xml, mime=mime)

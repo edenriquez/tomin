@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from "react";
 import type { ApexOptions } from "apexcharts";
+import { colors as palette } from "@/design/tokens";
 import { compactMxn, mxn } from "@/lib/format";
 import { ApexChart } from "@/components/charts/apex/ApexChart";
 
@@ -99,11 +100,30 @@ export function CategorySpendChart({
                 offsetY: -4,
             },
             // Per-layer, not shared: the tooltip names the thing a click would
-            // filter to, so hovering previews the gesture.
+            // filter to, so hovering previews the gesture. The month's total
+            // rides along — the layer answers "on what", the total "how much",
+            // without hunting the column's full height against the axis.
             tooltip: {
                 shared: false,
                 intersect: true,
-                y: { formatter: (v: number) => mxn(v) },
+                custom: ({ series, seriesIndex, dataPointIndex }) => {
+                    const category = lookup.current.categories[seriesIndex] ?? "";
+                    const value = series[seriesIndex]?.[dataPointIndex] ?? 0;
+                    const total = (series as number[][]).reduce(
+                        (sum, layer) => sum + (layer[dataPointIndex] ?? 0),
+                        0
+                    );
+                    return `
+                        <div style="padding:8px 10px">
+                            <div style="font-size:12px;color:${palette.graphite}">${escapeHtml(monthLabels[dataPointIndex] ?? "")}</div>
+                            <div style="font-size:13px;color:${palette.ink};display:flex;align-items:center;gap:6px">
+                                <span style="width:8px;height:8px;border-radius:9999px;background:${colors[seriesIndex]};display:inline-block"></span>
+                                <span>${escapeHtml(category)}</span>
+                                <span style="font-variant-numeric:tabular-nums">${mxn(value)}</span>
+                            </div>
+                            <div style="margin-top:2px;font-size:12px;color:${palette.graphite};font-variant-numeric:tabular-nums">Total del mes ${mxn(total)}</div>
+                        </div>`;
+                },
             },
             states: { active: { filter: { type: "darken", value: 0.6 } } },
         }),
@@ -111,4 +131,13 @@ export function CategorySpendChart({
     );
 
     return <ApexChart type="bar" series={series} options={options} height={height} />;
+}
+
+/** Category names are user-written text landing in tooltip HTML. */
+function escapeHtml(s: string): string {
+    return s
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
 }

@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from uuid import UUID
 
 from ...domain.entities import Statement, Transaction
 from ...domain.services.aliases import AliasService
 from ...domain.services.categorization import CategorizationService
 from ...domain.services.flags import detect_flags
+from ...domain.services.transfers import TransferPartyService, pair_transfers
 from ...domain.value_objects.enums import StatementSource, StatementStatus
 from ..dtos.extraction import ExtractedDocument
 from ..ports.outbound import (
@@ -23,6 +25,7 @@ from ..ports.outbound import (
     TransactionRepository,
     UserAliasRepository,
     UserLabelRepository,
+    UserTransferPartyRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,7 @@ class _StatementIngestion:
         merchants: MerchantRepository,
         user_labels: UserLabelRepository,
         user_aliases: UserAliasRepository,
+        transfer_parties: UserTransferPartyRepository,
         cube: CubeWriter,
     ) -> None:
         self._classifier = classifier
@@ -77,6 +81,7 @@ class _StatementIngestion:
         self._merchants = merchants
         self._user_labels = user_labels
         self._user_aliases = user_aliases
+        self._transfer_parties = transfer_parties
         self._cube = cube
 
     def _reject_duplicate(self, user_id: UUID, file_hash: str, filename: str) -> None:
@@ -128,12 +133,16 @@ class _StatementIngestion:
         # Same trick for display names: an alias taught yesterday renames
         # today's upload at ingest, raw_description untouched.
         aliaser = AliasService(self._user_aliases.list_for_user(user_id))
+        # And for self-transfers: a counterparty the user vouched for ("this
+        # name is me") flags matching movements the wording rules cannot.
+        parties = TransferPartyService(self._transfer_parties.list_for_user(user_id))
         domain_txs: list[Transaction] = []
         for p in parsed.transactions:
             cls = categorizer.classify(p.raw_description)
             # Derived once, at ingest, so every later read agrees. A
             # transfer is not spend and a withdrawal is not a category.
             flags = detect_flags(p.raw_description)
+            is_transfer = flags.is_transfer or parties.is_own(p.raw_description)
             domain_txs.append(
                 Transaction(
                     user_id=user_id,
@@ -147,8 +156,9 @@ class _StatementIngestion:
                     status=p.status,
                     category_id=cls.category_id,
                     merchant_id=cls.merchant_id,
-                    is_transfer=flags.is_transfer,
-                    is_cash_withdrawal=flags.is_cash_withdrawal,
+                    is_transfer=is_transfer,
+                    # A transfer is never a cash withdrawal (flags.py).
+                    is_cash_withdrawal=flags.is_cash_withdrawal and not is_transfer,
                 )
             )
 
@@ -158,11 +168,43 @@ class _StatementIngestion:
 
         self._cube.upsert_transactions(domain_txs)
 
+        self._pair_mirrors(user_id)
+
         return ProcessFileResult(
             statement_id=statement.id,
             template=template,
             transactions_created=len(domain_txs),
         )
+
+    def _pair_mirrors(self, user_id: UUID) -> None:
+        """Flag mirrored self-transfer legs the new statement just completed.
+
+        Runs over the whole ledger, not the new rows: the statement that just
+        arrived may hold the *missing half* of a transfer sent months ago from
+        an account uploaded earlier. The domain rule (transfers.py) is
+        conservative and skips anything a human already answered, so the pass
+        is safe to repeat on every ingest.
+        """
+        pairs = pair_transfers(list(self._transactions.iter_for_user(user_id)))
+        if not pairs:
+            return
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        touched: list[Transaction] = []
+        for legs in pairs:
+            for t in legs:
+                # A pair may lean on an already-flagged anchor — only the
+                # fresh leg needs writing.
+                if t.is_transfer:
+                    continue
+                t.is_transfer = True
+                t.is_cash_withdrawal = False
+                t.transfer_source = "auto"
+                t.updated_at = now
+                self._transactions.update(t)
+                touched.append(t)
+        if touched:
+            self._cube.upsert_transactions(touched)
+            logger.info("ingest: paired %d mirrored self-transfer(s)", len(pairs))
 
 
 class ProcessFileUseCase(_StatementIngestion):
@@ -187,6 +229,7 @@ class ProcessFileUseCase(_StatementIngestion):
         merchants: MerchantRepository,
         user_labels: UserLabelRepository,
         user_aliases: UserAliasRepository,
+        transfer_parties: UserTransferPartyRepository,
         cube: CubeWriter,
         file_storage: FileStorage,
     ) -> None:
@@ -199,14 +242,23 @@ class ProcessFileUseCase(_StatementIngestion):
             merchants=merchants,
             user_labels=user_labels,
             user_aliases=user_aliases,
+            transfer_parties=transfer_parties,
             cube=cube,
         )
         self._extractors = extractors
         self._file_storage = file_storage
 
     def execute(
-        self, *, user_id: UUID, data: bytes, filename: str, mime: str | None = None
+        self,
+        *,
+        user_id: UUID,
+        data: bytes,
+        filename: str,
+        mime: str | None = None,
+        password: str | None = None,
     ) -> ProcessFileResult:
+        # Hashed over the encrypted bytes as uploaded, never a decrypted form:
+        # re-sending the same protected file must dedupe against itself.
         file_hash = hashlib.sha256(data).hexdigest()
         # Checked before extraction, not inside `_ingest`: OCR is the expensive
         # step and a re-upload should not pay for it.
@@ -218,7 +270,9 @@ class ProcessFileUseCase(_StatementIngestion):
 
         handle = self._file_storage.save(data, filename)
         try:
-            doc = extractor.extract(self._file_storage.read(handle), filename, mime)
+            doc = extractor.extract(
+                self._file_storage.read(handle), filename, mime, password=password
+            )
             return self._ingest(
                 user_id=user_id,
                 doc=doc,

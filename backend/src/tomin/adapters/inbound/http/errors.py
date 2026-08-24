@@ -5,6 +5,7 @@ import logging
 from flask import Flask, jsonify
 from werkzeug.exceptions import HTTPException
 
+from ....application.ports.outbound import PdfPasswordError
 from ....application.use_cases.process_file import (
     DuplicateStatementError,
     UnsupportedFileError,
@@ -29,6 +30,20 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(UnsupportedFileError)
     def _unsupported(err: UnsupportedFileError):
         return jsonify(error="Unsupported file type", detail=str(err)), 415
+
+    @app.errorhandler(PdfPasswordError)
+    def _pdf_password(err: PdfPasswordError):
+        # 422 with a machine-readable code: the file itself is fine, the
+        # request just lacks (or mis-states) the password, and the client
+        # needs to know which of the two to say to the user.
+        return (
+            jsonify(
+                error="This PDF is password-protected",
+                code=f"pdf_password_{err.reason}",
+                detail=str(err),
+            ),
+            422,
+        )
 
     @app.errorhandler(StatementNotFoundError)
     def _statement_missing(err: StatementNotFoundError):

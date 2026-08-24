@@ -46,6 +46,7 @@ from .models import (
     TransactionTagModel,
     UserAliasModel,
     UserCategoryLabelModel,
+    UserTransferPartyModel,
     WorkstationChatMessageModel,
     WorkstationConversationModel,
     WorkstationModel,
@@ -113,6 +114,7 @@ def _to_transaction(m: TransactionModel, tag_ids: list[UUID] | None = None) -> T
         notes=m.notes,
         excluded_from_stats=bool(m.excluded_from_stats),
         is_transfer=bool(m.is_transfer),
+        transfer_source=m.transfer_source or "auto",
         is_cash_withdrawal=bool(m.is_cash_withdrawal),
         updated_at=m.updated_at,
     )
@@ -143,6 +145,7 @@ class SqlTransactionRepository:
                         notes=t.notes,
                         excluded_from_stats=t.excluded_from_stats,
                         is_transfer=t.is_transfer,
+                        transfer_source=t.transfer_source,
                         is_cash_withdrawal=t.is_cash_withdrawal,
                     )
                 )
@@ -193,6 +196,13 @@ class SqlTransactionRepository:
             m.category_source = transaction.category_source
             m.notes = transaction.notes
             m.excluded_from_stats = transaction.excluded_from_stats
+            # Correctable like the category: the wording heuristics guess at
+            # ingest, and taught parties, mirror pairing or the user overturn
+            # the guess later. A transfer is never a cash withdrawal, so the
+            # pair travels together.
+            m.is_transfer = transaction.is_transfer
+            m.transfer_source = transaction.transfer_source
+            m.is_cash_withdrawal = transaction.is_cash_withdrawal
             m.updated_at = transaction.updated_at
 
     def _base_query(self, user_id, start, end, category_id, search, statement_ids=None):
@@ -865,6 +875,32 @@ class SqlUserAliasRepository:
                 UserAliasModel(
                     id=str(uuid4()), user_id=_u(user_id), label=label, alias=alias
                 )
+            )
+
+
+class SqlUserTransferPartyRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def list_for_user(self, user_id: UUID) -> list[str]:
+        with self._db.session() as s:
+            stmt = select(UserTransferPartyModel).where(
+                UserTransferPartyModel.user_id == _u(user_id)
+            )
+            return [m.party for m in s.scalars(stmt).all()]
+
+    def add(self, user_id: UUID, party: str) -> None:
+        with self._db.session() as s:
+            existing = s.scalars(
+                select(UserTransferPartyModel).where(
+                    UserTransferPartyModel.user_id == _u(user_id),
+                    UserTransferPartyModel.party == party,
+                )
+            ).first()
+            if existing:
+                return
+            s.add(
+                UserTransferPartyModel(id=str(uuid4()), user_id=_u(user_id), party=party)
             )
 
 

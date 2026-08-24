@@ -34,6 +34,66 @@ def client(app):
     return app.test_client()
 
 
+#: Password of the encrypted-PDF fixture below.
+PDF_PASSWORD = "tomin123"
+
+
+def _build_text_pdf(lines: list[str]) -> bytes:
+    """A minimal but *valid* one-page PDF (xref and all) with real text.
+
+    Hand-assembled so the suite does not need a PDF-authoring dependency;
+    pypdf (dev extra) only encrypts it, which it can do without one.
+    """
+    content = b"BT /F1 12 Tf 72 720 Td 14 TL\n" + b"".join(
+        b"(" + ln.encode("latin-1") + b") Tj T*\n" for ln in lines
+    ) + b"ET"
+    objs = [
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+        b"/Resources<</Font<</F1 5 0 R>>>>>>",
+        b"<</Length %d>>stream\n%s\nendstream" % (len(content), content),
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objs, start=1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n%s\nendobj\n" % (i, body))
+    xref_at = out.tell()
+    out.write(b"xref\n0 %d\n" % (len(objs) + 1))
+    out.write(b"0000000000 65535 f \n")
+    for off in offsets:
+        out.write(b"%010d 00000 n \n" % off)
+    out.write(
+        b"trailer\n<</Size %d/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF\n"
+        % (len(objs) + 1, xref_at)
+    )
+    return out.getvalue()
+
+
+@pytest.fixture
+def encrypted_pdf_bytes():
+    """A password-protected statement-shaped PDF (password: ``PDF_PASSWORD``)."""
+    from pypdf import PdfReader, PdfWriter
+
+    plain = _build_text_pdf(
+        [
+            "BANCO DE PRUEBA Estado de Cuenta",
+            "Periodo 01/ENE/2026 al 31/ENE/2026",
+            "01/ENE/2026 COMPRA OXXO 123.45",
+            "02/ENE/2026 SPEI RECIBIDO NOMINA 500.00",
+        ]
+    )
+    writer = PdfWriter()
+    writer.append(PdfReader(io.BytesIO(plain)))
+    writer.encrypt(user_password=PDF_PASSWORD, algorithm="AES-128")
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
 @pytest.fixture
 def sample_cfdi_bytes():
     xml = (

@@ -88,10 +88,30 @@ export function LoadTimelineChart({
                           ],
                       }
                     : {},
+            // Per-layer, plus the month's total: the layer answers "which
+            // serie", the total "cuánto carga el mes" — measured or proyectado,
+            // the band above already says which.
             tooltip: {
                 shared: false,
                 intersect: true,
-                y: { formatter: (v: number) => mxn(v) },
+                custom: ({ series, seriesIndex, dataPointIndex }) => {
+                    const label = timeline.series[seriesIndex]?.item.label ?? "";
+                    const value = series[seriesIndex]?.[dataPointIndex] ?? 0;
+                    const total = (series as number[][]).reduce(
+                        (sum, layer) => sum + (layer[dataPointIndex] ?? 0),
+                        0
+                    );
+                    return `
+                        <div style="padding:8px 10px">
+                            <div style="font-size:12px;color:${colors.graphite}">${escapeHtml(labels[dataPointIndex] ?? "")}</div>
+                            <div style="font-size:13px;color:${colors.ink};display:flex;align-items:center;gap:6px">
+                                <span style="width:8px;height:8px;border-radius:9999px;background:${colorFor(label)};display:inline-block"></span>
+                                <span>${escapeHtml(label)}</span>
+                                <span style="font-variant-numeric:tabular-nums">${mxn(value)}</span>
+                            </div>
+                            <div style="margin-top:2px;font-size:12px;color:${colors.graphite};font-variant-numeric:tabular-nums">Total del mes ${mxn(total)}</div>
+                        </div>`;
+                },
             },
         };
     }, [labels, timeline, colorFor]);
@@ -123,4 +143,13 @@ export function LoadTimelineChart({
             height={height}
         />
     );
+}
+
+/** Series labels are bank/user text landing in tooltip HTML. */
+function escapeHtml(s: string): string {
+    return s
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
 }

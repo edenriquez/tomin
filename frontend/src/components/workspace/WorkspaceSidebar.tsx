@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, MessageSquareText, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Skeleton } from "@/components/ui";
+import { useCategories } from "@/lib/categories";
 import { describeRule } from "@/lib/workstations";
 import { useWorkspace } from "./WorkspaceProvider";
 
@@ -33,6 +34,7 @@ export function WorkspaceSidebar({
     variant?: "rail" | "page";
 }) {
     const { items, error } = useWorkspace();
+    const categories = useCategories();
 
     return (
         <nav aria-label="Análisis" className={cn(variant === "rail" && "w-60 shrink-0")}>
@@ -104,7 +106,7 @@ export function WorkspaceSidebar({
                                     number in the detail is only as trustworthy
                                     as the set, and the set is this. */}
                                 <span className="mt-0.5 block truncate text-label text-ash">
-                                    {describeRule(w)}
+                                    {describeRule(w, categories)}
                                 </span>
                             </Link>
 

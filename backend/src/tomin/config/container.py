@@ -28,6 +28,7 @@ from ..adapters.outbound.persistence import (
     SqlTransactionRepository,
     SqlUserAliasRepository,
     SqlUserLabelRepository,
+    SqlUserTransferPartyRepository,
     SqlConversationRepository,
     SqlWorkstationRepository,
 )
@@ -47,6 +48,8 @@ from ..application.use_cases import (
     AnswerWorkstationQuestion,
     ManageConversations,
     ManageWorkstations,
+    MarkTransferPartyUseCase,
+    PairTransfersUseCase,
     ProcessExtractedUseCase,
     ProcessFileUseCase,
     RealiasUseCase,
@@ -155,6 +158,10 @@ class Container:
     def user_aliases(self) -> SqlUserAliasRepository:
         return SqlUserAliasRepository(self.database)
 
+    @cached_property
+    def user_transfer_parties(self) -> SqlUserTransferPartyRepository:
+        return SqlUserTransferPartyRepository(self.database)
+
     # --- pipeline components --------------------------------------------
     @cached_property
     def classifier(self) -> KeywordTemplateClassifier:
@@ -182,6 +189,7 @@ class Container:
             merchants=self.merchants,
             user_labels=self.user_labels,
             user_aliases=self.user_aliases,
+            transfer_parties=self.user_transfer_parties,
             cube=self.cube,
             file_storage=self.file_storage,
         )
@@ -199,6 +207,7 @@ class Container:
             merchants=self.merchants,
             user_labels=self.user_labels,
             user_aliases=self.user_aliases,
+            transfer_parties=self.user_transfer_parties,
             cube=self.cube,
         )
 
@@ -236,6 +245,21 @@ class Container:
             transactions=self.transactions,
             categories=self.categories,
             user_labels=self.user_labels,
+            cube=self.cube,
+        )
+
+    @cached_property
+    def mark_transfer(self) -> MarkTransferPartyUseCase:
+        return MarkTransferPartyUseCase(
+            transactions=self.transactions,
+            transfer_parties=self.user_transfer_parties,
+            cube=self.cube,
+        )
+
+    @cached_property
+    def pair_transfers(self) -> PairTransfersUseCase:
+        return PairTransfersUseCase(
+            transactions=self.transactions,
             cube=self.cube,
         )
 

@@ -35,12 +35,17 @@ def upload_statement():
     if not data:
         return jsonify(error="Empty file"), 400
 
+    # Only for encrypted PDFs. Used once to open the document, then dropped
+    # with the rest of the request — it is never persisted or logged.
+    password = request.form.get("password") or None
+
     container = get_container()
     result = container.process_file.execute(
         user_id=user_id,
         data=data,
         filename=upload.filename or "upload",
         mime=upload.mimetype,
+        password=password,
     )
     # The full statement rides along so the onboarding review step can show
     # what the OCR understood (bank, period) without a second round trip.

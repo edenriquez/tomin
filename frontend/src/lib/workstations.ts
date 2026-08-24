@@ -9,6 +9,7 @@
  */
 
 import { request } from "./api";
+import type { CategoryInfo } from "./categories";
 import type { MetricParams } from "./metrics";
 
 /** The conditions a rule can state. All optional; they compose as AND. */
@@ -170,9 +171,17 @@ function str(value: unknown): string | null {
 /* -------------------------------------------------------------------------- */
 
 /** The rule as one line of Spanish, for the collapsed header. */
-export function describeRule(w: Workstation): string {
+export function describeRule(
+    w: Workstation,
+    /** From `useCategories()`; without it a category condition shows as the
+     *  generic "una categoría" rather than its name. */
+    categories?: Map<string, CategoryInfo> | null
+): string {
     const parts: string[] = [];
     if (w.rule.description_contains) parts.push(`«${w.rule.description_contains}»`);
+    if (w.rule.category_id) {
+        parts.push(categories?.get(w.rule.category_id)?.name ?? "una categoría");
+    }
     if (w.rule.amount_min && w.rule.amount_max) {
         parts.push(`$${w.rule.amount_min}–$${w.rule.amount_max}`);
     } else if (w.rule.amount_min) {

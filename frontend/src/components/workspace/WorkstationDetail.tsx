@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { BackendNotice, Button } from "@/components/ui";
 import { useAppData } from "@/components/AppChrome";
+import { useCategories } from "@/lib/categories";
 import { useMetricBatch } from "@/lib/useMetricBatch";
 import { isMetricError, type MetricQuery } from "@/lib/metrics";
 import { windowToPeriod } from "@/lib/window";
@@ -32,6 +33,7 @@ const ACTIVITY_KEY = "activity";
 export function WorkstationDetail({ workstation }: { workstation: Workstation }) {
     const { windowId } = useAppData();
     const { update, remove } = useWorkspace();
+    const categories = useCategories();
     const router = useRouter();
 
     const [editing, setEditing] = useState(false);
@@ -91,7 +93,7 @@ export function WorkstationDetail({ workstation }: { workstation: Workstation })
                         figure below depends on it; collapsed because nobody
                         comes here to admire their filter. */}
                     <p className="mt-0.5 truncate text-body-sm text-graphite">
-                        {describeRule(workstation)}
+                        {describeRule(workstation, categories)}
                     </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">

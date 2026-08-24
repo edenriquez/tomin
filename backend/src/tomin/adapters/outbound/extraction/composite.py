@@ -28,9 +28,17 @@ class PdfExtractor:
     def supports(self, filename: str, mime: str | None) -> bool:
         return filename.lower().endswith(".pdf")
 
-    def extract(self, data: bytes, filename: str, mime: str | None) -> ExtractedDocument:
+    def extract(
+        self,
+        data: bytes,
+        filename: str,
+        mime: str | None,
+        password: str | None = None,
+    ) -> ExtractedDocument:
         try:
-            return self._text.extract(data, filename, mime)
+            return self._text.extract(data, filename, mime, password=password)
         except NeedsOcrError:
             logger.info("No text layer in %s; falling back to OCR", filename)
-            return self._ocr.extract(data, filename, mime)
+            # Reaching OCR means the text extractor already opened the file,
+            # so a password that got this far is known-good.
+            return self._ocr.extract(data, filename, mime, password=password)

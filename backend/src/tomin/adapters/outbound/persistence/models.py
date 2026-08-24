@@ -123,6 +123,13 @@ class TransactionModel(Base):
     is_transfer: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=sa_false(), default=False
     )
+    # Who decided `is_transfer`: the machine ("auto") or the user ("user").
+    # Same reasoning as `category_source`: a re-flagging pass — heuristic
+    # change, taught party, mirror pairing — must never overwrite a human's
+    # answer, and without this column it could not tell the two apart.
+    transfer_source: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="auto", default="auto"
+    )
     is_cash_withdrawal: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=sa_false(), default=False
     )
@@ -170,6 +177,26 @@ class UserAliasModel(Base):
     user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
     label: Mapped[str] = mapped_column(String(120))
     alias: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = _created_at()
+
+
+class UserTransferPartyModel(Base):
+    """A counterparty name the user declared as their own (see migration 0016).
+
+    "Eduardo Yael Enriquez Tapia" on a transfer is the user paying themselves,
+    but no description-wording rule can know that — the signal is the *name*,
+    and only its owner can vouch for it. `party` is stored normalized so
+    ingest matching and the unique constraint agree about case and accents.
+    """
+
+    __tablename__ = "user_transfer_parties"
+    __table_args__ = (
+        UniqueConstraint("user_id", "party", name="uq_user_transfer_parties_user_party"),
+    )
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    party: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = _created_at()
 
 

@@ -59,6 +59,7 @@ class UpdateTransactionUseCase:
         description=UNSET,
         notes=UNSET,
         excluded_from_stats=UNSET,
+        is_transfer=UNSET,
     ) -> Transaction:
         transaction = self._transactions.get(transaction_id)
         # Someone else's transaction is reported as missing rather than
@@ -79,6 +80,15 @@ class UpdateTransactionUseCase:
             transaction.notes = notes
         if excluded_from_stats is not UNSET:
             transaction.excluded_from_stats = bool(excluded_from_stats)
+        if is_transfer is not UNSET:
+            transaction.is_transfer = bool(is_transfer)
+            # A human answered "is this my own money moving?" — the automatic
+            # passes (heuristics, taught parties, mirror pairing) must never
+            # overturn it in either direction.
+            transaction.transfer_source = "user"
+            if transaction.is_transfer:
+                # Domain rule: a transfer is never a cash withdrawal.
+                transaction.is_cash_withdrawal = False
 
         transaction.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self._transactions.update(transaction)

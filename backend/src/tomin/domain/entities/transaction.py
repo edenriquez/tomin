@@ -12,6 +12,12 @@ from ..value_objects.enums import TransactionStatus, TxType
 #: is a correction, and a correction is never overwritten by a later guess.
 CategorySource = Literal["auto", "user"]
 
+#: Who decided ``is_transfer``. Same contract as :data:`CategorySource`: the
+#: flag heuristics, the taught-party matcher and the mirror pairing all write
+#: ``auto`` and never touch a row marked ``user`` — a human's answer to "is
+#: this my own money moving?" outranks every future guess.
+TransferSource = Literal["auto", "user"]
+
 
 @dataclass(slots=True)
 class Transaction:
@@ -46,6 +52,7 @@ class Transaction:
     #: by default from every spend measure -- counting a card payment *and* the
     #: card's own charges is the same pesos twice.
     is_transfer: bool = False
+    transfer_source: TransferSource = "auto"
     #: Cash out of an ATM. A flag rather than a category, because a
     #: withdrawal's category is genuinely unknown: the statement cannot see
     #: what the cash was spent on.

@@ -250,6 +250,22 @@ class UserAliasRepository(Protocol):
 
 
 @runtime_checkable
+class UserTransferPartyRepository(Protocol):
+    """Per-user own-account counterparty names (migration 0016).
+
+    Parties arrive already normalized; this store does not re-normalize.
+    """
+
+    def list_for_user(self, user_id: UUID) -> list[str]:
+        """Normalized party names, ready for TransferPartyService."""
+        ...
+
+    def add(self, user_id: UUID, party: str) -> None:
+        """Idempotent: re-teaching the same party is a no-op."""
+        ...
+
+
+@runtime_checkable
 class UserLabelRepository(Protocol):
     """Per-user learned categorization vocabulary (migration 0010).
 

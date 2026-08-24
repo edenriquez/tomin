@@ -47,6 +47,7 @@ def transaction_json(t: Transaction) -> dict:
         # Derived facts, serialized so client-side aggregates (the Flujo
         # chart) can honor the same ledger rules the cube does.
         "is_transfer": t.is_transfer,
+        "transfer_source": t.transfer_source,
         "is_cash_withdrawal": t.is_cash_withdrawal,
         "tag_ids": [str(tag_id) for tag_id in t.tag_ids],
     }

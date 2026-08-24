@@ -2,9 +2,11 @@
 
 import { useCallback, useRef, useState, type DragEvent } from "react";
 import { FileUp, Loader2 } from "lucide-react";
-import { api, type UploadResult } from "@/lib/api";
+import { api, UploadError, type UploadResult } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { isEncryptedPdf } from "@/lib/pdf";
 import { Button, useToast } from "@/components/ui";
+import { PdfPasswordDialog } from "@/components/PdfPasswordDialog";
 
 const ACCEPT = ".pdf,.xml";
 const ACCEPTED_EXTENSIONS = [".pdf", ".xml"];
@@ -26,19 +28,38 @@ export function useStatementUpload(
 ) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
+    /**
+     * Set when an encrypted PDF needs a password. `wrong` distinguishes the
+     * first ask from a retry after the PDF rejected one. The file is kept so
+     * the dialog's submit can re-run the same upload; the password itself
+     * lives only inside the dialog and dies when it closes.
+     */
+    const [passwordFor, setPasswordFor] = useState<{ file: File; wrong: boolean } | null>(null);
     const { toast } = useToast();
 
     const upload = useCallback(
-        async (file: File) => {
+        async (file: File, password?: string) => {
             const name = file.name.toLowerCase();
             if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) {
                 toast("Solo aceptamos PDF de tu banco o XML del SAT.", "negative");
                 return;
             }
 
+            // Sniffed before the request goes out, same reasoning as the
+            // extension check above: asking for the password costs nothing
+            // locally, learning it was needed costs a round trip.
+            if (!password && name.endsWith(".pdf")) {
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                if (isEncryptedPdf(bytes)) {
+                    setPasswordFor({ file, wrong: false });
+                    return;
+                }
+            }
+
             setUploading(true);
             try {
-                const result = await api.uploadStatement(file);
+                const result = await api.uploadStatement(file, password);
+                setPasswordFor(null);
                 toast(
                     `Listo: ${result.transactions_created} movimientos (${result.template})`,
                     "positive"
@@ -46,7 +67,15 @@ export function useStatementUpload(
                 onUploaded?.();
                 onResult?.(result);
             } catch (e) {
-                toast(`No se pudo procesar el archivo: ${(e as Error).message}`, "negative");
+                const code = e instanceof UploadError ? e.code : undefined;
+                if (code === "pdf_password_required" || code === "pdf_password_incorrect") {
+                    // The dialog is the message here — a toast on top would
+                    // say the same thing twice.
+                    setPasswordFor({ file, wrong: code === "pdf_password_incorrect" });
+                } else {
+                    setPasswordFor(null);
+                    toast(`No se pudo procesar el archivo: ${(e as Error).message}`, "negative");
+                }
             } finally {
                 setUploading(false);
                 // Without this, re-selecting the same file fires no change event.
@@ -58,15 +87,26 @@ export function useStatementUpload(
 
     const pick = useCallback(() => inputRef.current?.click(), []);
 
-    /** Render this once next to whatever triggers `pick()`. */
+    /** Render this once next to whatever triggers `pick()`. The password
+     *  dialog rides along so every upload surface gets it for free. */
     const input = (
-        <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPT}
-            hidden
-            onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-        />
+        <>
+            <input
+                ref={inputRef}
+                type="file"
+                accept={ACCEPT}
+                hidden
+                onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+            />
+            <PdfPasswordDialog
+                open={passwordFor !== null}
+                filename={passwordFor?.file.name}
+                wrong={passwordFor?.wrong}
+                busy={uploading}
+                onCancel={() => setPasswordFor(null)}
+                onSubmit={(password) => passwordFor && upload(passwordFor.file, password)}
+            />
+        </>
     );
 
     return { upload, pick, uploading, input };

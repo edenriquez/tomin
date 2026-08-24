@@ -21,7 +21,13 @@ class OcrPdfExtractor:
         # when text extraction is insufficient, so it does not auto-claim files.
         return False
 
-    def extract(self, data: bytes, filename: str, mime: str | None) -> ExtractedDocument:
+    def extract(
+        self,
+        data: bytes,
+        filename: str,
+        mime: str | None,
+        password: str | None = None,
+    ) -> ExtractedDocument:
         try:
             import pytesseract
             from pdf2image import convert_from_bytes
@@ -31,7 +37,7 @@ class OcrPdfExtractor:
             ) from exc
 
         lines: list[str] = []
-        for image in convert_from_bytes(data, dpi=self._dpi):
+        for image in convert_from_bytes(data, dpi=self._dpi, userpw=password or None):
             text = pytesseract.image_to_string(image, lang=self._lang)
             lines.extend(ln for ln in text.splitlines() if ln.strip())
 

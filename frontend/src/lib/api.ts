@@ -30,6 +30,9 @@ export type Transaction = {
     /** Derived at ingest: self-transfer wording ("pago tarjeta", "cajita",
      *  "su abono"). The Flujo aggregate honors it like the cube does. */
     is_transfer?: boolean;
+    /** "auto" while the machine decided; "user" once a human answered.
+     *  Automatic passes never overturn a "user" row. */
+    transfer_source?: string;
     is_cash_withdrawal?: boolean;
     /** Ids only — resolve names against the tag list (see `lib/tags.ts`). */
     tag_ids?: string[];
@@ -43,6 +46,9 @@ export type TransactionPatch = {
     description?: string;
     notes?: string | null;
     excluded_from_stats?: boolean;
+    /** The user settling "is this my own money moving?" — in either direction.
+     *  Locks the row against every automatic re-flagging pass. */
+    is_transfer?: boolean;
 };
 
 export type TransactionPage = {
@@ -179,6 +185,29 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return res.json() as Promise<T>;
 }
 
+/**
+ * An upload failure the UI can branch on. `code` is the backend's
+ * machine-readable reason (today: `pdf_password_required` /
+ * `pdf_password_incorrect`); `message` stays human-readable for the toast.
+ */
+export class UploadError extends Error {
+    code?: string;
+    constructor(message: string, code?: string) {
+        super(message);
+        this.code = code;
+    }
+}
+
+async function uploadError(res: Response): Promise<UploadError> {
+    const text = await res.text();
+    try {
+        const body = JSON.parse(text) as { error?: string; code?: string };
+        return new UploadError(body.error ?? text, body.code);
+    } catch {
+        return new UploadError(text);
+    }
+}
+
 export const api = {
     transactions: (query = "") => request<TransactionPage>(`/api/transactions${query}`),
     /** The global category taxonomy: names and colors for charts and pickers. */
@@ -202,6 +231,26 @@ export const api = {
             `/api/transactions/realias`,
             { method: "POST", body: JSON.stringify(body) }
         ),
+    /**
+     * Flag every movement whose counterparty is the user themselves, and
+     * remember the name so future uploads flag themselves. `dry_run` reports
+     * the blast radius without writing.
+     */
+    markTransfer: (body: { party: string; dry_run?: boolean }) =>
+        request<{ matched: number; updated: number; party: string }>(
+            `/api/transactions/mark-transfer`,
+            { method: "POST", body: JSON.stringify(body) }
+        ),
+    /**
+     * Find and flag mirrored self-transfer legs across statements (same
+     * amount, opposite directions, days apart). Runs automatically at every
+     * ingest; this exists to backfill history uploaded before the rule.
+     */
+    pairTransfers: (body: { dry_run?: boolean } = {}) =>
+        request<{ pairs: number; updated: number }>(`/api/transactions/pair-transfers`, {
+            method: "POST",
+            body: JSON.stringify(body),
+        }),
     /** Returns the updated transaction, so the caller never has to guess what
      *  the server made of the patch. */
     updateTransaction: (id: string, patch: TransactionPatch) =>
@@ -231,11 +280,14 @@ export const api = {
             `/api/statements/${id}`,
             { method: "DELETE" }
         ),
-    uploadStatement: async (file: File): Promise<UploadResult> => {
+    uploadStatement: async (file: File, password?: string): Promise<UploadResult> => {
         const form = new FormData();
         form.append("file", file);
+        // Only for encrypted PDFs: the backend uses it once to open the file
+        // and drops it with the rest of the request.
+        if (password) form.append("password", password);
         const res = await fetch(`${API_URL}/api/statements`, { method: "POST", body: form });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) throw await uploadError(res);
         return res.json() as Promise<UploadResult>;
     },
 };

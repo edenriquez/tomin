@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { EyeOff, RotateCcw, Sparkles, StickyNote, X } from "lucide-react";
+import { ArrowLeftRight, EyeOff, RotateCcw, Sparkles, StickyNote, X } from "lucide-react";
 import { api, type Transaction, type TransactionPatch } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useCategories } from "@/lib/categories";
@@ -20,17 +20,25 @@ import { Button, Select, useToast } from "@/components/ui";
  * user always sees the blast radius before committing.
  */
 
-/** What a taught label would do: assign this category, or apply this name. */
+/** What a taught label would do: assign this category, apply this name, or
+ *  flag matching movements as transfers between the user's own accounts. */
 type Teach =
     | { kind: "category"; categoryId: string }
-    | { kind: "alias"; alias: string };
+    | { kind: "alias"; alias: string }
+    | { kind: "transfer" };
 
 type Suggestion = { teach: Teach; label: string; matched: number };
 
 function probeRequest(teach: Teach, label: string, dryRun: boolean) {
-    return teach.kind === "category"
-        ? api.recategorize({ category_id: teach.categoryId, label, dry_run: dryRun })
-        : api.realias({ label, alias: teach.alias, dry_run: dryRun });
+    if (teach.kind === "category")
+        return api.recategorize({ category_id: teach.categoryId, label, dry_run: dryRun });
+    if (teach.kind === "alias")
+        return api.realias({ label, alias: teach.alias, dry_run: dryRun });
+    // The server calls the taught text a "party" (it names the counterparty);
+    // mapped onto the shared {label} shape the suggestion strip renders.
+    return api
+        .markTransfer({ party: label, dry_run: dryRun })
+        .then((r) => ({ matched: r.matched, updated: r.updated, label: r.party }));
 }
 
 /** One hook per row: the in-place controls and the strip share its state. */
@@ -79,6 +87,15 @@ export function useInlineEdit(
         if (categoryId) probeSimilar({ kind: "category", categoryId }, suggestLabel(t));
     }
 
+    function toggleTransfer(next: boolean) {
+        onPatch({ is_transfer: next });
+        setSuggestion(null);
+        // Flagging one row invites teaching the counterparty ("this name is
+        // me") so the siblings and every future upload flag themselves.
+        // Unflagging teaches nothing: it is a per-row exception.
+        if (next) probeSimilar({ kind: "transfer" }, suggestLabel(t));
+    }
+
     async function applySimilar() {
         if (!suggestion) return;
         setApplying(true);
@@ -88,7 +105,12 @@ export function useInlineEdit(
                 labelDraft.trim() || suggestion.label,
                 false
             );
-            const verb = suggestion.teach.kind === "alias" ? "renombrados" : "actualizados";
+            const verb =
+                suggestion.teach.kind === "alias"
+                    ? "renombrados"
+                    : suggestion.teach.kind === "transfer"
+                      ? "marcados como transferencia"
+                      : "actualizados";
             toast(
                 res.updated > 0
                     ? `${res.updated} movimiento(s) ${verb}. «${res.label}» quedó aprendido.`
@@ -107,6 +129,7 @@ export function useInlineEdit(
     return {
         commitName,
         changeCategory,
+        toggleTransfer,
         suggestion,
         labelDraft,
         setLabelDraft,
@@ -223,6 +246,7 @@ export function EditorStrip({
 }) {
     const renamed = t.raw_description != null && t.description !== t.raw_description;
     const excluded = t.excluded_from_stats ?? false;
+    const isTransfer = t.is_transfer ?? false;
     const { suggestion } = edit;
 
     return (
@@ -245,6 +269,23 @@ export function EditorStrip({
                 >
                     <EyeOff size={13} aria-hidden />
                     {excluded ? "Excluido de estadísticas" : "Excluir de estadísticas"}
+                </button>
+
+                <button
+                    type="button"
+                    aria-pressed={isTransfer}
+                    title="Dinero moviéndose entre tus propias cuentas: se conserva en el historial pero no cuenta como ingreso ni como gasto"
+                    onClick={() => edit.toggleTransfer(!isTransfer)}
+                    className={cn(
+                        "inline-flex items-center gap-1.5 rounded-control px-2.5 py-1 text-body-sm",
+                        "transition-colors duration-100",
+                        isTransfer
+                            ? "bg-soot font-medium text-paper"
+                            : "text-graphite hover:bg-fog hover:text-ink"
+                    )}
+                >
+                    <ArrowLeftRight size={13} aria-hidden />
+                    {isTransfer ? "Transferencia entre tus cuentas" : "Es entre mis cuentas"}
                 </button>
 
                 {renamed && (
@@ -297,7 +338,9 @@ export function EditorStrip({
                             más —{" "}
                             {suggestion.teach.kind === "alias"
                                 ? `renombrar como «${suggestion.teach.alias}»`
-                                : "misma categoría"}
+                                : suggestion.teach.kind === "transfer"
+                                  ? "marcar como transferencia entre tus cuentas"
+                                  : "misma categoría"}
                         </span>
                     </span>
                     <span className="ml-auto flex items-center gap-1">
