@@ -105,6 +105,29 @@ def test_null_chat_reports_unavailable_rather_than_raising_on_construction():
     assert chat.model_label == ""
 
 
+def test_fallback_chat_uses_the_second_model_when_the_first_refuses():
+    from tomin.adapters.outbound.chat import FallbackChat
+
+    class Dead:
+        available = True
+        model_label = "primary"
+
+        def stream(self, *, system, messages):
+            raise ChatUnavailable("429")
+            yield  # pragma: no cover — makes this a generator
+
+    class Alive:
+        available = True
+        model_label = "fallback"
+
+        def stream(self, *, system, messages):
+            yield "hola"
+
+    chat = FallbackChat(Dead(), Alive())
+    assert chat.model_label == "primary · fallback"
+    assert "".join(chat.stream(system="s", messages=[])) == "hola"
+
+
 def test_null_chat_explains_itself_when_actually_asked():
     with pytest.raises(ChatUnavailable) as exc:
         list(NullChat().stream(system="s", messages=[]))

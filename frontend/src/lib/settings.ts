@@ -18,9 +18,15 @@
  * caller changes. No React in this file.
  */
 
-import { isWindowId, WINDOW_VOCABULARY, type WindowId } from "./window";
+import {
+    isCustomRange,
+    isWindowId,
+    WINDOW_VOCABULARY,
+    type CustomRange,
+    type WindowId,
+} from "./window";
 
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 export const SETTINGS_STORAGE_KEY = "tomin.settings";
 
 /** A panel's stored config. Values are primitives: anything richer would need
@@ -46,6 +52,11 @@ export type Settings = {
      *  where you were is the same feature with nothing to configure, and it
      *  cannot disagree with the period actually on screen. */
     lastWindow: WindowId;
+    /** Two dates the user typed or dragged, when the filter is not on a preset.
+     *  `null` means "read `lastWindow`". Kept beside it rather than folded into
+     *  it so the preset the user was on survives a custom detour and comes back
+     *  when the range is cleared. */
+    customRange: CustomRange | null;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -53,8 +64,9 @@ export const DEFAULT_SETTINGS: Settings = {
     editorMode: false,
     panels: {},
     banks: [],
-    windows: ["1m", "3m", "6m", "ytd", "all"],
-    lastWindow: "3m",
+    windows: ["15d", "30d", "3m", "all"],
+    lastWindow: "30d",
+    customRange: null,
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -102,7 +114,7 @@ function migrateV1(raw: Record<string, unknown>): Record<string, unknown> {
     const showIncome = raw.scatterShowsIncome;
     return {
         ...raw,
-        version: SETTINGS_VERSION,
+        version: 2,
         panels:
             typeof showIncome === "boolean"
                 ? { "movimientos.scatter": { showIncome } }
@@ -116,10 +128,27 @@ function migrateV1(raw: Record<string, unknown>): Record<string, unknown> {
  * brick the app. Field-level garbage falls back per field. Older versions are
  * migrated forward; newer ones (a downgrade) fall back to defaults.
  */
+/**
+ * v3 added the two rolling presets the time filter leads with (15 and 30 days)
+ * and the custom range. An existing vocabulary gains the presets rather than
+ * being replaced: whatever the user had enabled stays enabled, and the rest of
+ * their preferences are untouched.
+ */
+function migrateV2(raw: Record<string, unknown>): Record<string, unknown> {
+    const had = Array.isArray(raw.windows) ? raw.windows.map(String) : [];
+    return {
+        ...raw,
+        version: SETTINGS_VERSION,
+        windows: Array.from(new Set([...had, "15d", "30d"])),
+        customRange: null,
+    };
+}
+
 export function parseSettings(raw: unknown): Settings {
     if (!isRecord(raw)) return DEFAULT_SETTINGS;
 
-    const input = raw.version === 1 ? migrateV1(raw) : raw;
+    let input = raw.version === 1 ? migrateV1(raw) : raw;
+    if (input.version === 2) input = migrateV2(input);
     if (input.version !== SETTINGS_VERSION) return DEFAULT_SETTINGS;
 
     const windows = Array.isArray(input.windows)
@@ -142,6 +171,7 @@ export function parseSettings(raw: unknown): Settings {
         lastWindow: isWindowId(String(input.lastWindow ?? input.defaultWindow))
             ? ((input.lastWindow ?? input.defaultWindow) as WindowId)
             : DEFAULT_SETTINGS.lastWindow,
+        customRange: isCustomRange(input.customRange) ? input.customRange : null,
     });
 }
 

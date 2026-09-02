@@ -11,8 +11,11 @@ from .goals import goals_bp
 from .health import health_bp
 from .ingest import ingest_bp
 from .metrics import metrics_bp
+from .prices import prices_bp
+from .receipts import receipts_bp
 from .statements import statements_bp
 from .tags import tags_bp
+from .telemetry import telemetry_bp
 from .transactions import transactions_bp
 from .workstations import workstations_bp
 
@@ -22,6 +25,8 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(statements_bp)
     app.register_blueprint(ingest_bp)
     app.register_blueprint(transactions_bp)
+    app.register_blueprint(receipts_bp)
+    app.register_blueprint(prices_bp)
     app.register_blueprint(tags_bp)
     app.register_blueprint(categories_bp)
     app.register_blueprint(analytics_bp)
@@ -31,3 +36,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(forecast_bp)
     app.register_blueprint(goals_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(telemetry_bp)

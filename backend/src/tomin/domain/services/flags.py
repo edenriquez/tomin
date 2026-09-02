@@ -46,9 +46,14 @@ _WHITESPACE = re.compile(r"\s+")
 #:   lines say "abono nomina", never "su abono", so the pronoun is the anchor.
 #: - "cajita" is Nu's own savings pocket: money moving to or from it never
 #:   left the user.
+#: - "pago de servicio NNNNNN a tb" is how a Banamex debit account records a
+#:   payment to a Banamex card ("TB": Tarjeta Banamex) -- the outgoing half of
+#:   paying your own card. The reference number between the words is what the
+#:   plain "pago tarjeta" pattern could not see past.
 _TRANSFER = re.compile(
     r"\b(?:"
     r"pago\s+(?:de\s+)?(?:tc|tdc|tarjeta)"
+    r"|pago\s+de\s+servicio\s+\d+\s+a\s+tb"
     r"|traspaso"
     r"|su\s+abono"
     r"|cajita"

@@ -45,9 +45,7 @@ export function LoadTimelineChart({
             },
             colors: timeline.series.map((s) => colorFor(s.item.label)),
             plotOptions: { bar: { columnWidth: "62%", borderRadius: 2 } },
-            // Siblings in a category differ only in lightness; the hairline
-            // keeps two of them from reading as a single charge.
-            stroke: { width: 1, colors: [colors.paper] },
+            stroke: { width: 0 },
             dataLabels: { enabled: false },
             xaxis: {
                 categories: labels,
@@ -80,7 +78,6 @@ export function LoadTimelineChart({
                                   },
                               },
                               {
-                                  // The rule itself: where measured stops.
                                   x: firstFuture,
                                   strokeDashArray: 4,
                                   borderColor: colors.muted,
@@ -88,9 +85,6 @@ export function LoadTimelineChart({
                           ],
                       }
                     : {},
-            // Per-layer, plus the month's total: the layer answers "which
-            // serie", the total "cuánto carga el mes" — measured or proyectado,
-            // the band above already says which.
             tooltip: {
                 shared: false,
                 intersect: true,
@@ -101,15 +95,16 @@ export function LoadTimelineChart({
                         (sum, layer) => sum + (layer[dataPointIndex] ?? 0),
                         0
                     );
+                    const swatch = colorFor(label);
                     return `
                         <div style="padding:8px 10px">
                             <div style="font-size:12px;color:${colors.graphite}">${escapeHtml(labels[dataPointIndex] ?? "")}</div>
                             <div style="font-size:13px;color:${colors.ink};display:flex;align-items:center;gap:6px">
-                                <span style="width:8px;height:8px;border-radius:9999px;background:${colorFor(label)};display:inline-block"></span>
+                                <span style="width:8px;height:8px;border-radius:9999px;background:${swatch};display:inline-block"></span>
                                 <span>${escapeHtml(label)}</span>
                                 <span style="font-variant-numeric:tabular-nums">${mxn(value)}</span>
                             </div>
-                            <div style="margin-top:2px;font-size:12px;color:${colors.graphite};font-variant-numeric:tabular-nums">Total del mes ${mxn(total)}</div>
+                            <div style="margin-top:2px;font-size:12px;color:${colors.graphite}">Total del mes ${mxn(total)}</div>
                         </div>`;
                 },
             },
@@ -119,19 +114,12 @@ export function LoadTimelineChart({
     if (!timeline.series.length) {
         return (
             <p className="py-10 text-center text-body text-graphite">
-                Selecciona al menos una serie para dibujarla.
+                Elige lo que sí o sí se cobra para dibujarlo.
             </p>
         );
     }
 
     return (
-        // Keyed by the series identity AND the month span: react-apexcharts
-        // MUTATES the mounted chart on update and does not reliably re-apply
-        // a changed `colors` array when the series set changes — nor the axis
-        // categories when only the series values change (a zoomed month range
-        // would keep the old month labels). A different selection is a
-        // different chart; remount it (animations are off, so the swap is
-        // invisible).
         <ApexChart
             key={`${timeline.series.map((s) => s.item.label).join("|")}·${timeline.months[0]}·${timeline.months.length}`}
             type="bar"

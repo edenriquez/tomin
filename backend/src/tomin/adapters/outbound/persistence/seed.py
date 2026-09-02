@@ -34,6 +34,18 @@ DEFAULT_CATEGORIES: list[dict] = [
                    "hbo", "apple tv", "youtube", "gamepass"],
     },
     {
+        # Money coming in as *earnings*. Conservative on purpose: "pago
+        # recibido" and "deposito" are not here, because a friend paying you
+        # back and a transfer from your own other account both arrive with
+        # those words -- and those are transfers, flagged elsewhere, not income.
+        # Payroll wording is what every Mexican employer's SPEI carries.
+        "name": "Ingresos",
+        "color": "#16a34a",
+        "icon": "savings",
+        "labels": ["nomina", "sueldo", "salario", "honorarios", "quincena",
+                   "dispersion de nomina", "pago de nomina"],
+    },
+    {
         "name": "Transferencias & Ajustes",
         "color": "#64748b",
         "icon": "payments",
@@ -75,8 +87,15 @@ DEFAULT_MERCHANTS: list[dict] = [
 def seed_reference_data(
     categories: CategoryRepository, merchants: MerchantRepository
 ) -> None:
-    """Idempotently seed default categories and merchants when empty."""
-    if not categories.get_all():
+    """Idempotently seed default categories and merchants.
+
+    Per category, by name: a default added later ("Ingresos") reaches a
+    database that already has the others, while a category the user renamed
+    or re-labelled is never touched -- only *missing* names are inserted.
+    """
+    have = {c.name.strip().lower() for c in categories.get_all()}
+    missing = [c for c in DEFAULT_CATEGORIES if c["name"].strip().lower() not in have]
+    if missing:
         categories.add_many(
             [
                 Category(
@@ -85,7 +104,7 @@ def seed_reference_data(
                     icon=c["icon"],
                     categorization_labels=c["labels"],
                 )
-                for c in DEFAULT_CATEGORIES
+                for c in missing
             ]
         )
     if not merchants.get_all():

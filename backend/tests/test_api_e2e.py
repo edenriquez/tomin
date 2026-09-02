@@ -397,6 +397,7 @@ def test_taught_alias_names_the_recurring_series(client):
 
     items = client.get("/api/analytics/recurring").get_json()["items"]
     assert len(items) == 1
+    assert items[0]["key"] == "alias:cableycomun"
     assert items[0]["label"] == "Cable e Internet"
     assert items[0]["frequency"] == "monthly"
     assert items[0]["occurrences"] == 3

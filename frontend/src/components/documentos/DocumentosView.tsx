@@ -26,6 +26,7 @@ import {
 import { useAppData } from "@/components/AppChrome";
 import { useBankScope } from "@/lib/banks";
 import { PanelChoice, PanelControls } from "@/components/settings/PanelControls";
+import { PanelSettingsToggle } from "@/components/settings/PanelSettingsToggle";
 import { usePanelSettings } from "@/components/settings/usePanelSettings";
 import { useStatementUpload } from "@/components/StatementDropzone";
 
@@ -287,6 +288,7 @@ export function DocumentosView() {
                         {sorted && (
                             <span className="text-body-sm text-graphite">{sorted.length}</span>
                         )}
+                        <PanelSettingsToggle className="ml-auto" />
                     </div>
                     <PanelControls>
                         <PanelChoice<Sort>

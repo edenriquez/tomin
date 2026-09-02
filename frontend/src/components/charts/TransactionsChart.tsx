@@ -6,7 +6,6 @@ import type { Transaction } from "@/lib/api";
 import { chart as chartTokens, colors } from "@/design/tokens";
 import { categoryColor, categoryName, type CategoryInfo } from "@/lib/categories";
 import { compactMxn, dayLabel, monthLabel, mxn, mxn2 } from "@/lib/format";
-import { grainFor, type WindowId } from "@/lib/window";
 import { ApexChart } from "./apex/ApexChart";
 
 const CHART_ID = "tx-chart";
@@ -62,6 +61,9 @@ export type ChartRange = { start: number; end: number };
 
 const HOUR_MS = 3_600_000;
 
+/** Above this many marks the scatter stops animating: the tween would stutter. */
+const ANIMATED_MARKS = 1500;
+
 /**
  * Selection is two-way with the table:
  * - mark → row: Apex `dataPointSelection` → `onSelect(id)`.
@@ -76,7 +78,7 @@ export function TransactionsChart({
     colorMode,
     categories,
     showIncome,
-    windowId,
+    grain,
     selectedId,
     onSelect,
     onRangeSelect,
@@ -92,7 +94,8 @@ export function TransactionsChart({
     /** From useCategories(); null degrades to the neutral palette. */
     categories: Map<string, CategoryInfo> | null;
     showIncome: boolean;
-    windowId: WindowId;
+    /** Bucket size for the aggregate modes: the window decides, not the chart. */
+    grain: "day" | "month";
     selectedId: string | null;
     onSelect: (id: string | null) => void;
     /** Drag a horizontal range over the scatter → this fires with its bounds.
@@ -165,7 +168,6 @@ export function TransactionsChart({
         if (mode === "flujo") {
             // Aggregate: income and expense per bucket, plus the running net —
             // the answer to "¿voy ganando o perdiendo?" over the window.
-            const grain = grainFor(windowId);
             const bucketOf = (iso: string) => (grain === "day" ? iso : iso.slice(0, 7));
 
             const buckets: string[] = [];
@@ -219,7 +221,7 @@ export function TransactionsChart({
 
         // Unreachable: both modes return above. Keeps TS's control-flow happy.
         throw new Error(`unknown chart mode: ${mode}`);
-    }, [transactions, showIncome, mode, byCategory, categories, windowId]);
+    }, [transactions, showIncome, mode, byCategory, categories, grain]);
 
     // Both handlers live in refs so the options memo does not rebuild every
     // time the parent re-renders (parents pass inline functions). This is
@@ -298,9 +300,21 @@ export function TransactionsChart({
         const base: ApexOptions = {
             chart: {
                 id: CHART_ID,
-                // Animations off: hundreds of SVG marks re-tweening on every
-                // window change stutters on phones.
-                animations: { enabled: false },
+                // A window change should move the marks to where they now
+                // belong, not repaint them. The one honest limit is volume:
+                // past ~1,500 SVG marks the tween itself stutters on phones,
+                // and a stutter is worse than a cut. Below it, dynamicAnimation
+                // is the whole feeling of the filter.
+                animations:
+                    transactions.length <= ANIMATED_MARKS
+                        ? {
+                              enabled: true,
+                              speed: 360,
+                              easing: "easeinout" as const,
+                              animateGradually: { enabled: false },
+                              dynamicAnimation: { enabled: true, speed: 360 },
+                          }
+                        : { enabled: false },
                 ...(brushable && {
                     toolbar: { show: false, autoSelected: "selection" as const },
                     zoom: { enabled: false },
@@ -431,7 +445,7 @@ export function TransactionsChart({
                             const ms = Number(value);
                             if (!Number.isFinite(ms)) return "";
                             const d = new Date(ms);
-                            return grainFor(windowId) === "day"
+                            return grain === "day"
                                 ? dayLabel(d)
                                 : monthLabel(d, true);
                         },
@@ -456,7 +470,7 @@ export function TransactionsChart({
 
         // Unreachable: both modes return above.
         throw new Error(`unknown chart mode: ${mode}`);
-    }, [mode, windowId, showIncome, byCategory, categories, transactions, seriesColors, stackedBuckets, brushable, zoomRange]);
+    }, [mode, grain, showIncome, byCategory, categories, transactions, seriesColors, stackedBuckets, brushable, zoomRange]);
 
     const type = mode === "scatter" ? "scatter" : "line";
     return (

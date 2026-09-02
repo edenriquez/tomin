@@ -23,6 +23,10 @@ export function useTransactions(
 ) {
     const { toast } = useToast();
     const [items, setItems] = useState<Transaction[] | null>(null);
+    // True while a fetch is in flight. `items` stays as it was until the new
+    // page lands: a chart that blanks to a skeleton on every window change
+    // cannot animate, and the skeleton is itself the jump the user sees.
+    const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
@@ -36,7 +40,7 @@ export function useTransactions(
         // The stale flag makes out-of-order responses harmless: a slow fetch
         // for the previous window resolves after cleanup and writes nothing.
         let stale = false;
-        setItems(null);
+        setLoading(true);
 
         const params = new URLSearchParams();
         if (start) params.set("start", start);
@@ -50,11 +54,13 @@ export function useTransactions(
                 setItems(page.items);
                 setTotal(page.total);
                 setError(null);
+                setLoading(false);
             })
             .catch((e) => {
                 if (stale) return;
                 setError((e as Error).message);
                 setItems([]);
+                setLoading(false);
             });
 
         return () => {
@@ -98,5 +104,5 @@ export function useTransactions(
         [toast]
     );
 
-    return { items, total, error, reload, patchItem };
+    return { items, total, error, reload, patchItem, loading };
 }

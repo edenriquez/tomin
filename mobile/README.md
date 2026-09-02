@@ -38,18 +38,41 @@ app/            # expo-router screens
   _layout.tsx   # navigation stack
   index.tsx     # dashboard (Resumen)
   upload.tsx    # pick → store on-device → extract → send sealed → dashboard link
+  receipt.tsx   # photograph a ticket → OCR here → send sealed → basket + attach
   transactions.tsx
 src/lib/
   api.ts              # backend client (read + delete only — no file upload)
   storage.ts          # on-device statement store (source of truth)
   extract.ts          # on-device extraction: PDF text layer / SAT XML
   pdf-lines.ts        # pdf.js fragments → reading-order lines (pure, testable)
+  receipt.ts          # on-device OCR of a ticket photo → sealed payload
+  receipt-lines.ts    # OCR boxes → printed ticket lines (pure, testable)
   secure-transport.ts # server key TOFU pin, sealed envelope, POST
   polyfills.ts        # globals Hermes lacks (base64, structuredClone, TextDecoder)
 scripts/
-  verify-envelope.mjs   # crypto + hashing + polyfills, under Node
-  verify-extraction.mjs # pdf.js worker-less boot + line grouping, under Node
+  verify-envelope.mjs      # crypto + hashing + polyfills, under Node
+  verify-extraction.mjs    # pdf.js worker-less boot + line grouping, under Node
+  verify-receipt-lines.mjs # OCR box → ticket line grouping, under Node
 ```
+
+## Tickets
+
+`receipt.tsx` is the same custody promise for a different document. The photo is
+taken by this app, read by this app — `@react-native-ml-kit/text-recognition`
+(ML Kit on Android, Vision on iOS) — and never uploaded. What travels is the
+text, sealed, to `POST /api/ingest/receipt`.
+
+The recognizer is a **native module**, so a JS reload is not enough after
+installing it; rebuild the dev client (`npx expo run:ios` / `run:android`), the
+same as `expo-crypto`. Until that rebuild, the screen says so instead of
+failing silently, and every other screen keeps working.
+
+The awkward part is not the OCR, it is the geometry: a recognizer returns
+*boxes*, and on a two-column ticket the product name and its price are two of
+them. `receipt-lines.ts` joins them back into printed lines — the backend's
+reader has one rule ("a product line ends in money"), so a name and a price
+arriving as separate lines breaks every basket. That grouping is pure and is
+checked by `npm run verify`.
 
 ## The wire protocol (v1)
 

@@ -10,8 +10,19 @@ from .process_file import (
     ProcessFileResult,
     ProcessFileUseCase,
 )
+from .prices import AnswerPriceQuestion, ComparePricesUseCase, ResolveProductTerms
 from .realias import RealiasResult, RealiasUseCase
 from .recategorize import InvalidLabelError, RecategorizeResult, RecategorizeUseCase
+from .receipts import (
+    DuplicateReceiptError,
+    IngestReceiptResult,
+    IngestReceiptUseCase,
+    ManageReceiptsUseCase,
+    ReceiptNotFoundError,
+    Suggestion,
+    TransactionAlreadyHasReceiptError,
+    UnknownTransactionError,
+)
 from .rebuild_cube import RebuildCubeResult, RebuildCubeUseCase
 from .statements import (
     DeleteStatementResult,
@@ -54,7 +65,18 @@ __all__ = [
     "MarkTransferResult",
     "PairTransfersResult",
     "PairTransfersUseCase",
+    "AnswerPriceQuestion",
+    "ComparePricesUseCase",
+    "ResolveProductTerms",
+    "DuplicateReceiptError",
+    "IngestReceiptResult",
+    "IngestReceiptUseCase",
     "InvalidLabelError",
+    "ManageReceiptsUseCase",
+    "ReceiptNotFoundError",
+    "Suggestion",
+    "TransactionAlreadyHasReceiptError",
+    "UnknownTransactionError",
     "ProcessExtractedUseCase",
     "ProcessFileResult",
     "ProcessFileUseCase",

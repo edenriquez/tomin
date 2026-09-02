@@ -53,6 +53,12 @@ type WorkspaceData = ReturnType<typeof useWorkstations> & {
     addConversation: (conversation: Conversation) => void;
     /** A thread that just got a new message bubbles to the top. */
     touchConversation: (workstationId: string, conversationId: string) => void;
+    /** The model named the thread; swap the placeholder in the list. */
+    renameConversation: (
+        workstationId: string,
+        conversationId: string,
+        title: string
+    ) => void;
     /** Delete on the server and in the list. False when the API refused. */
     removeConversation: (workstationId: string, conversationId: string) => Promise<boolean>;
 };
@@ -124,6 +130,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         []
     );
 
+    const renameConversation = useCallback(
+        (workstationId: string, conversationId: string, title: string) => {
+            setConversations((cur) => {
+                const list = cur[workstationId];
+                if (!list) return cur;
+                return {
+                    ...cur,
+                    [workstationId]: list.map((c) =>
+                        c.id === conversationId ? { ...c, title } : c
+                    ),
+                };
+            });
+        },
+        []
+    );
+
     const removeConversation = useCallback(
         async (workstationId: string, conversationId: string) => {
             try {
@@ -152,6 +174,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             loadConversations,
             addConversation,
             touchConversation,
+            renameConversation,
             removeConversation,
         }),
         [
@@ -163,6 +186,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             loadConversations,
             addConversation,
             touchConversation,
+            renameConversation,
             removeConversation,
         ]
     );

@@ -16,7 +16,7 @@ import { categoryColor, categoryName, useCategories, type CategoryInfo } from "@
 import { matchMerchant, merchantLogoUrl } from "@/lib/merchants";
 import { dayLabel, mxn2 } from "@/lib/format";
 import { parsePeriodKey } from "@/lib/metrics";
-import { Button } from "@/components/ui";
+import { Button, Checkbox } from "@/components/ui";
 import { EditorStrip, InlineCategory, InlineName, useInlineEdit } from "./TransactionEditor";
 
 /**
@@ -47,6 +47,7 @@ export function TransactionsList({
     selectedId,
     onSelect,
     editing,
+    membership,
 }: {
     /** Already window+search filtered, `tx_date DESC` from the API. */
     items: Transaction[];
@@ -60,6 +61,11 @@ export function TransactionsList({
     editing?: {
         onPatch: (t: Transaction, patch: TransactionPatch) => void;
         onBulkApplied: () => void;
+    };
+    /** Membership in the Lectura set. Highlight (selectedId) stays inspect. */
+    membership?: {
+        excluded: Set<string>;
+        onToggle: (id: string, inSet: boolean) => void;
     };
 }) {
     const categories = useCategories();
@@ -99,6 +105,12 @@ export function TransactionsList({
                         transaction={t}
                         categories={categories}
                         selected={t.id === selectedId}
+                        inSet={membership ? !membership.excluded.has(t.id) : undefined}
+                        onMembership={
+                            membership
+                                ? (on) => membership.onToggle(t.id, on)
+                                : undefined
+                        }
                         dateLabel={rowDate(t)}
                         onToggle={() => toggle(t)}
                         editing={editing}
@@ -130,13 +142,15 @@ const Row = forwardRef<HTMLLIElement, {
     transaction: Transaction;
     categories: Map<string, CategoryInfo> | null;
     selected: boolean;
+    inSet?: boolean;
+    onMembership?: (inSet: boolean) => void;
     dateLabel: string;
     onToggle: () => void;
     editing?: {
         onPatch: (t: Transaction, patch: TransactionPatch) => void;
         onBulkApplied: () => void;
     };
-}>(function Row({ transaction: t, categories, selected, dateLabel, onToggle, editing }, ref) {
+}>(function Row({ transaction: t, categories, selected, inSet, onMembership, dateLabel, onToggle, editing }, ref) {
     // Unconditional (hooks) and cheap: it holds no fetch until a commit.
     const edit = useInlineEdit(
         t,
@@ -148,14 +162,10 @@ const Row = forwardRef<HTMLLIElement, {
     return (
         <li
             ref={ref}
-            className={cn(
-                // The open entry stays flat in the ledger — no card, no
-                // margins, no rounding, which all break the ruled lines.
-                // Its state is an inset well: the background steps down to
-                // Canvas, one level below the card's Paper, the way a form
-                // area recedes into stationery.
+                className={cn(
                 "transition-colors duration-100",
-                selected && "bg-canvas"
+                selected && "bg-canvas",
+                inSet === false && "opacity-50"
             )}
         >
             <div
@@ -180,6 +190,23 @@ const Row = forwardRef<HTMLLIElement, {
                 )}
             >
                 <RowAvatar categories={categories} transaction={t} />
+
+                {onMembership && inSet !== undefined && (
+                    <span
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                    >
+                        <Checkbox
+                            checked={inSet}
+                            onChange={onMembership}
+                            aria-label={
+                                inSet
+                                    ? `Quitar ${t.description} del conjunto`
+                                    : `Dejar ${t.description} en el conjunto`
+                            }
+                        />
+                    </span>
+                )}
 
                 <span className="min-w-0 flex-1">
                     {editable ? (

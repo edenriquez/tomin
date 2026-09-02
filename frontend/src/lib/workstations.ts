@@ -12,8 +12,8 @@ import { request } from "./api";
 import type { CategoryInfo } from "./categories";
 import type { MetricParams } from "./metrics";
 
-/** The conditions a rule can state. All optional; they compose as AND. */
-export type WorkstationRule = {
+/** The conditions one filter can state. All optional; they compose as AND. */
+export type RuleClause = {
     /** Case- and accent-insensitive substring of the movement's display name. */
     description_contains?: string;
     /** Inclusive bounds, over the unsigned magnitude. Strings, not numbers —
@@ -25,14 +25,47 @@ export type WorkstationRule = {
     tag_id?: string;
 };
 
-/** The rule conditions, in the order the editor shows them. */
+/**
+ * A rule is one filter, or the union of several.
+ *
+ * The two shapes are one type on purpose. A rule with a single filter stays
+ * **flat** — exactly what every lens saved before groups existed looks like,
+ * and what the backend still compiles to a plain query — while `any_of` appears
+ * only when the user actually built a group. Nothing has to migrate, and the
+ * common case never pays for the general one.
+ */
+export type WorkstationRule = RuleClause & { any_of?: RuleClause[] };
+
+/** The conditions of one filter, in the order the editor shows them. */
 export const RULE_FIELDS = [
     "description_contains",
     "amount_min",
     "amount_max",
     "category_id",
     "tag_id",
-] as const satisfies readonly (keyof WorkstationRule)[];
+] as const satisfies readonly (keyof RuleClause)[];
+
+/** A rule as the list of filters it unions. One-filter rules read as one. */
+export function ruleClauses(rule: WorkstationRule): RuleClause[] {
+    if (rule.any_of?.length) return rule.any_of;
+    return [stripUnion(rule)];
+}
+
+/** The inverse: filters back into whichever shape the backend expects. */
+export function ruleFromClauses(clauses: RuleClause[]): WorkstationRule {
+    return clauses.length === 1 ? { ...clauses[0] } : { any_of: clauses.map((c) => ({ ...c })) };
+}
+
+/** Whether this filter says anything at all. An empty one matches everything,
+ *  which is never what a filter meant — the backend refuses to save it. */
+export function clauseHasSubject(clause: RuleClause): boolean {
+    return Boolean(clause.description_contains?.trim() || clause.category_id || clause.tag_id);
+}
+
+function stripUnion(rule: WorkstationRule): RuleClause {
+    const { any_of: _ignored, ...clause } = rule;
+    return clause;
+}
 
 export type Workstation = {
     id: string;
@@ -177,24 +210,39 @@ export function describeRule(
      *  generic "una categoría" rather than its name. */
     categories?: Map<string, CategoryInfo> | null
 ): string {
-    const parts: string[] = [];
-    if (w.rule.description_contains) parts.push(`«${w.rule.description_contains}»`);
-    if (w.rule.category_id) {
-        parts.push(categories?.get(w.rule.category_id)?.name ?? "una categoría");
-    }
-    if (w.rule.amount_min && w.rule.amount_max) {
-        parts.push(`$${w.rule.amount_min}–$${w.rule.amount_max}`);
-    } else if (w.rule.amount_min) {
-        parts.push(`desde $${w.rule.amount_min}`);
-    } else if (w.rule.amount_max) {
-        parts.push(`hasta $${w.rule.amount_max}`);
-    }
+    // Filters joined by "o", conditions inside one joined by "·": the two
+    // separators carry the two different meanings, so a group reads as a group
+    // at a glance instead of as one long list of conditions.
+    const parts = ruleClauses(w.rule)
+        .map((clause) => describeClause(clause, categories))
+        .filter(Boolean);
+    let line = parts.join(" o ");
     if (w.excluded_tx_ids.length) {
-        parts.push(
+        const excluded =
             w.excluded_tx_ids.length === 1
                 ? "1 excluido"
-                : `${w.excluded_tx_ids.length} excluidos`
-        );
+                : `${w.excluded_tx_ids.length} excluidos`;
+        line = line ? `${line} · ${excluded}` : excluded;
+    }
+    return line;
+}
+
+/** One filter as its conditions, joined. Exported for the editor's headers. */
+export function describeClause(
+    clause: RuleClause,
+    categories?: Map<string, CategoryInfo> | null
+): string {
+    const parts: string[] = [];
+    if (clause.description_contains) parts.push(`«${clause.description_contains}»`);
+    if (clause.category_id) {
+        parts.push(categories?.get(clause.category_id)?.name ?? "una categoría");
+    }
+    if (clause.amount_min && clause.amount_max) {
+        parts.push(`$${clause.amount_min}–$${clause.amount_max}`);
+    } else if (clause.amount_min) {
+        parts.push(`desde $${clause.amount_min}`);
+    } else if (clause.amount_max) {
+        parts.push(`hasta $${clause.amount_max}`);
     }
     return parts.join(" · ");
 }

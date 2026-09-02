@@ -21,9 +21,9 @@ from typing import Any
 from uuid import UUID
 
 from ...application.dtos.metrics import MetricQuery, Period, ResolverContext
-from ...domain.entities import Workstation
+from ...domain.entities import Workstation, sanitize_inferred_title
 from ...domain.metrics.catalog import COHORT_ACTIVITY, COHORT_PROFILE
-from ..ports.outbound.chat import ChatMessage, ChatPort
+from ..ports.outbound.chat import ChatMessage, ChatPort, ChatUnavailable
 
 #: The ledger rows that travel with the brief. The cohort is user-chosen and
 #: small; without the rows, "which days do I top up most?" has no answer at all.
@@ -61,6 +61,14 @@ Reglas, en orden de importancia:
    11 476,56 ÷ 8,71 ≈ 1 317,60.
 
 No repitas el resumen de vuelta. Responde la pregunta."""
+
+#: A list name, not a caption. Distinct from SYSTEM so a test (and a gateway
+#: that caches prefixes) can tell the title call from the answer call.
+TITLE_SYSTEM = """\
+Escribes títulos cortos para conversaciones de finanzas personales.
+
+Responde SOLO con el título: 3 a 5 palabras, español de México, sin comillas,
+sin puntuación final, sin emoji. No es una oración. No repitas la pregunta."""
 
 
 class AnswerWorkstationQuestion:
@@ -102,6 +110,32 @@ class AnswerWorkstationQuestion:
             ChatMessage(role="user", content=f"{brief}\n\nPregunta: {question.strip()}"),
         ]
         return self._chat.stream(system=SYSTEM, messages=messages)
+
+    def infer_title(self, *, question: str, answer: str) -> str:
+        """A few words that name the thread, or empty to keep the placeholder.
+
+        Called after the first answer, never before: the question alone is a
+        caption, and a name you can click later needs the exchange.
+        """
+        if not self.available or not answer.strip():
+            return ""
+        try:
+            pieces = self._chat.stream(
+                system=TITLE_SYSTEM,
+                messages=[
+                    ChatMessage(
+                        role="user",
+                        content=(
+                            f"Pregunta: {question.strip()}\n"
+                            f"Respuesta: {answer.strip()[:400]}"
+                        ),
+                    )
+                ],
+            )
+            raw = "".join(pieces)
+        except ChatUnavailable:
+            return ""
+        return sanitize_inferred_title(raw)
 
     # --- the brief -------------------------------------------------------
     def build_brief(
@@ -178,9 +212,10 @@ class AnswerWorkstationQuestion:
             limit=10000,
             offset=0,
         )
-        rule = workstation.rule
         excluded = {str(i) for i in workstation.excluded_tx_ids}
-        needle = _fold(rule.description_contains or "")
+        # Pre-folded once per clause rather than per row: a group of five
+        # filters over 10 000 movements is 50 000 comparisons otherwise.
+        clauses = [(_fold(c.description_contains or ""), c) for c in workstation.rule.clauses]
 
         out: list[tuple[str, str, str]] = []
         for t in page:
@@ -191,11 +226,10 @@ class AnswerWorkstationQuestion:
             if t.tx_type.value != "expense":
                 continue
             label = t.description or t.raw_description
-            if needle and needle not in _fold(label):
-                continue
-            if rule.amount_min is not None and t.amount < rule.amount_min:
-                continue
-            if rule.amount_max is not None and t.amount > rule.amount_max:
+            # The union: in the set if *any* filter takes it. Mirrors the
+            # engine's `any_of`, and must keep mirroring it -- these rows are
+            # the evidence under an answer whose totals came from the cube.
+            if not any(_clause_matches(clause, needle, t, label) for needle, clause in clauses):
                 continue
             out.append((t.tx_date.isoformat(), label, f"{t.amount}"))
             if len(out) == MAX_ROWS:
@@ -252,15 +286,52 @@ def _weekday_lines(rows: Sequence[tuple[str, str, str]]) -> list[str]:
     return [f"  {name}: {count}" for name, count in zip(names, counts)]
 
 
-def _rule_prose(workstation: Workstation) -> str:
-    rule = workstation.rule
+def _clause_matches(clause, needle: str, t, label: str) -> bool:
+    """Whether one filter takes this movement. The AND inside a group."""
+    if needle and needle not in _fold(label):
+        return False
+    if clause.amount_min is not None and t.amount < clause.amount_min:
+        return False
+    if clause.amount_max is not None and t.amount > clause.amount_max:
+        return False
+    if clause.category_id is not None and t.category_id != clause.category_id:
+        return False
+    if clause.tag_id is not None and clause.tag_id not in t.tag_ids:
+        return False
+    return True
+
+
+def _clause_prose(clause) -> str:
     parts = []
-    if rule.description_contains:
-        parts.append(f"la descripcion contiene «{rule.description_contains}»")
-    if rule.amount_min is not None:
-        parts.append(f"el monto es al menos {rule.amount_min}")
-    if rule.amount_max is not None:
-        parts.append(f"el monto es a lo mas {rule.amount_max}")
+    if clause.description_contains:
+        parts.append(f"la descripcion contiene «{clause.description_contains}»")
+    if clause.amount_min is not None:
+        parts.append(f"el monto es al menos {clause.amount_min}")
+    if clause.amount_max is not None:
+        parts.append(f"el monto es a lo mas {clause.amount_max}")
+    if clause.category_id is not None:
+        parts.append("pertenece a una categoria concreta")
+    if clause.tag_id is not None:
+        parts.append("lleva una etiqueta concreta")
+    return " y ".join(parts)
+
+
+def _rule_prose(workstation: Workstation) -> str:
+    """The rule in words, for the brief.
+
+    A group is spelled out as numbered filters rather than joined with "o": the
+    model has to be able to say *which* filter a movement came in through when
+    the user asks, and a run-on sentence of five ORs makes that unrecoverable.
+    """
+    clauses = workstation.rule.clauses
+    if len(clauses) == 1:
+        parts = [_clause_prose(clauses[0])]
+    else:
+        parts = [
+            "el conjunto es la union de "
+            f"{len(clauses)} filtros (un movimiento entra si cumple cualquiera)"
+        ]
+        parts += [f"filtro {i}: {_clause_prose(c)}" for i, c in enumerate(clauses, 1)]
     if workstation.excluded_tx_ids:
         parts.append(f"{len(workstation.excluded_tx_ids)} movimientos excluidos a mano")
     return "; ".join(parts)

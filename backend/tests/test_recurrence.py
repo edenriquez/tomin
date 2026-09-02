@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from tomin.domain.entities import Transaction
-from tomin.domain.services.recurrence import RecurrenceService, series_key
+from tomin.domain.services.recurrence import RecurrenceService, known_utility_key, series_key
 from tomin.domain.value_objects.enums import TxType
 
 
@@ -106,6 +106,74 @@ def test_variable_amount_recurs_but_is_flagged_unstable():
     assert groups[0].amount_stable is False
 
 
+def test_named_dentist_every_six_weeks_is_bimonthly():
+    """The reported case: four «Dentista» transfers ~6–7 weeks apart,
+    plus one longer skip. Median 47 days sat in the monthly/bimonthly gap."""
+    txs = []
+    for day, amount in [
+        (date(2026, 1, 25), "700"),
+        (date(2026, 4, 19), "700"),
+        (date(2026, 6, 5), "850"),
+        (date(2026, 7, 19), "700"),
+    ]:
+        t = _tx(day, "xochitl flores fonseca Transferencia", amount)
+        t.description = "Dentista"
+        txs.append(t)
+    groups = RecurrenceService().detect(txs)
+    assert len(groups) == 1
+    g = groups[0]
+    assert g.label == "Dentista"
+    assert g.frequency == "bimonthly"
+    assert g.occurrences == 4
+
+
+def test_same_day_double_capture_does_not_hide_a_monthly_gym():
+    """The reported case: GYMFUERZAFIT posted twice on 22-jun, and one
+    skipped month. The 0-day gap used to fail regularity."""
+    txs = []
+    for day, amount, raw in [
+        (date(2026, 2, 16), "760", "17-feb-2026 MERPAGO*GYMFUERZAFIT2 MAG 2105031W3MX +"),
+        (date(2026, 3, 18), "800", "19-mar-2026 MERPAGO*GYMFUERZAFIT2 MAG 2105031W3MX +"),
+        (date(2026, 6, 22), "800", "23-jun-2026 MERPAGO*GYMFUERZAFIT2 MAG 2105031W3MX +"),
+        (date(2026, 6, 22), "800", "24-jun-2026 MERPAGO*GYMFUERZAFIT2 MAG 2105031W3 I6062418092"),
+        (date(2026, 7, 22), "800", "23-jul-2026 MERPAGO*GYMFUERZAFIT2 MAG 2105031W3MX +"),
+    ]:
+        t = _tx(day, raw, amount)
+        t.description = "GYM"
+        txs.append(t)
+    groups = RecurrenceService().detect(txs)
+    assert len(groups) == 1
+    g = groups[0]
+    assert g.label == "GYM"
+    assert g.frequency == "monthly"
+    assert g.occurrences == 4
+    assert g.typical_amount == Decimal("800.00")
+
+
+def test_cfe_product_lines_and_a_fee_are_one_bimonthly_bill():
+    """CFE residential is bimestral; SUM SERV vs CONTIGO is the same utility,
+    and a $18 CFE CONTIGO fee must not break the cadence."""
+    assert known_utility_key("28-may-2026 CFE SUM SERV BAS CR MU CSS 160330CP7 +") == "cfe"
+    assert known_utility_key("29-jul-2026 CFE CONTIGO MU CSS 160330CP7 +") == "cfe"
+
+    txs = [
+        _tx(date(2026, 3, 25), "26-mar-2026 CFE SUM SERV BAS CR MU CSS 160330CP7 +", "806"),
+        _tx(date(2026, 5, 27), "28-may-2026 CFE SUM SERV BAS CR MU CSS 160330CP7 +", "2014"),
+        _tx(date(2026, 7, 6), "07-jul-2026 CFE CONTIGO MU CSS 160330CP7 +", "18"),
+        _tx(date(2026, 7, 28), "29-jul-2026 CFE CONTIGO MU CSS 160330CP7 +", "2021"),
+    ]
+    txs[-1].description = "Pago Luz"
+    txs[-2].description = "Pago Luz"
+
+    groups = RecurrenceService().detect(txs)
+    assert len(groups) == 1
+    g = groups[0]
+    assert g.key == "util:cfe"
+    assert g.frequency == "bimonthly"
+    assert g.occurrences == 3  # the $18 fee is not the bill
+    assert g.label == "Pago Luz"
+
+
 def test_biweekly_cadence():
     txs = [
         _tx(date(2024, 1, 1), "Prestamo quincenal", "750"),
@@ -149,6 +217,62 @@ def test_taught_alias_merges_differently_worded_series():
     assert g.key == "alias:cableycomun"
     assert g.occurrences == 3
     assert g.frequency == "monthly"
+
+
+def test_shared_user_name_groups_spei_that_embed_the_month():
+    """The reported case: each SPEI names the month, so the heuristic splits
+    them; the user already named every row «Colegiatura Demian»."""
+    months = [
+        (date(2025, 12, 2), "DICIEMBRE"),
+        (date(2026, 1, 7), "ENERO"),
+        (date(2026, 2, 4), "FEBRERO"),
+        (date(2026, 3, 2), "MARZO"),
+        (date(2026, 4, 6), "ABRIL"),
+        (date(2026, 5, 6), "MAYO"),
+        (date(2026, 6, 3), "JUNIO"),
+        (date(2026, 7, 9), "JULIO"),
+    ]
+
+    def spei(month: str) -> str:
+        return (
+            "PAGO INTERBANCARIO A BANORTE AL BENEF. JUANA DE ASBAJE "
+            f"Y RAMIREZ DE SANTILLANA CLAVE 1 SECUNDARIA {month} MISMO DIA"
+        )
+
+    unnamed = [_tx(day, spei(month), "3700") for day, month in months]
+    assert RecurrenceService().detect(unnamed) == []
+
+    named = []
+    for day, month in months:
+        t = _tx(day, spei(month), "3700")
+        t.description = "Colegiatura Demian"
+        named.append(t)
+    groups = RecurrenceService().detect(named)
+    assert len(groups) == 1
+    g = groups[0]
+    assert g.label == "Colegiatura Demian"
+    assert g.key == "named:colegiatura demian"
+    assert g.occurrences == 8
+    assert g.frequency == "monthly"
+
+
+def test_shared_user_name_wins_over_a_generic_alias():
+    """A taught label that is a SPEI substring must not hide the user's name."""
+    months = [
+        (date(2026, 1, 7), "ENERO"),
+        (date(2026, 2, 4), "FEBRERO"),
+        (date(2026, 3, 2), "MARZO"),
+    ]
+    txs = []
+    for day, month in months:
+        raw = f"PAGO INTERBANCARIO A BANORTE SECUNDARIA {month} MISMO DIA"
+        t = _tx(day, raw, "3700")
+        t.description = "Colegiatura Demian"
+        txs.append(t)
+    groups = RecurrenceService().detect(txs, aliases=[("pago", "Transferencias")])
+    assert len(groups) == 1
+    assert groups[0].label == "Colegiatura Demian"
+    assert groups[0].key == "named:colegiatura demian"
 
 
 def test_alias_changes_the_label_but_never_splits_the_series():

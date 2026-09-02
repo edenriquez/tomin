@@ -20,6 +20,13 @@ def app(tmp_path):
         # both) without paying for the migration history on every test.
         # test_migrations.py exercises the Alembic path itself.
         run_migrations=False,
+        # No outbound call from the suite. A test that reaches the Profeco
+        # survey is slow, flaky, and red on a laptop with no network — for
+        # a reason that has nothing to do with the code under test. The
+        # reference port is exercised with a fake, in test_prices.py.
+        price_reference_city="",
+        listings_source="",
+        brave_search_api_key="",
     )
     application = create_app(settings)
     # The app defers bootstrap to the first request (DuckDB single-writer lock

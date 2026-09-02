@@ -29,9 +29,12 @@ class RecurringCharge:
 
 @dataclass(frozen=True)
 class RecurringItem:
+    #: Stable grouping identity from RecurrenceService — survives a new charge,
+    #: unlike last_date. What a pin must be stored as.
+    key: str
     label: str
     occurrences: int
-    frequency: str  # weekly | biweekly | monthly | yearly
+    frequency: str  # weekly | biweekly | monthly | bimonthly | yearly
     typical_amount: Decimal
     monthly_equivalent: Decimal
     amount_stable: bool

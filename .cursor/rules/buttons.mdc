@@ -1,0 +1,20 @@
+---
+description: Use the system Button; Lectura dock is soot, not a custom cyan CTA
+alwaysApply: true
+---
+
+# Buttons
+
+Actions go through `Button` from `@/components/ui`. No decorative icons on the filled commit, no second Signal chip.
+
+The Lectura dock is the exception to Signal: soot fill, paper label — same on-state as selected pills and chat send. Elevation lives on the **bar** (a layered float shadow), not on the button.
+
+```tsx
+// BAD
+<Button icon={<FlaskConical />}>Leer conjunto</Button>
+
+// GOOD — dock commit
+<Button size="sm" className="border-soot bg-soot text-paper">
+  Leer conjunto
+</Button>
+```

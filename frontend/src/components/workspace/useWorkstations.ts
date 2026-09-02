@@ -49,7 +49,7 @@ export function useWorkstations() {
                 setItems((cur) => [created, ...(cur ?? [])]);
                 return created;
             } catch (e) {
-                toast(`No se pudo crear el análisis: ${(e as Error).message}`, "negative");
+                toast(`No se pudo crear la lectura: ${(e as Error).message}`, "negative");
                 return null;
             }
         },

@@ -32,7 +32,7 @@ export default function WorkstationPage() {
         // Reachable by a stale link or a lens deleted in another tab. A 404
         // that says so beats a spinner that never resolves.
         return (
-            <EmptyState icon={FlaskConical} title="Este análisis ya no existe">
+            <EmptyState icon={FlaskConical} title="Esta lectura ya no existe">
                 Puede que lo hayas borrado. Elige otro de la lista o crea uno nuevo.
             </EmptyState>
         );

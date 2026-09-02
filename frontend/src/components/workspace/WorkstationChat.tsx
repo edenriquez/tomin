@@ -249,7 +249,7 @@ export function WorkstationChat({
                     <code className="text-ink">LLM_BASE_URL</code>,{" "}
                     <code className="text-ink">LLM_API_KEY</code> y{" "}
                     <code className="text-ink">LLM_MODEL</code> en el backend para activarlo.
-                    El resto de este análisis funciona sin eso.
+                    El resto de esta lectura funciona sin eso.
                 </p>
             ) : (
                 <>

@@ -33,6 +33,11 @@ _TRANSACTION_LINE = re.compile(r"^\s*\d{1,2}[-/]")
 _COUNTERPARTY_LINE = re.compile(
     r"^\s*(?:emisor|receptor|ordenante|beneficiario|cliente"
     r"|nom\s+origi|nom\s+benef|banco\s+(?:emisor|receptor))\s*:"
+    # Banamex's debit detail names the other bank in prose, not behind a
+    # label: "PAGO RECIBIDO DE NU MEXICO POR ORDEN DE ..." and "PAGO
+    # INTERBANCARIO A BBVA MEXICO AL BENEF ...". Twelve of those and the
+    # statement read as a Nu statement.
+    r"|^\s*(?:\d{2}\s+[a-z]{3}\s+)?pago\s+(?:recibido\s+de|interbancario\s+a)\b"
 )
 
 #: Signature classes, by how much a hit proves the issuer:
@@ -94,6 +99,11 @@ class KeywordTemplateClassifier:
             ("nu bank", "legal"),
         ),
         "Banamex": (
+            # The debit account's product name, printed in the masthead of
+            # every "MiCuenta" statement and never as a counterparty. Without
+            # it a debit statement full of SPEI traffic scored as whichever
+            # bank the user transfers to most.
+            ("micuenta", "product"),
             ("citibanamex", "legal"),
             ("banco nacional de mexico", "legal"),
             ("banamex", "brand"),

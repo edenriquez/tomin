@@ -23,6 +23,12 @@ Ingestion pipeline (backend): `upload -> extract (PDF text / OCR / SAT XML)
 -> classify template -> parse -> categorize -> persist structured data
 (raw file discarded) -> feed DuckDB cube`.
 
+Grocery tickets ride a second, shorter pipeline with the same custody rule: the
+phone photographs a ticket, OCRs it **on device**, and sends only the lines,
+sealed — `read into products -> match to the movement it explains -> compare
+against your own price history`. A statement can only say
+`SORIANA $1,412.60`; this is what turns that into "la leche te subió 19%".
+
 - Backend: hexagonal (ports & adapters), Flask HTTP, SQLAlchemy (Supabase
   Postgres or SQLite), local OCR (pdfplumber + optional Tesseract), DuckDB cube.
 - Auth: Supabase (JWT verified server-side); disabled by default for local dev.

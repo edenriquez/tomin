@@ -50,6 +50,7 @@ def recurring():
     return jsonify(
         items=[
             {
+                "key": i.key,
                 "label": i.label,
                 "occurrences": i.occurrences,
                 "frequency": i.frequency,

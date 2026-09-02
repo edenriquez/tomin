@@ -31,6 +31,7 @@ class DetectRecurringUseCase:
         groups = self._service.detect(txs, self._user_aliases.list_for_user(user_id))
         return [
             RecurringItem(
+                key=g.key,
                 label=g.label,
                 occurrences=g.occurrences,
                 frequency=g.frequency,

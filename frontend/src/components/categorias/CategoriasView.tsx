@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/cn";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Shapes } from "lucide-react";
 import {
@@ -16,10 +18,15 @@ import {
     queryMetrics,
     type MetricEntry,
 } from "@/lib/metrics";
-import { resolveWindow, windowToPeriod } from "@/lib/window";
+import { monthsToRange } from "@/lib/window";
+import { useTimeWindow } from "@/components/TimeWindowProvider";
+import { track } from "@/lib/telemetry";
 import { useAppData } from "@/components/AppChrome";
 import { BackendNotice, EmptyState, Skeleton } from "@/components/ui";
 import { ChartCard } from "@/components/ChartCard";
+import { LecturaDock } from "@/components/lectura/LecturaDock";
+import { useLectura } from "@/components/lectura/LecturaProvider";
+import { draftFromClauses } from "@/lib/lectura";
 import { RangeBrush, type BucketRange } from "@/components/charts/RangeBrush";
 import { TransactionsList } from "@/components/movimientos/TransactionsList";
 import { useTransactions } from "@/components/movimientos/useTransactions";
@@ -64,21 +71,35 @@ function sameCategory(a: string, b: string): boolean {
     return normalize(a) === normalize(b);
 }
 
+function categoryIdByName(
+    map: ReturnType<typeof useCategories>,
+    name: string
+): string | undefined {
+    if (!map) return undefined;
+    for (const [id, info] of Array.from(map.entries())) {
+        if (sameCategory(info.name, name)) return id;
+    }
+    return undefined;
+}
+
 export function CategoriasView() {
-    const { windowId, dataVersion } = useAppData();
+    const { windowKey, period, bounds, dataVersion } = useAppData();
+    const { selectCustom } = useTimeWindow();
     const categories = useCategories();
     const [entry, setEntry] = useState<MetricEntry | null>(null);
+    const [fetching, setFetching] = useState(true);
     const [error, setError] = useState<string | null>(null);
     // Bumped when an edit here changes a category: the cube has to be asked
     // again, or the columns would keep showing the category the user just
     // corrected.
     const [edits, setEdits] = useState(0);
+    const { openDraft, opening } = useLectura();
 
     // What the list is showing. Both come from the chart or the chips, and
     // both are session state — a filter is a question, not a preference.
     // Months are a RANGE ("2026-02".."2026-04"): a layer click asks about one
     // month (start === end), a drag across the columns asks about several.
-    const [pickedCategory, setPickedCategory] = useState<string | null>(null);
+    const [pickedCategories, setPickedCategories] = useState<string[]>([]);
     const [pickedMonths, setPickedMonths] = useState<{ start: string; end: string } | null>(
         null
     );
@@ -88,12 +109,12 @@ export function CategoriasView() {
     const { statementIds } = useBankScope(dataVersion);
     const scopeKey = statementIds?.join("|") ?? "";
 
-    const period = useMemo(() => windowToPeriod(windowId), [windowId]);
-    const bounds = useMemo(() => resolveWindow(windowId), [windowId]);
 
     useEffect(() => {
         let stale = false;
-        setEntry(null);
+        // The old columns stay mounted while the new ones load, so Apex can
+        // tween one set into the other instead of repainting from a skeleton.
+        setFetching(true);
         queryMetrics(period, [
             // Month grain alongside the category dimension: rows arrive as
             // {month, category, expense_amount} — the stacked reading's shape.
@@ -108,9 +129,12 @@ export function CategoriasView() {
                 if (stale) return;
                 setEntry(batch.results.cats);
                 setError(null);
+                setFetching(false);
             })
             .catch((e) => {
-                if (!stale) setError((e as Error).message);
+                if (stale) return;
+                setError((e as Error).message);
+                setFetching(false);
             });
         return () => {
             stale = true;
@@ -129,14 +153,15 @@ export function CategoriasView() {
     // A new period is a new reading: filters and paging reset rather than
     // silently applying to data the user hasn't looked at yet.
     useEffect(() => {
-        setPickedCategory(null);
+        setPickedCategories([]);
         setPickedMonths(null);
         setSelectedId(null);
         setVisibleCount(PAGE);
-    }, [windowId]);
+    }, [windowKey]);
 
     const result = entry && !isMetricError(entry) ? entry : null;
     const loading = entry === null && !error;
+    const refreshing = fetching && !loading;
 
     const points: MonthlyCategoryPoint[] = useMemo(() => {
         if (!result) return [];
@@ -194,9 +219,11 @@ export function CategoriasView() {
         // Expenses only: the columns are spend, so an income row in the list
         // would be evidence for a mark that isn't there.
         let out = items.filter((t) => t.type === "expense");
-        if (pickedCategory) {
+        if (pickedCategories.length) {
             out = out.filter((t) =>
-                sameCategory(categoryName(categories, t.category_id), pickedCategory)
+                pickedCategories.some((name) =>
+                    sameCategory(categoryName(categories, t.category_id), name)
+                )
             );
         }
         if (pickedMonths) {
@@ -206,7 +233,7 @@ export function CategoriasView() {
             });
         }
         return out;
-    }, [items, categories, pickedCategory, pickedMonths]);
+    }, [items, categories, pickedCategories, pickedMonths]);
 
     const filteredTotal = useMemo(
         () => (filtered ?? []).reduce((sum, t) => sum + t.amount, 0),
@@ -217,21 +244,34 @@ export function CategoriasView() {
     // asked the question takes it back, so there is no dead-end selection.
     const handlePick = useCallback(
         (category: string, month: string) => {
-            const same =
-                pickedCategory !== null &&
-                sameCategory(pickedCategory, category) &&
+            const already = pickedCategories.some((n) => sameCategory(n, category));
+            const sameMonth =
+                already &&
+                pickedCategories.length === 1 &&
                 pickedMonths?.start === month &&
                 pickedMonths?.end === month;
-            setPickedCategory(same ? null : category);
-            setPickedMonths(same ? null : { start: month, end: month });
+            if (sameMonth) {
+                setPickedCategories([]);
+                setPickedMonths(null);
+            } else {
+                setPickedCategories([category]);
+                setPickedMonths({ start: month, end: month });
+            }
             setSelectedId(null);
             setVisibleCount(PAGE);
         },
-        [pickedCategory, pickedMonths]
+        [pickedCategories, pickedMonths]
     );
 
     function pickCategory(name: string | null) {
-        setPickedCategory(name);
+        if (!name) {
+            setPickedCategories([]);
+        } else {
+            track("categorias.pick_category");
+            setPickedCategories((cur) =>
+                cur.some((n) => n === name) ? cur.filter((n) => n !== name) : [...cur, name]
+            );
+        }
         setSelectedId(null);
         setVisibleCount(PAGE);
     }
@@ -242,14 +282,18 @@ export function CategoriasView() {
     // drawing — chart and list always describe the same set.
     const chartPoints = useMemo(() => {
         let out = points;
-        if (pickedCategory) out = out.filter((pt) => sameCategory(pt.category, pickedCategory));
+        if (pickedCategories.length) {
+            out = out.filter((pt) =>
+                pickedCategories.some((name) => sameCategory(pt.category, name))
+            );
+        }
         if (pickedMonths) {
             out = out.filter(
                 (pt) => pt.month >= pickedMonths.start && pt.month <= pickedMonths.end
             );
         }
         return out;
-    }, [points, pickedCategory, pickedMonths]);
+    }, [points, pickedCategories, pickedMonths]);
 
     // The drawn chart's month axis, chronological — the brush maps drag
     // pixels to indices into exactly this.
@@ -259,16 +303,21 @@ export function CategoriasView() {
         return keys;
     }, [chartPoints]);
 
+    // A drag across the months is not a local zoom any more: it sets the
+    // app's time window to those months, so this chart, the list, and every
+    // other view answer for the same span — and the header shows it.
     const handleBrush = useCallback(
         (r: BucketRange) => {
             const start = monthKeys[r.start];
             const end = monthKeys[r.end];
             if (!start || !end) return;
-            setPickedMonths({ start, end });
+            const range = monthsToRange(start, end);
+            selectCustom(range.start, range.end, "drag:categorias");
+            setPickedMonths(null);
             setSelectedId(null);
             setVisibleCount(PAGE);
         },
-        [monthKeys]
+        [monthKeys, selectCustom]
     );
 
     const pickedMonthLabel = useMemo(() => {
@@ -303,6 +352,7 @@ export function CategoriasView() {
                                     would cover the whole plot. A drag inside
                                     the zoom narrows further; the month chip
                                     below is the way back out. */}
+                                <div className={cn("transition-opacity duration-300", refreshing && "opacity-50")}>
                                 <RangeBrush
                                     buckets={monthKeys.length}
                                     range={null}
@@ -314,12 +364,13 @@ export function CategoriasView() {
                                         // stale colors and axes when the series
                                         // or month set changes — a different
                                         // selection is a different chart.
-                                        key={`${pickedCategory ?? "todas"}-${pickedMonths?.start ?? ""}-${pickedMonths?.end ?? ""}`}
+                                        key={`${pickedCategories.join("|") || "todas"}-${pickedMonths?.start ?? ""}-${pickedMonths?.end ?? ""}`}
                                         points={chartPoints}
                                         categoryColors={categoryColors}
                                         onPick={handlePick}
                                     />
                                 </RangeBrush>
+                                </div>
                                 <p className="text-label text-ash">
                                     Haz clic en una capa para ver sus movimientos, o
                                     arrastra sobre los meses para acotar un rango.
@@ -350,7 +401,7 @@ export function CategoriasView() {
                         <div className="mt-3">
                             <CategoryFilterBar
                                 chips={chips}
-                                picked={pickedCategory}
+                                picked={pickedCategories}
                                 onPick={pickCategory}
                                 month={pickedMonths?.start ?? null}
                                 monthLabel={pickedMonthLabel}
@@ -373,7 +424,7 @@ export function CategoriasView() {
                                 </div>
                             ) : filtered.length === 0 ? (
                                 <p className="py-6 text-body text-graphite">
-                                    {pickedCategory || pickedMonths
+                                    {pickedCategories.length || pickedMonths
                                         ? "Ningún movimiento con este filtro."
                                         : "Sin movimientos en este periodo."}
                                 </p>
@@ -406,6 +457,32 @@ export function CategoriasView() {
                 </>
             )}
 
+            {pickedCategories.length > 0 && (
+                <LecturaDock
+                    summary={
+                        pickedCategories.length === 1
+                            ? `1 categoría · ${pickedCategories[0]}`
+                            : `${pickedCategories.length} categorías`
+                    }
+                    chips={pickedCategories}
+                    busy={opening}
+                    onRead={() => {
+                        const clauses = pickedCategories
+                            .map((name) => {
+                                const category_id = categoryIdByName(categories, name);
+                                return category_id ? { category_id } : null;
+                            })
+                            .filter((c): c is { category_id: string } => c !== null);
+                        const draft = draftFromClauses(
+                            clauses,
+                            [],
+                            pickedCategories.join(" + ")
+                        );
+                        if (draft) void openDraft(draft);
+                    }}
+                    onClear={() => setPickedCategories([])}
+                />
+            )}
         </div>
     );
 }

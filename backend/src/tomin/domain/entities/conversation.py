@@ -9,6 +9,11 @@ from uuid import UUID, uuid4
 #: once, at write time, so every reader shows the same words.
 MAX_TITLE_LENGTH = 80
 
+#: An inferred list-title is a name, not a caption. Five words is the most
+#: that still scans in a rail; the character cap catches a single long token.
+MAX_INFERRED_WORDS = 5
+MAX_INFERRED_LENGTH = 48
+
 
 def title_from_question(question: str) -> str:
     """The first question, trimmed to a title.
@@ -22,6 +27,26 @@ def title_from_question(question: str) -> str:
     cut = text[:MAX_TITLE_LENGTH]
     head, _, _ = cut.rpartition(" ")
     return (head or cut) + "…"
+
+
+def sanitize_inferred_title(raw: str) -> str:
+    """Turn a model's title attempt into a list name, or empty if unusable.
+
+    The first question is already stored as a fallback; an empty return means
+    keep that. Stripping quotes and punctuation is what makes "Nómina en
+    Soriana" rather than "«Nómina en Soriana.»" land in the rail.
+    """
+    text = " ".join((raw or "").split())
+    text = text.strip(" «»\"'`.,;:¡!¿?-—")
+    if not text:
+        return ""
+    words = text.split()[:MAX_INFERRED_WORDS]
+    text = " ".join(words)
+    if len(text) > MAX_INFERRED_LENGTH:
+        cut = text[:MAX_INFERRED_LENGTH]
+        head, _, _ = cut.rpartition(" ")
+        text = head or cut
+    return text
 
 
 @dataclass(slots=True)

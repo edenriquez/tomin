@@ -37,7 +37,7 @@ export function WorkspaceSidebar({
     const categories = useCategories();
 
     return (
-        <nav aria-label="Análisis" className={cn(variant === "rail" && "w-60 shrink-0")}>
+        <nav aria-label="Lecturas" className={cn(variant === "rail" && "w-60 shrink-0")}>
             <button
                 type="button"
                 onClick={onNew}
@@ -47,7 +47,7 @@ export function WorkspaceSidebar({
                 )}
             >
                 <Plus size={15} aria-hidden />
-                Nuevo análisis
+                Nueva lectura
             </button>
 
             <div aria-hidden className="my-2 h-px bg-mist" />
@@ -64,7 +64,7 @@ export function WorkspaceSidebar({
 
             {error && (
                 <p className="px-3 py-2 text-body-sm text-graphite">
-                    No se pudieron cargar tus análisis.
+                    No se pudieron cargar tus lecturas.
                 </p>
             )}
 

@@ -1,27 +1,32 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { resolveWindow, type WindowBounds, type WindowId } from "@/lib/window";
-import { SettingsProvider } from "@/components/settings/SettingsProvider";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { api } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
-import { WindowPills } from "@/components/WindowPills";
-import { useWindowSelection } from "@/components/useWindowSelection";
+import { LecturaHost } from "@/components/lectura/LecturaHost";
+import { useTimeWindow } from "@/components/TimeWindowProvider";
+import type { Period } from "@/lib/metrics";
+import type { TimeWindow, WindowBounds } from "@/lib/window";
 
 /**
- * The one chassis every route mounts: settings provider, shell, the optional
- * window-pills row, and the upload→refetch counter. Before this, each page
- * assembled the same sandwich by hand — four provider placements, two pills
- * wrappers, and an `Inner` split just to get a hook inside the provider.
+ * The frame every view shares: shell, and the inputs a view reads its data
+ * through. The time selection itself lives above the page, in
+ * `TimeWindowProvider`; this only hands it down alongside the data version.
  *
- * Views read their inputs through `useAppData()` instead of threading three
- * props from every page.
+ * Views read their inputs through `useAppData()` instead of threading props
+ * from every page.
  */
 
 type AppData = {
     /** Bumped after each upload; views key their fetches on it. */
     dataVersion: number;
-    windowId: WindowId;
+    /** The selected span, as a value and in the shapes each API wants. */
+    window: TimeWindow;
+    /** Changes exactly when the selection does — the dependency to key on. */
+    windowKey: string;
     bounds: WindowBounds;
+    period: Period;
+    grain: "day" | "month";
 };
 
 const AppDataContext = createContext<AppData | null>(null);
@@ -38,51 +43,53 @@ export function AppChrome({
     onDataChanged,
 }: {
     children: ReactNode;
-    /** Render the period pills. Off for views that read the whole history
-     *  (Recurrentes) or manage the archive (Documentos). */
+    /** Whether this view reads through the time filter. Off for views that
+     *  read the whole history (Fijos, Precios) or manage the archive
+     *  (Documentos); the bar still shows, and says it does not apply. */
     withWindow?: boolean;
     onDataChanged?: () => void;
 }) {
-    return (
-        <SettingsProvider>
-            <Chrome withWindow={withWindow} onDataChanged={onDataChanged}>
-                {children}
-            </Chrome>
-        </SettingsProvider>
-    );
-}
-
-/** Split so the hooks below run inside the provider. */
-function Chrome({
-    children,
-    withWindow,
-    onDataChanged,
-}: {
-    children: ReactNode;
-    withWindow: boolean;
-    onDataChanged?: () => void;
-}) {
     const [dataVersion, setDataVersion] = useState(0);
-    const [windowId, selectWindow] = useWindowSelection();
+    const tw = useTimeWindow();
+
+    // The newest transaction on record is where the rolling presets end. Read
+    // after every upload, because that is when it moves; a failed read leaves
+    // the previous anchor (or today) in place rather than blanking the filter.
+    useEffect(() => {
+        let stale = false;
+        api.transactionSpan()
+            .then((span) => !stale && tw.setAnchor(span.last))
+            .catch(() => undefined);
+        return () => {
+            stale = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dataVersion]);
 
     const value = useMemo<AppData>(
-        () => ({ dataVersion, windowId, bounds: resolveWindow(windowId) }),
-        [dataVersion, windowId]
+        () => ({
+            dataVersion,
+            window: tw.window,
+            windowKey: tw.key,
+            bounds: tw.bounds,
+            period: tw.period,
+            grain: tw.grain,
+        }),
+        [dataVersion, tw]
     );
 
     return (
         <AppShell
+            timeScoped={withWindow}
             onUploaded={() => {
                 setDataVersion((v) => v + 1);
                 onDataChanged?.();
             }}
         >
-            {withWindow && (
-                <div className="flex flex-wrap items-center justify-end gap-4 pb-6">
-                    <WindowPills value={windowId} onChange={selectWindow} />
-                </div>
-            )}
-            <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
+            <AppDataContext.Provider value={value}>
+                {children}
+                <LecturaHost />
+            </AppDataContext.Provider>
         </AppShell>
     );
 }

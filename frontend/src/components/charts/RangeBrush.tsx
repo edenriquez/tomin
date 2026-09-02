@@ -17,7 +17,7 @@ export type BucketRange = { start: number; end: number };
  * Drag-to-select for charts whose x axis is a list of buckets (months).
  *
  * Apex only ships drag selection for numeric/datetime axes; the stacked
- * month charts (Categorías, Recurrentes) are category-axis bars, so this
+ * month charts (Categorías, Fijos) are category-axis bars, so this
  * wrapper adds the same gesture from outside: drag horizontally across the
  * plot and the covered buckets come back as an index range. The pixel→bucket
  * mapping reads the chart's own `.apexcharts-grid` rectangle, so the axis

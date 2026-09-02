@@ -80,6 +80,12 @@ MONTHLY_CASH_FLOW = MetricSpec(
         "amount_min",
         "amount_max",
         "exclude_tx",
+        # A saved lens can be a *group*: several of the predicates above,
+        # each a filter of its own, unioned. Declared alongside them because a
+        # group is still a filtered reading of this metric, not a metric of its
+        # own -- and `validate_filters` checks every name inside it against
+        # this same list, so the union can express nothing a flat rule cannot.
+        "any_of",
     ),
     # Day unlocked for short dashboard windows (7d/14d); month stays the
     # default so existing clients see no change.
@@ -107,6 +113,12 @@ ACCUMULATED_SPEND = MetricSpec(
         "amount_min",
         "amount_max",
         "exclude_tx",
+        # A saved lens can be a *group*: several of the predicates above,
+        # each a filter of its own, unioned. Declared alongside them because a
+        # group is still a filtered reading of this metric, not a metric of its
+        # own -- and `validate_filters` checks every name inside it against
+        # this same list, so the union can express nothing a flat rule cannot.
+        "any_of",
     ),
     grains=("month", "day"),
     default_grain="month",
@@ -239,6 +251,12 @@ COHORT_ACTIVITY = MetricSpec(
         "amount_min",
         "amount_max",
         "exclude_tx",
+        # A saved lens can be a *group*: several of the predicates above,
+        # each a filter of its own, unioned. Declared alongside them because a
+        # group is still a filtered reading of this metric, not a metric of its
+        # own -- and `validate_filters` checks every name inside it against
+        # this same list, so the union can express nothing a flat rule cannot.
+        "any_of",
     ),
     grains=("month", "day"),
     default_grain="month",
@@ -266,6 +284,12 @@ COHORT_TOTALS = MetricSpec(
         "amount_min",
         "amount_max",
         "exclude_tx",
+        # A saved lens can be a *group*: several of the predicates above,
+        # each a filter of its own, unioned. Declared alongside them because a
+        # group is still a filtered reading of this metric, not a metric of its
+        # own -- and `validate_filters` checks every name inside it against
+        # this same list, so the union can express nothing a flat rule cannot.
+        "any_of",
     ),
     requires=("transactions",),
 )
@@ -300,6 +324,12 @@ COHORT_PROFILE = MetricSpec(
         "amount_min",
         "amount_max",
         "exclude_tx",
+        # A saved lens can be a *group*: several of the predicates above,
+        # each a filter of its own, unioned. Declared alongside them because a
+        # group is still a filtered reading of this metric, not a metric of its
+        # own -- and `validate_filters` checks every name inside it against
+        # this same list, so the union can express nothing a flat rule cannot.
+        "any_of",
     ),
     requires=("transactions",),
 )

@@ -6,6 +6,7 @@ import { api, type Transaction, type TransactionPatch } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useCategories } from "@/lib/categories";
 import { Button, Select, useToast } from "@/components/ui";
+import { ReceiptStrip } from "./ReceiptStrip";
 
 /**
  * Inline editing for a selected row. No form: the row's own text is the
@@ -232,8 +233,9 @@ export function InlineCategory({
 /**
  * What has no place in the row, as inline elements rather than a form: the
  * note (click-to-write text, not a labelled field), the exclusion (one
- * pressed chip), the original bank text when a rename hides it, and the
- * teach-prompt when a correction just happened.
+ * pressed chip), the original bank text when a rename hides it, the basket
+ * from a photographed ticket when there is one, and the teach-prompt when a
+ * correction just happened.
  */
 export function EditorStrip({
     transaction: t,
@@ -251,6 +253,10 @@ export function EditorStrip({
 
     return (
         <div className="space-y-2.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+            {/* Read-only here on purpose: a ticket is photographed on the phone,
+                where the paper is. This side only shows what came of it. */}
+            <ReceiptStrip transactionId={t.id} />
+
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                 <InlineNote transaction={t} onPatch={onPatch} />
 

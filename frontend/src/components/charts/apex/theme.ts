@@ -15,7 +15,18 @@ export const baseOptions: ApexOptions = {
         foreColor: colors.graphite,
         toolbar: { show: false },
         zoom: { enabled: false },
-        animations: { enabled: true, speed: 200 },
+        // A new window is a *change* to the reading, and the chart should move
+        // like one: bars grow or shrink to their new height, points slide, the
+        // axis re-labels. `dynamicAnimation` is what makes an in-place series
+        // update tween instead of repaint — which is also why the views keep
+        // the previous data mounted while the next arrives.
+        animations: {
+            enabled: true,
+            speed: 360,
+            easing: "easeinout",
+            animateGradually: { enabled: true, delay: 30 },
+            dynamicAnimation: { enabled: true, speed: 360 },
+        },
         dropShadow: { enabled: false },
         parentHeightOffset: 0,
         redrawOnParentResize: true,

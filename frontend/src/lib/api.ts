@@ -126,9 +126,11 @@ export type UploadResult = {
 
 /** One detected recurring series (subscription, fixed bill). */
 export type RecurringItem = {
+    /** Stable grouping identity — survives a new charge, unlike last_date. */
+    key: string;
     label: string;
     occurrences: number;
-    frequency: "weekly" | "biweekly" | "monthly" | "yearly";
+    frequency: "weekly" | "biweekly" | "monthly" | "bimonthly" | "yearly";
     /** Median charge. */
     typical_amount: number;
     /** What the series costs per 30 days — the ranking measure. */
@@ -210,6 +212,16 @@ async function uploadError(res: Response): Promise<UploadError> {
 
 export const api = {
     transactions: (query = "") => request<TransactionPage>(`/api/transactions${query}`),
+    /** The ledger's first and last transaction dates; the time filter anchors
+     *  its rolling presets on `last`, not on the calendar. */
+    transactionSpan: (statementIds?: string[] | null) => {
+        const params = new URLSearchParams();
+        for (const id of statementIds ?? []) params.append("statement_id", id);
+        const q = params.toString();
+        return request<{ first: string | null; last: string | null }>(
+            `/api/transactions/span${q ? `?${q}` : ""}`
+        );
+    },
     /** The global category taxonomy: names and colors for charts and pickers. */
     categories: () => request<{ items: Category[] }>(`/api/categories`),
     /**

@@ -36,6 +36,7 @@ const CADENCE_DAYS: Record<string, number> = {
     weekly: 7,
     biweekly: 14,
     monthly: 30,
+    bimonthly: 60,
     yearly: 365,
 };
 
@@ -66,6 +67,9 @@ function stepForward(d: Date, frequency: string): Date {
             break;
         case "biweekly":
             next.setDate(next.getDate() + 14);
+            break;
+        case "bimonthly":
+            next.setMonth(next.getMonth() + 2);
             break;
         case "yearly":
             next.setFullYear(next.getFullYear() + 1);
@@ -220,8 +224,25 @@ export function buildTimeline(
             spent += amount;
         }
 
-        // Simulated horizon. The current month can hold both: charges already
-        // made and charges still to come, which is exactly right.
+        // Simulated horizon. Irregular series (taught merchants with no
+        // cadence) smear their typical month — inventing a landing date
+        // would be the lie fijos otherwise refuse. Cadenced series still
+        // step charge by charge.
+        const irregular =
+            item.key.startsWith("rest:") || item.key.startsWith("ingreso:smear:");
+        if (irregular) {
+            const rate = item.monthly_equivalent;
+            const firstFuture = index.get(currentMonth) ?? months.length;
+            activeSeries += 1;
+            for (let i = firstFuture + 1; i < values.length; i++) {
+                values[i] = rate;
+            }
+            projected += rate * monthsAhead;
+            yearly += rate * 12;
+            monthlyRate += rate;
+            return { item, values };
+        }
+
         const upcoming = futureCharges(item, horizonEnd, now, asOf);
         if (upcoming.length) activeSeries += 1;
         else if (isStale(item, asOf)) endedSeries += 1;
@@ -255,3 +276,109 @@ export function buildTimeline(
         asOf,
     };
 }
+
+/**
+ * Linear interpolation on a sorted sample. `q` is 0..1.
+ */
+export function quantile(sorted: number[], q: number): number {
+    if (sorted.length === 0) return 0;
+    const i = (sorted.length - 1) * q;
+    const lo = Math.floor(i);
+    const hi = Math.ceil(i);
+    if (lo === hi) return sorted[lo]!;
+    return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (i - lo);
+}
+
+/**
+ * The bulk of a distribution: Tukey fences on P25/P75. A $33k SPEI next to
+ * a $800 gym is not "more recurrence" — it is a different kind of money, and
+ * summing it makes every month look the same.
+ */
+export function tukeyFence(values: number[]): { lo: number; hi: number } | null {
+    if (values.length < 4) return null;
+    const sorted = values.slice().sort((a, b) => a - b);
+    const q1 = quantile(sorted, 0.25);
+    const q3 = quantile(sorted, 0.75);
+    const iqr = q3 - q1;
+    return { lo: Math.max(0, q1 - 1.5 * iqr), hi: q3 + 1.5 * iqr };
+}
+
+/**
+ * Series whose typical charge sits in the bulk of `universe`.
+ * Fence against the whole detected set, not the leftover after pinning —
+ * otherwise one SPEI remaining in Sugeridos is "the rest" and the filter
+ * never fires (n < 4).
+ */
+export function typicalSeries(
+    items: RecurringItem[],
+    universe: RecurringItem[] = items
+): RecurringItem[] {
+    const fence = tukeyFence(universe.map((i) => Math.abs(i.typical_amount)));
+    if (!fence) return items;
+    return items.filter((i) => {
+        const a = Math.abs(i.typical_amount);
+        return a >= fence.lo && a <= fence.hi;
+    });
+}
+
+/**
+ * The messy rest of life: unpinned recurrences in the typical bulk.
+ * History is what they actually cost (a charge more than 3× its series
+ * typical is a spike, not the rhythm). The horizon is their combined
+ * monthly rate, smeared — the thing fijos must not do.
+ */
+export function noiseTotal(
+    items: RecurringItem[],
+    months: number,
+    universe: RecurringItem[] = items
+): number {
+    return typicalSeries(items, universe).reduce((sum, i) => sum + i.monthly_equivalent, 0) * months;
+}
+
+export type RestSeries = {
+    /** What the typical unpinned series actually cost, month by month. */
+    measured: (number | null)[];
+    /** Combined monthly_equivalent from today forward. */
+    simulated: (number | null)[];
+    rate: number;
+    count: number;
+    /** Series left out as atípicas. */
+    dropped: number;
+};
+
+/**
+ * Two aligned series for the blue line: measured history of the rest,
+ * then a flat simulated rate. Only the typical bulk of recurrences —
+ * percentiles, not the mean the SPEI would dominate.
+ */
+export function restByMonth(
+    items: RecurringItem[],
+    months: MonthKey[],
+    firstFutureIndex: number,
+    universe: RecurringItem[] = items,
+    extras: RecurringItem[] = []
+): RestSeries {
+    const typical = typicalSeries(items, universe);
+    const kept = [...typical, ...extras];
+    const rate = kept.reduce((sum, i) => sum + i.monthly_equivalent, 0);
+    const spent = new Map<MonthKey, number>();
+    for (const item of kept) {
+        const cap = 3 * Math.abs(item.typical_amount);
+        for (const c of item.charges ?? []) {
+            const amount = Math.abs(c.amount);
+            if (cap > 0 && amount > cap) continue;
+            const d = parsePeriodKey(c.date);
+            if (!d) continue;
+            const key = monthKeyOf(d);
+            spent.set(key, (spent.get(key) ?? 0) + amount);
+        }
+    }
+    return {
+        measured: months.map((m, i) => (i >= firstFutureIndex ? null : (spent.get(m) ?? 0))),
+        simulated: months.map((_, i) => (i >= firstFutureIndex ? rate : null)),
+        rate,
+        count: kept.length,
+        dropped: items.length - typical.length,
+    };
+}
+

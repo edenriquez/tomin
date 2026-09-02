@@ -65,6 +65,9 @@ export default function DashboardScreen() {
             <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push("/upload")}>
                 <Text style={styles.primaryBtnText}>+ Subir Estado de Cuenta</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push("/receipt")}>
+                <Text style={styles.secondaryBtnText}>Foto de un ticket</Text>
+            </TouchableOpacity>
             <Link href="/transactions" style={styles.linkBtn}>
                 Ver todas las transacciones
             </Link>
@@ -105,5 +108,14 @@ const styles = StyleSheet.create({
         marginTop: 20,
     },
     primaryBtnText: { color: "#fff", fontWeight: "600" },
+    secondaryBtn: {
+        borderRadius: 12,
+        padding: 12,
+        alignItems: "center",
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: "#cbd5e1",
+    },
+    secondaryBtnText: { color: "#334155", fontWeight: "600" },
     linkBtn: { color: "#2563eb", textAlign: "center", marginTop: 12 },
 });

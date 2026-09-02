@@ -14,8 +14,12 @@ from uuid import UUID, uuid4
 import pytest
 
 from tomin.application.ports.outbound.chat import ChatMessage
-from tomin.application.use_cases.workstation_chat import SYSTEM
-from tomin.domain.entities.conversation import MAX_TITLE_LENGTH, title_from_question
+from tomin.application.use_cases.workstation_chat import SYSTEM, TITLE_SYSTEM
+from tomin.domain.entities.conversation import (
+    MAX_TITLE_LENGTH,
+    sanitize_inferred_title,
+    title_from_question,
+)
 
 DEV_USER = UUID("00000000-0000-0000-0000-000000000001")
 
@@ -26,13 +30,24 @@ class RecordingChat:
     available = True
     model_label = "fake/model"
 
-    def __init__(self, answer: str = "ok") -> None:
+    def __init__(self, answer: str = "ok", title: str = "Nómina en Soriana") -> None:
         self.answer = answer
+        self.title = title
         self.calls: list[list[ChatMessage]] = []
+        self.systems: list[str] = []
 
     def stream(self, *, system, messages):
         self.calls.append(list(messages))
+        self.systems.append(system)
+        if system == TITLE_SYSTEM:
+            yield self.title
+            return
         yield self.answer
+
+
+def _qa_calls(chat: RecordingChat) -> list[list[ChatMessage]]:
+    """Answer streams only — the title call is a different conversation."""
+    return [msgs for msgs, sys in zip(chat.calls, chat.systems) if sys != TITLE_SYSTEM]
 
 
 @pytest.fixture
@@ -80,10 +95,15 @@ def test_first_question_opens_a_thread_and_stores_both_turns(client, chat):
 
     conversation = _conversation_frame(frames)
     assert conversation is not None, "a fresh ask must announce its new thread"
+    # The opening frame still carries the question: the inferred name arrives
+    # after the answer, once there is an exchange to name.
     assert conversation["title"] == "¿Por qué mayo fue alto?"
+    titles = [f["title"] for f in frames if "title" in f and "conversation" not in f]
+    assert titles == ["Nómina en Soriana"]
 
     listed = client.get(f"/api/workstations/{ws['id']}/conversations").get_json()
     assert [c["id"] for c in listed["items"]] == [conversation["id"]]
+    assert listed["items"][0]["title"] == "Nómina en Soriana"
 
     thread = client.get(
         f"/api/workstations/conversations/{conversation['id']}"
@@ -100,14 +120,15 @@ def test_second_question_replays_stored_history_to_the_model(client, chat):
 
     _ask(client, ws["id"], "¿Y al año?", conversation_id=conversation["id"])
 
-    # Second call: the stored exchange precedes the new question — the client
-    # sent no history at all.
-    roles = [m.role for m in chat.calls[1]]
+    qa = _qa_calls(chat)
+    # Second *answer* call: the stored exchange precedes the new question — the
+    # client sent no history at all. The title inference in between is not this.
+    roles = [m.role for m in qa[1]]
     assert roles == ["user", "assistant", "user"]
     # Stored history is the raw exchange; the brief rides only on the new turn.
-    assert chat.calls[1][0].content == "¿Cuánto gasto?"
-    assert chat.calls[1][1].content == "ok"
-    assert chat.calls[1][2].content.endswith("Pregunta: ¿Y al año?")
+    assert qa[1][0].content == "¿Cuánto gasto?"
+    assert qa[1][1].content == "ok"
+    assert qa[1][2].content.endswith("Pregunta: ¿Y al año?")
 
     thread = client.get(
         f"/api/workstations/conversations/{conversation['id']}"
@@ -127,7 +148,8 @@ def test_a_second_conversation_does_not_bleed_into_the_first(client, chat):
 
     assert first["id"] != second["id"]
     # The second thread starts clean: brief + its own question, no history.
-    assert [m.role for m in chat.calls[1]] == ["user"]
+    qa = _qa_calls(chat)
+    assert [m.role for m in qa[1]] == ["user"]
 
     listed = client.get(f"/api/workstations/{ws['id']}/conversations").get_json()
     assert listed["total"] == 2
@@ -197,6 +219,14 @@ def test_titles_cut_at_a_word_boundary():
     assert len(title) <= MAX_TITLE_LENGTH + 1  # the ellipsis
     assert title.endswith("…")
     assert " palabr…" not in title  # no mid-word cut
+
+
+def test_inferred_title_is_a_few_words_not_a_caption():
+    assert sanitize_inferred_title('«Nómina en Soriana.»') == "Nómina en Soriana"
+    assert sanitize_inferred_title("uno dos tres cuatro cinco seis siete") == (
+        "uno dos tres cuatro cinco"
+    )
+    assert sanitize_inferred_title("   ") == ""
 
 
 def test_system_prompt_forbids_latex_and_allows_light_markdown():

@@ -262,6 +262,17 @@ def chat(workstation_id: str):
             role="assistant",
             content="".join(answer_pieces),
         )
+        if created is not None:
+            inferred = answerer.infer_title(
+                question=question, answer="".join(answer_pieces)
+            )
+            if inferred:
+                renamed = manager.rename(
+                    user_id=user_id,
+                    conversation_id=conversation.id,
+                    title=inferred,
+                )
+                yield _sse({"title": renamed.title, "conversation_id": str(renamed.id)})
         yield _sse({"done": True})
 
     return Response(
@@ -281,19 +292,13 @@ def _sse(payload: dict) -> str:
 
 
 def _rule(raw) -> WorkstationRule:
-    if not isinstance(raw, dict):
-        raise ValueError("'rule' must be an object")
-    allowed = set(WorkstationRule.__slots__)
-    unknown = set(raw) - allowed
-    if unknown:
-        raise ValueError(f"Unsupported rule conditions: {sorted(unknown)}")
-    return WorkstationRule(
-        description_contains=raw.get("description_contains"),
-        amount_min=raw.get("amount_min"),
-        amount_max=raw.get("amount_max"),
-        category_id=_uuid_or_none(raw.get("category_id")),
-        tag_id=_uuid_or_none(raw.get("tag_id")),
-    )
+    """One filter, or `{"any_of": [...]}` for a group. Both parse in the domain.
+
+    Every ValueError it raises is a 400 through the app-wide handler, which is
+    the point: a rule the engine would reject must fail here, while the user is
+    still looking at the editor.
+    """
+    return WorkstationRule.from_json(raw)
 
 
 def _uuids(raw) -> list[UUID]:
@@ -302,7 +307,3 @@ def _uuids(raw) -> list[UUID]:
     if not isinstance(raw, list):
         raise ValueError("'excluded_tx_ids' must be a list of ids")
     return [UUID(value) for value in raw]
-
-
-def _uuid_or_none(value) -> UUID | None:
-    return UUID(value) if value else None

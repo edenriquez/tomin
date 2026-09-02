@@ -5,6 +5,10 @@ Hexagonal (ports & adapters) Flask API.
 Pipeline: transient upload -> extract (PDF text / OCR / SAT XML) -> classify template
 -> parse -> categorize -> persist structured data (raw file discarded) -> feed DuckDB cube.
 
+A second, shorter pipeline carries photographed grocery tickets: the phone OCRs
+the image and only the lines travel -> read into products -> matched to the
+movement they explain -> priced against the user's own history.
+
 ## Layout
 
 ```
@@ -44,7 +48,8 @@ behind an optional integration:
 ```bash
 LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_API_KEY=...            # yours; never committed
-LLM_MODEL=nvidia/nemotron-3-super-120b-a12b:free
+LLM_MODEL=minimax/minimax-m3
+LLM_FALLBACK_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 ```
 
 Any endpoint speaking OpenAI-shaped Chat Completions works — OpenRouter, Groq,
@@ -62,6 +67,63 @@ covers the statement PDF, not the extracted ledger — so this is not a
 contradiction, but it *is* a disclosure, and the UI makes it before the first
 question rather than after. Note that free tiers on some gateways train on
 conversations; check the policy before pointing this at a real ledger.
+
+## Tickets: the basket behind a charge
+
+A statement can only ever say `SORIANA HIPER 4062 · $1,412.60`. A photographed
+grocery ticket is the other half of that charge, and it arrives through the same
+custody path as a statement (`docs/custody-plan.md` G1/G2): the phone runs OCR
+on the photo, the photo stays there, and only the lines travel — sealed to this
+server's X25519 key.
+
+```
+POST /api/ingest/receipt   <- { v, key_id, epk, nonce, box }   (same envelope)
+   payload: { v, kind:"receipt", filename, content_sha256, lines[],
+              captured_at, extractor, transaction_id? }
+   -> 201 { receipt_id, receipt, attached, suggestions[], prices_url }
+   -> 409 esa foto ya fue procesada · 404 movimiento no encontrado
+```
+
+Two things happen server-side, and both are written to decline rather than
+guess:
+
+**Reading the lines.** `ReceiptReader` has two implementations. The heuristic
+(`domain/services/receipt_reading.py`) is regexes over the OCR text and always
+works, with no key. When a model is configured, `LlmReceiptReader` reads the
+same lines — it is genuinely better at a mangled two-column thermal print — and
+then both reads are scored against the total the ticket itself prints. The one
+whose items add up closer wins; an answer that will not parse loses by default.
+Which reader wrote a basket is stored on the row.
+
+**Attaching it to a movement.** `domain/services/receipt_matching.py` requires
+the totals to match (±$1 for OCR noise), inside a four-day window, and uses the
+store name only to break ties. Two identical charges on the same day leave the
+receipt *unattached* with both offered to the user: a wrong attachment is
+invisible and permanent, so it is a question, not a coin flip.
+
+## Prices come from the user's own tickets, and nowhere else
+
+`GET /api/prices` builds a price book out of the stored receipt lines: per
+product, every purchase with its store and date, the median, the cheapest and
+dearest, and the last one against the typical one.
+
+Products are grouped by a normalised key (`domain/services/products.py`) that
+folds accents, drops barcodes and lifts the size out of the name, so
+`7501020510010 LECHE LALA ENT 1L` and `LALA LECHE ENTERA 1 LT` are one history.
+No fuzzy matching: two names that survive normalisation and still differ stay
+two products, which is visible and correctable, unlike a silent merge of
+`leche entera` with `leche deslactosada`.
+
+The comparison basis is chosen, never assumed. A group compares per litre or
+per kilo only when *every* purchase in it printed a size; otherwise it compares
+per piece. Both are reported, because "$18 vs $32" is a lie when one of them was
+three times the size.
+
+`POST /api/prices/chat` streams an answer over that book through the same
+optional LLM seam as the workspace chat, with the same posture and one addition
+stated three times in the prompt: it has no internet. It compares the tickets
+the user photographed, and "solo puedo comparar los tickets que subiste" is a
+correct answer rather than a failure.
 
 ## The analytics cube is disposable
 

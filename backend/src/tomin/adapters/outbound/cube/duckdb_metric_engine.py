@@ -226,62 +226,86 @@ class DuckDbMetricEngine:
         for name, value in query.filters.items():
             if name == "currency":
                 continue  # already applied as the currency scope
-            filter_def = FILTERS[name]
-            column = self._sql(filter_def.column)
-
-            # Ops that name exactly one predicate compile off the declaration.
-            # Every value below is bound, never interpolated -- the property the
-            # closed vocabulary exists to protect.
-            op = filter_def.op
-            if op == "contains":
-                # Case- and accent-insensitive: a user typing "recarga" must
-                # match "RECARGA" and "Recargación" alike, or the rule silently
-                # drops rows and every number under it is quietly wrong.
-                # LIKE metacharacters in the needle are escaped so a search for
-                # "50%" means 50 percent, not "50 followed by anything".
-                needle = _fold(str(value)).lower()
-                for meta in ("\\", "%", "_"):
-                    needle = needle.replace(meta, f"\\{meta}")
-                clauses.append(f"lower(strip_accents({column})) LIKE ? ESCAPE '\\'")
-                params.append(f"%{needle}%")
-                continue
-            if op in ("gte", "lte"):
-                clauses.append(f"{column} {'>=' if op == 'gte' else '<='} ?")
-                params.append(value)
-                continue
-            if op == "not_in":
-                values = value if isinstance(value, (list, tuple)) else [value]
-                if not values:
-                    continue  # excluding nothing is not a predicate
-                placeholders = ", ".join("?" * len(values))
-                clauses.append(f"{column} NOT IN ({placeholders})")
-                params.extend(str(v) for v in values)
+            if name == "any_of":
+                # A group: several filters, each an AND of ordinary predicates,
+                # unioned. Compiled from the *same* `_predicate` every flat
+                # filter goes through, so a condition cannot mean one thing
+                # alone and another inside a group -- which is the only way the
+                # count in the editor and the total on the tile stay the same
+                # number.
+                groups: list[str] = []
+                for group in value:
+                    parts: list[str] = []
+                    for inner_name, inner_value in group.items():
+                        sql, bound = self._predicate(inner_name, inner_value)
+                        if not sql:
+                            continue
+                        parts.append(sql)
+                        params.extend(bound)
+                    if parts:
+                        groups.append(" AND ".join(parts))
+                # An empty union selects nothing rather than everything: the
+                # failure of a rule must be visible as a zero, never as the
+                # whole ledger wearing the rule's name.
+                clauses.append(
+                    "(" + " OR ".join(f"({g})" for g in groups) + ")" if groups else "1 = 0"
+                )
                 continue
 
-            if filter_def.multivalued:
-                # The column is an array, so the predicate is membership. A list
-                # of values is an OR ("tagged viaje *or* deducible"), which is
-                # what a multi-select in the UI means.
-                values = value if isinstance(value, (list, tuple)) else [value]
-                if not values:
-                    clauses.append("1 = 0")
-                    continue
-                tests = " OR ".join(f"list_contains({column}, ?)" for _ in values)
-                clauses.append(f"({tests})")
-                params.extend(str(v) for v in values)
+            sql, bound = self._predicate(name, value)
+            if not sql:
                 continue
-            if isinstance(value, (list, tuple)):
-                if not value:
-                    clauses.append("1 = 0")
-                    continue
-                placeholders = ", ".join("?" * len(value))
-                clauses.append(f"{column} IN ({placeholders})")
-                params.extend(value)
-            else:
-                clauses.append(f"{column} = ?")
-                params.append(value)
+            clauses.append(sql)
+            params.extend(bound)
 
         return clauses, params
+
+    def _predicate(self, name: str, value: Any) -> tuple[str, list[Any]]:
+        """One declared filter as ``(sql, params)``.
+
+        Ops that name exactly one predicate compile off the declaration. Every
+        value is bound, never interpolated -- the property the closed vocabulary
+        exists to protect. An empty string back means "no predicate", which is
+        not the same as a false one (excluding nothing narrows nothing).
+        """
+        filter_def = FILTERS[name]
+        column = self._sql(filter_def.column)
+        op = filter_def.op
+
+        if op == "contains":
+            # Case- and accent-insensitive: a user typing "recarga" must
+            # match "RECARGA" and "Recargación" alike, or the rule silently
+            # drops rows and every number under it is quietly wrong.
+            # LIKE metacharacters in the needle are escaped so a search for
+            # "50%" means 50 percent, not "50 followed by anything".
+            needle = _fold(str(value)).lower()
+            for meta in ("\\", "%", "_"):
+                needle = needle.replace(meta, f"\\{meta}")
+            return f"lower(strip_accents({column})) LIKE ? ESCAPE '\\'", [f"%{needle}%"]
+        if op in ("gte", "lte"):
+            return f"{column} {'>=' if op == 'gte' else '<='} ?", [value]
+        if op == "not_in":
+            values = value if isinstance(value, (list, tuple)) else [value]
+            if not values:
+                return "", []  # excluding nothing is not a predicate
+            placeholders = ", ".join("?" * len(values))
+            return f"{column} NOT IN ({placeholders})", [str(v) for v in values]
+
+        if filter_def.multivalued:
+            # The column is an array, so the predicate is membership. A list
+            # of values is an OR ("tagged viaje *or* deducible"), which is
+            # what a multi-select in the UI means.
+            values = value if isinstance(value, (list, tuple)) else [value]
+            if not values:
+                return "1 = 0", []
+            tests = " OR ".join(f"list_contains({column}, ?)" for _ in values)
+            return f"({tests})", [str(v) for v in values]
+        if isinstance(value, (list, tuple)):
+            if not value:
+                return "1 = 0", []
+            placeholders = ", ".join("?" * len(value))
+            return f"{column} IN ({placeholders})", list(value)
+        return f"{column} = ?", [value]
 
     def _compile(
         self,

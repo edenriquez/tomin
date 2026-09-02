@@ -1,0 +1,800 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight, Pin, Plus, X } from "lucide-react";
+import { api, type RecurringItem, type Transaction } from "@/lib/api";
+import { useBankScope } from "@/lib/banks";
+import { categoryName, useCategories } from "@/lib/categories";
+import { cn } from "@/lib/cn";
+import {
+    HORIZONS,
+    itemFromManual,
+    itemFromRestMark,
+    isRestKey,
+    reconcileFijos,
+    type Horizon,
+} from "@/lib/fijos";
+import { dayLabel, mxn, mxn2 } from "@/lib/format";
+import { parsePeriodKey } from "@/lib/metrics";
+import { useAppData } from "@/components/AppChrome";
+import { ChartCard } from "@/components/ChartCard";
+import {
+    ChartEncodingToggle,
+    RangeBandChart,
+} from "@/components/charts/RangeBandChart";
+import {
+    CHART_ENCODINGS,
+    timelineEnvelope,
+    type ChartEncoding,
+} from "@/components/charts/rangeBand";
+import { chart } from "@/design/tokens";
+import { LoadTimelineChart } from "@/components/recurrentes/LoadTimelineChart";
+import { usePanelSettings } from "@/components/settings/usePanelSettings";
+import {
+    buildTimeline,
+    isStale,
+    ledgerEnd,
+    restByMonth,
+    type Timeline,
+} from "@/components/recurrentes/projection";
+import { rhythmCopy } from "@/components/recurrentes/rhythm";
+import { buildSeriesColors } from "@/components/recurrentes/seriesColors";
+import { BackendNotice, Button, Checkbox, EmptyState, Skeleton } from "@/components/ui";
+import { LecturaDock } from "@/components/lectura/LecturaDock";
+import { useLectura } from "@/components/lectura/LecturaProvider";
+import { draftFromClauses, MAX_LECTURA_CLAUSES } from "@/lib/lectura";
+import { AddFijoSheet } from "./AddFijoSheet";
+import { useFijos } from "./useFijos";
+
+/**
+ * Fijos: the planning view. You pin the charges you treat as certain; the
+ * headline is those, cargo a cargo (or a typical month if there is no day),
+ * plus the rest of typical recurrences you did not pin. Detection suggests;
+ * you decide what is fijo. The chart is the fijos only.
+ */
+
+const FREQUENCY_LABELS: Record<RecurringItem["frequency"], string> = {
+    weekly: "Semanal",
+    biweekly: "Quincenal",
+    monthly: "Mensual",
+    bimonthly: "Bimestral",
+    yearly: "Anual",
+};
+
+const MONTHS_BACK = 12;
+const RECENT_CHARGES = 6;
+
+export function FijosView() {
+    const { dataVersion } = useAppData();
+    const [items, setItems] = useState<RecurringItem[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const categories = useCategories();
+    const { state, hydrated, replace, pin, unpin, addManual, addRest, pinRest, removeRest, setHorizon } = useFijos();
+    const [chartCfg, setChartCfg] = usePanelSettings("fijos.timeline", {
+        encoding: "barras" as string,
+    });
+    const encoding: ChartEncoding = (CHART_ENCODINGS as readonly string[]).includes(
+        chartCfg.encoding
+    )
+        ? (chartCfg.encoding as ChartEncoding)
+        : "barras";
+    const [openKey, setOpenKey] = useState<string | null>(null);
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+    const { openDraft, opening } = useLectura();
+    const [adding, setAdding] = useState<false | "fijo" | "resto">(false);
+    const [ledger, setLedger] = useState<Transaction[] | null>(null);
+
+    const { statementIds } = useBankScope(dataVersion);
+    const scopeQuery = statementIds
+        ? `?${statementIds.map((id) => `statement_id=${id}`).join("&")}`
+        : "";
+
+    useEffect(() => {
+        let stale = false;
+        api.recurring(scopeQuery)
+            .then((res) => {
+                if (stale) return;
+                setItems(res.items.map((i) => ({ ...i, key: i.key || i.label })));
+                setError(null);
+            })
+            .catch((e) => {
+                if (stale) return;
+                setError((e as Error).message);
+                setItems([]);
+            });
+        return () => {
+            stale = true;
+        };
+    }, [dataVersion, scopeQuery]);
+
+    useEffect(() => {
+        if (!hydrated || (state.restMarks ?? []).length === 0) {
+            setLedger([]);
+            return;
+        }
+        let stale = false;
+        const params = new URLSearchParams();
+        params.set("limit", "10000");
+        for (const id of statementIds ?? []) params.append("statement_id", id);
+        api.transactions(`?${params}`)
+            .then((page) => {
+                if (!stale) setLedger(page.items);
+            })
+            .catch(() => {
+                if (!stale) setLedger([]);
+            });
+        return () => {
+            stale = true;
+        };
+    }, [hydrated, dataVersion, statementIds, state.restMarks]);
+
+    // Merge manuals that detection has since found, once both sides exist.
+    useEffect(() => {
+        if (!hydrated || !items) return;
+        const next = reconcileFijos(state, items);
+        if (next !== state) replace(next);
+    }, [hydrated, items, state, replace]);
+
+    const loading = items === null || !hydrated;
+    const detected = items ?? [];
+
+    const manuals = useMemo(() => state.manuals.map(itemFromManual), [state.manuals]);
+
+    const taughtRest = useMemo(() => {
+        if (!ledger?.length) return [];
+        return (state.restMarks ?? [])
+            .map((m) => itemFromRestMark(m, ledger))
+            .filter((i): i is RecurringItem => i !== null);
+    }, [state.restMarks, ledger]);
+
+    const pinnedRest = useMemo(
+        () => taughtRest.filter((i) => state.pinnedKeys.includes(i.key)),
+        [taughtRest, state.pinnedKeys]
+    );
+    const looseRest = useMemo(
+        () => taughtRest.filter((i) => !state.pinnedKeys.includes(i.key)),
+        [taughtRest, state.pinnedKeys]
+    );
+
+    const pinned = useMemo(() => {
+        const fromDetected = detected.filter((i) => state.pinnedKeys.includes(i.key));
+        const detectedKeys = new Set(fromDetected.map((i) => i.key));
+        return [
+            ...fromDetected,
+            ...manuals.filter((m) => !detectedKeys.has(m.key)),
+            ...pinnedRest,
+        ];
+    }, [detected, manuals, pinnedRest, state.pinnedKeys]);
+
+    const suggested = useMemo(() => {
+        const pinnedSet = new Set(state.pinnedKeys);
+        const asOf = ledgerEnd(detected);
+        return detected
+            .filter((i) => !pinnedSet.has(i.key))
+            .slice()
+            .sort((a, b) => {
+                const endedA = isStale(a, asOf) ? 1 : 0;
+                const endedB = isStale(b, asOf) ? 1 : 0;
+                if (endedA !== endedB) return endedA - endedB;
+                if (a.amount_stable !== b.amount_stable) return a.amount_stable ? -1 : 1;
+                return b.monthly_equivalent - a.monthly_equivalent;
+            });
+    }, [detected, state.pinnedKeys]);
+
+    const activeDetected = useMemo(() => {
+        const asOf = ledgerEnd(detected);
+        return detected.filter((i) => !isStale(i, asOf));
+    }, [detected]);
+
+    const noisePool = useMemo(() => {
+        const pinnedSet = new Set(state.pinnedKeys);
+        return activeDetected.filter((i) => !pinnedSet.has(i.key));
+    }, [activeDetected, state.pinnedKeys]);
+
+    const allForColor = useMemo(
+        () => [...detected, ...manuals, ...taughtRest],
+        [detected, manuals, taughtRest]
+    );
+    const colorOf = useMemo(
+        () => buildSeriesColors(allForColor, categories),
+        [allForColor, categories]
+    );
+
+    const ledgerAsOf = useMemo(() => ledgerEnd(detected.length ? detected : pinned), [detected, pinned]);
+    const horizon = state.horizon;
+
+    const timeline = useMemo(
+        () => buildTimeline(pinned, MONTHS_BACK, horizon),
+        [pinned, horizon]
+    );
+
+    const fijosBand = useMemo(() => {
+        const env = timelineEnvelope(timeline);
+        return [
+            {
+                name: "Fijos",
+                color: chart.neutral[1]!,
+                bandColor: chart.neutral[4]!,
+                ...env,
+            },
+        ];
+    }, [timeline]);
+
+    const rest = useMemo(() => {
+        if (noisePool.length === 0 && activeDetected.length === 0 && looseRest.length === 0) {
+            return undefined;
+        }
+        return restByMonth(
+            noisePool,
+            timeline.months,
+            timeline.firstFutureIndex,
+            activeDetected,
+            looseRest
+        );
+    }, [noisePool, activeDetected, looseRest, timeline.months, timeline.firstFutureIndex]);
+
+    const fijosNeed = timeline.totals.projected;
+    const restNeed = rest && rest.rate > 0 ? rest.rate * horizon : 0;
+    const need = fijosNeed + restNeed;
+
+    const emptyDetection = !loading && detected.length === 0 && manuals.length === 0 && !error;
+
+    return (
+        <div className="space-y-4 sm:space-y-6">
+            {error && <BackendNotice what="tus cargos recurrentes" detail={error} />}
+
+            {emptyDetection ? (
+                <EmptyState icon={Pin} title="Aún no detectamos cargos recurrentes">
+                    Se necesitan al menos tres cobros del mismo lugar con un ritmo
+                    reconocible. Sube más estados de cuenta y aparecen solos.
+                </EmptyState>
+            ) : (
+                <>
+                    <Headline
+                        need={need}
+                        fijosNeed={fijosNeed}
+                        restNeed={restNeed}
+                        hasRest={!!rest && rest.rate > 0}
+                        horizon={horizon}
+                        monthlyRate={timeline.totals.monthlyRate}
+                        pinnedCount={pinned.length}
+                        loading={loading}
+                        onHorizon={setHorizon}
+                        timeline={timeline}
+                    />
+
+                    <ChartCard
+                        title="Mes a mes, y lo que viene"
+                        action={
+                            <ChartEncodingToggle
+                                value={encoding}
+                                onChange={(enc) => setChartCfg({ encoding: enc })}
+                            />
+                        }
+                    >
+                        {loading ? (
+                            <Skeleton className="h-[300px]" />
+                        ) : encoding === "rango" ? (
+                            <RangeBandChart
+                                months={timeline.months}
+                                firstFutureIndex={timeline.firstFutureIndex}
+                                series={fijosBand}
+                                empty="Elige lo que sí o sí se cobra para dibujarlo."
+                                caption="La línea es la carga del mes. La banda es lo que se ha movido en el monto — un renta estable casi no abre, un cargo que varía sí."
+                            />
+                        ) : (
+                            <LoadTimelineChart
+                                timeline={timeline}
+                                colorFor={colorOf}
+                            />
+                        )}
+                    </ChartCard>
+
+                    <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="font-display text-title-sm font-normal text-ink">
+                                Mis fijos
+                                {pinned.length > 0 && (
+                                    <span className="ml-2 font-sans text-body-sm text-graphite">
+                                        {pinned.length}
+                                    </span>
+                                )}
+                            </h2>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<Plus size={14} />}
+                                onClick={() => setAdding("fijo")}
+                            >
+                                Añadir un cargo
+                            </Button>
+                        </div>
+                        <p className="mt-1 text-body-sm text-graphite">
+                            Lo que sí o sí se cobra. Con día fijo, cargo a cargo; sin
+                            él, el mes típico.
+                        </p>
+                        <div className="mt-4">
+                            {loading ? (
+                                <div className="space-y-2">
+                                    {[0, 1].map((i) => (
+                                        <Skeleton key={i} className="h-12" />
+                                    ))}
+                                </div>
+                            ) : pinned.length === 0 ? (
+                                <p className="py-6 text-body text-graphite">
+                                    Elige lo que sí o sí se cobra — de las sugerencias, o añade uno.
+                                </p>
+                            ) : (
+                                <SeriesList
+                                    items={pinned}
+                                    openKey={openKey}
+                                    selectedKeys={selectedKeys}
+                                    onSelect={(key, on) => {
+                                        setSelectedKeys((cur) => {
+                                            const next = new Set(cur);
+                                            if (on) next.add(key);
+                                            else next.delete(key);
+                                            return next;
+                                        });
+                                    }}
+                                    onToggle={(i) =>
+                                        setOpenKey((cur) => (cur === i.key ? null : i.key))
+                                    }
+                                    onUnpin={unpin}
+                                    colorOf={colorOf}
+                                    categories={categories}
+                                    asOf={ledgerAsOf}
+                                    action="unpin"
+                                />
+                            )}
+                        </div>
+                    </section>
+
+                    <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="font-display text-title-sm font-normal text-ink">
+                                Sugeridos
+                                {suggested.length > 0 && (
+                                    <span className="ml-2 font-sans text-body-sm text-graphite">
+                                        {suggested.length}
+                                    </span>
+                                )}
+                            </h2>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<Plus size={14} />}
+                                onClick={() => setAdding("resto")}
+                            >
+                                Sumar al resto
+                            </Button>
+                        </div>
+                        <p className="mt-1 text-body-sm text-graphite">
+                            Recurrentes que no fijaste, y gastos sin día fijo que
+                            tú marcas (Walmart, despensa). Los cargos atípicos no
+                            cuentan hasta que los fijes.
+                        </p>
+                        <div className="mt-4">
+                            {loading ? (
+                                <div className="space-y-2">
+                                    {[0, 1, 2].map((i) => (
+                                        <Skeleton key={i} className="h-12" />
+                                    ))}
+                                </div>
+                            ) : looseRest.length === 0 && suggested.length === 0 ? (
+                                <p className="py-6 text-body text-graphite">
+                                    {detected.length === 0
+                                        ? "Cuando detectemos series, aparecen aquí. Un gasto sin ritmo se suma al resto a mano."
+                                        : "Todas las series detectadas ya son fijos. Suma uno al resto si vas seguido sin fecha fija."}
+                                </p>
+                            ) : (
+                                <>
+                                    {looseRest.length > 0 && (
+                                        <SeriesList
+                                            items={looseRest}
+                                            openKey={openKey}
+                                            onToggle={(i) =>
+                                                setOpenKey((cur) => (cur === i.key ? null : i.key))
+                                            }
+                                            onPin={pin}
+                                            onUnpin={removeRest}
+                                            colorOf={colorOf}
+                                            categories={categories}
+                                            asOf={ledgerAsOf}
+                                            action="unrest"
+                                        />
+                                    )}
+                                    {suggested.length > 0 && (
+                                        <SeriesList
+                                            items={suggested}
+                                            openKey={openKey}
+                                            onToggle={(i) =>
+                                                setOpenKey((cur) => (cur === i.key ? null : i.key))
+                                            }
+                                            onPin={pin}
+                                            colorOf={colorOf}
+                                            categories={categories}
+                                            asOf={ledgerAsOf}
+                                            action="pin"
+                                        />
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </section>
+                </>
+            )}
+
+            {selectedKeys.size > 0 && (
+                <LecturaDock
+                    summary={
+                        selectedKeys.size === 1
+                            ? "1 fijo"
+                            : `${selectedKeys.size} fijos`
+                    }
+                    chips={pinned
+                        .filter((i) => selectedKeys.has(i.key))
+                        .slice(0, MAX_LECTURA_CLAUSES)
+                        .map((i) => i.label)}
+                    busy={opening}
+                    onRead={() => {
+                        const chosen = pinned.filter((i) => selectedKeys.has(i.key));
+                        const draft = draftFromClauses(
+                            chosen.map((i) => ({ description_contains: i.label })),
+                            [],
+                            chosen.map((i) => i.label).join(" + ")
+                        );
+                        if (draft) void openDraft(draft);
+                    }}
+                    onClear={() => setSelectedKeys(new Set())}
+                />
+            )}
+
+            <AddFijoSheet
+                open={adding !== false}
+                intent={adding === "resto" ? "resto" : "fijo"}
+                onClose={() => setAdding(false)}
+                detected={detected}
+                dataVersion={dataVersion}
+                onPin={pin}
+                onAddManual={addManual}
+                onAddRest={addRest}
+                onPinRest={pinRest}
+            />
+        </div>
+    );
+}
+
+function Headline({
+    need,
+    fijosNeed,
+    restNeed,
+    hasRest,
+    horizon,
+    monthlyRate,
+    pinnedCount,
+    loading,
+    onHorizon,
+    timeline,
+}: {
+    need: number;
+    fijosNeed: number;
+    restNeed: number;
+    hasRest: boolean;
+    horizon: Horizon;
+    monthlyRate: number;
+    pinnedCount: number;
+    loading: boolean;
+    onHorizon: (h: Horizon) => void;
+    timeline: Timeline;
+}) {
+    const stale = daysBetween(timeline.asOf, new Date());
+    const { totals } = timeline;
+
+    return (
+        <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <p className="text-caption uppercase text-ash">Necesitas</p>
+                    {loading ? (
+                        <Skeleton className="mt-1 h-9 w-48" />
+                    ) : (
+                        <p className="tabular mt-0.5 font-display text-metric font-normal text-ink">
+                            {mxn(need)}
+                        </p>
+                    )}
+                    <p className="mt-1 text-body text-graphite">
+                        en los próximos {horizon} meses
+                    </p>
+                    {!loading && pinnedCount === 0 && !hasRest && (
+                        <p className="mt-2 text-body-sm text-graphite">
+                            Elige lo que sí o sí se cobra.
+                        </p>
+                    )}
+                    {!loading && (pinnedCount > 0 || hasRest) && (
+                        <p className="mt-2 text-body-sm text-graphite">
+                            Fijos {mxn(fijosNeed)}
+                            {hasRest && (
+                                <>
+                                    <span className="text-ash"> · </span>
+                                    Resto recurrente {mxn(restNeed)}
+                                </>
+                            )}
+                            {pinnedCount > 0 && (
+                                <>
+                                    <span className="text-ash"> · </span>
+                                    ritmo de fijos {mxn(monthlyRate)}/mes
+                                </>
+                            )}
+                        </p>
+                    )}
+                </div>
+
+                <div className="flex flex-col items-end gap-3">
+                    <div
+                        role="radiogroup"
+                        aria-label="Horizonte"
+                        className="inline-flex rounded-control border border-mist bg-paper p-0.5"
+                    >
+                        {HORIZONS.map((h) => {
+                            const selected = horizon === h;
+                            return (
+                                <button
+                                    key={h}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    onClick={() => onHorizon(h)}
+                                    className={cn(
+                                        "rounded-control px-3 py-1 text-body-sm",
+                                        "transition-colors duration-100",
+                                        selected
+                                            ? "bg-fog font-medium text-ink"
+                                            : "text-graphite hover:text-ink"
+                                    )}
+                                >
+                                    {h} meses
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+
+            {!loading && (totals.endedSeries > 0 || (totals.projected === 0 && stale > 30 && pinnedCount > 0)) && (
+                <p className="mt-4 text-body-sm text-graphite">
+                    {totals.endedSeries > 0 && (
+                        <>
+                            {totals.endedSeries} fijo
+                            {totals.endedSeries === 1 ? "" : "s"} sin cargos desde antes del
+                            último movimiento; no {totals.endedSeries === 1 ? "se proyecta" : "se proyectan"}.{" "}
+                        </>
+                    )}
+                    {stale > 30 && (
+                        <>
+                            Tu último movimiento es del {dayLabel(timeline.asOf)} — sube un
+                            estado de cuenta más reciente para afinar la proyección.
+                        </>
+                    )}
+                </p>
+            )}
+        </section>
+    );
+}
+
+function SeriesList({
+    items,
+    openKey,
+    onToggle,
+    selectedKeys,
+    onSelect,
+    onPin,
+    onUnpin,
+    colorOf,
+    categories,
+    asOf,
+    action,
+}: {
+    items: RecurringItem[];
+    openKey: string | null;
+    onToggle: (i: RecurringItem) => void;
+    selectedKeys?: Set<string>;
+    onSelect?: (key: string, on: boolean) => void;
+    onPin?: (key: string) => void;
+    onUnpin?: (key: string) => void;
+    colorOf: (label: string) => string;
+    categories: ReturnType<typeof useCategories>;
+    asOf: Date;
+    action: "pin" | "unpin" | "unrest";
+}) {
+    return (
+        <ul className="divide-y divide-mist">
+            {items.map((i) => {
+                const open = openKey === i.key;
+                const rest = isRestKey(i.key) || action === "unrest";
+                const loose = action === "unrest";
+                return (
+                    <li key={i.key}>
+                        <div className="flex items-start gap-2 py-2.5">
+                            {onSelect && selectedKeys && (
+                                <span className="pt-1">
+                                    <Checkbox
+                                        checked={selectedKeys.has(i.key)}
+                                        onChange={(on) => onSelect(i.key, on)}
+                                        aria-label={`Incluir ${i.label} en la lectura`}
+                                    />
+                                </span>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => onToggle(i)}
+                                aria-expanded={open}
+                                aria-controls={`fijo-${i.key}`}
+                                className="min-w-0 flex-1 text-left"
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="flex min-w-0 items-center gap-2">
+                                        <ChevronRight
+                                            size={14}
+                                            aria-hidden
+                                            className={cn(
+                                                "shrink-0 text-ash transition-transform duration-100",
+                                                open && "rotate-90"
+                                            )}
+                                        />
+                                        <span
+                                            aria-hidden
+                                            title={categoryName(categories, i.category_id)}
+                                            className="h-2 w-2 shrink-0 rounded-full"
+                                            style={{ background: colorOf(i.label) }}
+                                        />
+                                        <span className="truncate text-body text-ink">{i.label}</span>
+                                    </span>
+                                    <span className="tabular shrink-0 whitespace-nowrap text-body-sm text-ink">
+                                        {i.amount_stable ? "" : "~"}
+                                        {mxn2(i.typical_amount)}
+                                    </span>
+                                </div>
+                                <div className="mt-0.5 flex items-center justify-between gap-3 pl-6 text-body-sm text-graphite">
+                                    <span>
+                                        {rest
+                                            ? `Sin fecha fija · ${mxn(i.monthly_equivalent)}/mes${loose ? " · en el resto" : ""}`
+                                            : `${FREQUENCY_LABELS[i.frequency]} · ${mxn(i.monthly_equivalent)}/mes`}
+                                        {!rest && !i.amount_stable && " · varía"}
+                                    </span>
+                                    {!rest && <NextExpected item={i} asOf={asOf} />}
+                                </div>
+                            </button>
+                            {action === "pin" ? (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => onPin?.(i.key)}
+                                >
+                                    Fijar
+                                </Button>
+                            ) : action === "unrest" ? (
+                                <span className="flex shrink-0 items-center gap-1">
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => onPin?.(i.key)}
+                                    >
+                                        Fijar
+                                    </Button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onUnpin?.(i.key)}
+                                        aria-label={`Quitar ${i.label} del resto`}
+                                        title="Quitar del resto"
+                                        className="rounded-control p-1.5 text-graphite hover:bg-fog hover:text-ink"
+                                    >
+                                        <X size={14} aria-hidden />
+                                    </button>
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => onUnpin?.(i.key)}
+                                    aria-label={`Quitar ${i.label}`}
+                                    title={rest ? "Quitar del resto" : "Quitar de fijos"}
+                                    className="shrink-0 rounded-control p-1.5 text-graphite hover:bg-fog hover:text-ink"
+                                >
+                                    <X size={14} aria-hidden />
+                                </button>
+                            )}
+                        </div>
+                        {open && (
+                            <div id={`fijo-${i.key}`} className="pb-3 pl-6">
+                                <SeriesDetail item={i} rest={rest} />
+                            </div>
+                        )}
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
+function SeriesDetail({ item, rest }: { item: RecurringItem; rest?: boolean }) {
+    const charges = item.charges ?? [];
+    const rhythm = rest ? null : rhythmCopy(charges, item.frequency);
+
+    if (!charges.length) {
+        return (
+            <p className="text-body-sm text-graphite">
+                Este cargo se detectó antes de que guardáramos sus fechas. Vuelve a subir
+                el estado de cuenta para verlas.
+            </p>
+        );
+    }
+
+    const recent = [...charges]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, RECENT_CHARGES);
+
+    return (
+        <div className="min-w-0">
+            <p className="text-body text-ink">
+                {rhythm ??
+                    (rest
+                        ? "Sin un día fijo — el mes típico es lo que cobraron, no un calendario."
+                        : "Sin un día fijo — el ritmo es regular, el día no.")}
+            </p>
+            <p className="mt-2 text-body-sm text-graphite">
+                Últimos cargos:{" "}
+                <span className="tabular text-ink">
+                    {recent.map((c) => isoToLabel(c.date)).join(" · ")}
+                </span>
+                {charges.length > RECENT_CHARGES &&
+                    ` · y ${charges.length - RECENT_CHARGES} más`}
+            </p>
+        </div>
+    );
+}
+
+function daysUntil(item: RecurringItem): number | null {
+    const next = parsePeriodKey(item.next_expected);
+    if (!next) return null;
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((next.getTime() - midnight.getTime()) / 86_400_000);
+}
+
+function expectedCopy(item: RecurringItem): string {
+    const days = daysUntil(item);
+    if (days === null) return item.next_expected;
+    if (days < -1) return `esperado hace ${-days} días`;
+    if (days === -1) return "esperado ayer";
+    if (days === 0) return "hoy";
+    if (days === 1) return "mañana";
+    return `en ${days} días`;
+}
+
+function NextExpected({ item, asOf }: { item: RecurringItem; asOf: Date }) {
+    const copy = expectedCopy(item);
+    const overdue = copy.startsWith("esperado");
+    const days = daysUntil(item);
+    const imminent = !overdue && days !== null && days <= 3;
+    const ended = isStale(item, asOf);
+    return (
+        <span
+            className={cn(
+                "hidden text-body-sm sm:inline",
+                overdue ? "text-ash" : imminent ? "font-medium text-ink" : "text-graphite"
+            )}
+        >
+            {isoToLabel(item.next_expected)} · {copy}
+            {ended && <span className="text-ash"> · sin proyección</span>}
+        </span>
+    );
+}
+
+function isoToLabel(iso: string): string {
+    const d = parsePeriodKey(iso);
+    return d ? dayLabel(d) : iso;
+}
+
+function daysBetween(a: Date, b: Date): number {
+    return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+}

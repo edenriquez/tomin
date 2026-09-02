@@ -11,6 +11,8 @@ from ....domain.entities import (
     Dashboard,
     DashboardWidget,
     Goal,
+    Receipt,
+    ReceiptItem,
     Statement,
     Tag,
     Transaction,
@@ -18,6 +20,7 @@ from ....domain.entities import (
 )
 from ....domain.metrics.spec import MetricSpec
 from ....domain.services.forecasting import ForecastPoint
+from ....domain.services.prices import PricePoint, ProductPrices
 
 
 def _num(value: Decimal | None) -> float:
@@ -218,7 +221,7 @@ def workstation_json(w: Workstation) -> dict:
     return {
         "id": str(w.id),
         "name": w.name,
-        "rule": {name: str(value) for name, value in w.rule.conditions.items()},
+        "rule": w.rule.to_json(),
         "excluded_tx_ids": [str(i) for i in w.excluded_tx_ids],
         "filters": w.to_filters(),
         "created_at": _iso(w.created_at),
@@ -254,3 +257,105 @@ def goal_json(g: Goal) -> dict:
         "target_date": _iso(g.target_date),
         "progress": round(g.progress, 4),
     }
+
+
+def _money(value: Decimal | None) -> float | None:
+    """Like :func:`_num`, but ``None`` survives.
+
+    Receipts are full of prices that are genuinely unknown — a loose bolillo
+    has no unit price — and ``0.0`` would render as "free" on every screen that
+    reads this. The absence has to travel.
+    """
+    return float(value) if value is not None else None
+
+
+def receipt_item_json(i: ReceiptItem) -> dict:
+    return {
+        "id": str(i.id),
+        "line_no": i.line_no,
+        # The OCR line behind every other field here, so the UI can show the
+        # user what it read before it interpreted anything.
+        "raw_text": i.raw_text,
+        "description": i.description,
+        "product_key": i.product_key,
+        "amount": _num(i.amount),
+        "quantity": _money(i.quantity),
+        "unit_price": _money(i.unit_price),
+        "size": _money(i.size),
+        "size_unit": i.size_unit,
+        # Derived, and null far more often than not (see the entity).
+        "each": _money(i.each),
+        "per_base_unit": _money(i.per_base_unit),
+    }
+
+
+def receipt_json(r: Receipt) -> dict:
+    return {
+        "id": str(r.id),
+        "transaction_id": str(r.transaction_id) if r.transaction_id else None,
+        "match_source": r.match_source,
+        "store": r.store,
+        "purchased_at": _iso(r.purchased_at),
+        "total": _money(r.total),
+        "currency": r.currency,
+        # Provenance: which OCR engine read the photo and which reader
+        # structured the lines. Shown in the detail panel, because a basket
+        # that came out wrong is a different conversation depending on these.
+        "extractor": r.extractor,
+        "reader": r.reader,
+        "captured_at": _iso(r.captured_at),
+        "created_at": _iso(r.created_at),
+        # What the lines add up to. The UI compares it against `total` and says
+        # so when they disagree — OCR drops lines, and a silently short basket
+        # is worse than a visible gap.
+        "items_total": _num(r.items_total),
+        "items": [receipt_item_json(i) for i in r.items],
+    }
+
+
+def price_point_json(point: PricePoint, basis: str) -> dict:
+    return {
+        "receipt_id": str(point.receipt_id),
+        "transaction_id": str(point.transaction_id) if point.transaction_id else None,
+        "purchased_at": _iso(point.purchased_at),
+        "store": point.store,
+        "description": point.description,
+        "amount": _num(point.amount),
+        "quantity": _money(point.quantity),
+        "each": _money(point.each),
+        "per_base_unit": _money(point.per_base_unit),
+        "size": _money(point.size),
+        "size_unit": point.size_unit,
+        # The figure this product is actually compared by, already chosen by
+        # the domain so no client re-decides it and gets a different answer.
+        "value": _money(point.value(basis)),
+    }
+
+
+def product_prices_json(p: ProductPrices, *, include_points: bool = True) -> dict:
+    """One product's price history.
+
+    ``include_points`` off is the list view: a pantry of 300 products would
+    otherwise ship every purchase of every one of them to draw 300 summary
+    rows. The detail endpoint turns it back on.
+    """
+    body = {
+        "product_key": p.product_key,
+        "name": p.name,
+        # "unit" (per litre/kilo) or "each" (per piece). Every figure below is
+        # in this basis, and the UI must say which — "$18 vs $32" means nothing
+        # if one of them was three times the size.
+        "basis": p.basis,
+        "times_bought": p.times_bought,
+        "priced": p.priced,
+        "median": _money(p.median),
+        "spread": _money(p.spread),
+        "latest_vs_median": _money(p.latest_vs_median),
+        "stores": list(p.stores),
+        "cheapest": price_point_json(p.cheapest, p.basis) if p.cheapest else None,
+        "dearest": price_point_json(p.dearest, p.basis) if p.dearest else None,
+        "latest": price_point_json(p.latest, p.basis) if p.latest else None,
+    }
+    if include_points:
+        body["points"] = [price_point_json(point, p.basis) for point in p.points]
+    return body

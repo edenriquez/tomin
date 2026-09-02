@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Inter_Tight } from "next/font/google";
 import { ToastProvider } from "@/components/ui";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,7 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return (
         <html lang="es" className={`${inter.variable} ${interTight.variable}`}>
             <body className="font-sans">
-                <ToastProvider>{children}</ToastProvider>
+                <ToastProvider>
+                    <Providers>{children}</Providers>
+                </ToastProvider>
             </body>
         </html>
     );

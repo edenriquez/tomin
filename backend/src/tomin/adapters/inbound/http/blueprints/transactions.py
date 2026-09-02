@@ -47,6 +47,23 @@ def list_transactions():
     )
 
 
+@transactions_bp.get("/span")
+def transaction_span():
+    """Where the ledger starts and ends. The time filter anchors on ``last``.
+
+    Scoped like the list (repeatable ``statement_id``) so "15 días" under a
+    bank filter means the last 15 days *of that bank's* history.
+    """
+    statement_ids = [UUID(v) for v in request.args.getlist("statement_id")] or None
+    first, last = get_container().transactions.span_for_user(
+        current_user_id(), statement_ids=statement_ids
+    )
+    return jsonify(
+        first=first.isoformat() if first else None,
+        last=last.isoformat() if last else None,
+    )
+
+
 @transactions_bp.post("/recategorize")
 def recategorize():
     """Apply a category to every similar machine-categorized transaction.

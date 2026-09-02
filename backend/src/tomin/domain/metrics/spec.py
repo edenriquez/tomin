@@ -42,6 +42,18 @@ Direction = Literal["expense", "income", "net", "any"]
 FilterOp = Literal["eq", "in", "contains", "gte", "lte", "not_in"]
 ParamType = Literal["decimal", "int", "float"]
 
+#: How many groups one ``any_of`` may union. A query-safety bound, deliberately
+#: stated here rather than imported from the workstation entity: that module's
+#: ``MAX_CLAUSES`` is a product judgement about what a person can read, this one
+#: is about what the compiler will build. They happen to agree today.
+MAX_ANY_OF = 10
+
+#: Filters that scope the *whole* query and are meaningless inside one group of
+#: a union. Currency is the reading's unit, `exclude_tx` says "not this
+#: movement" no matter which group let it in, and a nested `any_of` would be the
+#: tree this design refuses.
+NOT_INSIDE_ANY_OF = frozenset({"any_of", "currency", "exclude_tx"})
+
 
 class MetricValidationError(ValueError):
     """A query asked for something the catalog does not declare.
@@ -256,9 +268,61 @@ class MetricSpec:
                     f"Metric '{self.id}' does not support filter '{name}'. "
                     f"Allowed: {list(self.filters)}.",
                 )
+            if name == "any_of":
+                coerced[name] = self._validate_any_of(value, vocabulary)
+                continue
             filter_def = (vocabulary or {}).get(name)
             coerced[name] = filter_def.validate_value(value) if filter_def else value
         return coerced
+
+    def _validate_any_of(self, value: Any, vocabulary=None) -> list[dict[str, Any]]:
+        """Type-check a union of filter groups.
+
+        ``any_of`` is the one filter whose value is other filters: a list of
+        objects, each an AND of ordinary declared filters, OR'd together. The
+        vocabulary stays closed all the way down -- every inner name is checked
+        against this metric's own allow-list and coerced by its own op, so
+        nesting buys a client no predicate it could not already send flat.
+
+        One level only. A tree of unions and intersections is a query language,
+        and the moment a set needs one, nobody trusts the number under it.
+        """
+        if not isinstance(value, (list, tuple)) or not value:
+            raise MetricValidationError(
+                "filter_invalid",
+                f"Filter 'any_of' takes a non-empty list of filter objects, got {value!r}.",
+            )
+        if len(value) > MAX_ANY_OF:
+            raise MetricValidationError(
+                "filter_invalid",
+                f"Filter 'any_of' unions at most {MAX_ANY_OF} groups, got {len(value)}.",
+            )
+
+        groups: list[dict[str, Any]] = []
+        for group in value:
+            if not isinstance(group, dict) or not group:
+                raise MetricValidationError(
+                    "filter_invalid",
+                    f"Each 'any_of' entry must be a non-empty object of filters, got {group!r}.",
+                )
+            coerced: dict[str, Any] = {}
+            for name, inner in group.items():
+                if name in NOT_INSIDE_ANY_OF:
+                    raise MetricValidationError(
+                        "filter_not_allowed",
+                        f"Filter '{name}' scopes the whole query and cannot appear "
+                        "inside 'any_of'.",
+                    )
+                if name not in self.filters:
+                    raise MetricValidationError(
+                        "filter_not_allowed",
+                        f"Metric '{self.id}' does not support filter '{name}'. "
+                        f"Allowed: {list(self.filters)}.",
+                    )
+                filter_def = (vocabulary or {}).get(name)
+                coerced[name] = filter_def.validate_value(inner) if filter_def else inner
+            groups.append(coerced)
+        return groups
 
     def validate_grain(self, grain: str | None) -> None:
         if grain is not None and grain not in self.grains:

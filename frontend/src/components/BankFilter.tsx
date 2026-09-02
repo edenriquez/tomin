@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Landmark } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { BankScope } from "@/lib/banks";
+import { track } from "@/lib/telemetry";
 
 /**
  * The global bank scope, in the shell — it travels with the user across every
@@ -43,11 +44,11 @@ export function BankFilter({ scope }: { scope: BankScope }) {
               : `${scope.selected.length} bancos`;
 
     function toggle(bank: string) {
-        scope.setSelected(
-            scope.selected.includes(bank)
-                ? scope.selected.filter((b) => b !== bank)
-                : [...scope.selected, bank]
-        );
+        const next = scope.selected.includes(bank)
+            ? scope.selected.filter((b) => b !== bank)
+            : [...scope.selected, bank];
+        track("bank.select", { count: next.length });
+        scope.setSelected(next);
     }
 
     return (
@@ -58,15 +59,23 @@ export function BankFilter({ scope }: { scope: BankScope }) {
                 aria-expanded={open}
                 onClick={() => setOpen((v) => !v)}
                 className={cn(
-                    "inline-flex h-9 items-center gap-2 rounded-control border px-3 text-body",
-                    "transition-colors duration-100",
-                    scope.selected.length
-                        ? "border-edge bg-wash/40 text-ink"
-                        : "border-mist text-graphite hover:bg-paper hover:text-ink"
+                    // The same capsule as the period control beside it: a hairline
+                    // on Fog, and the chosen state raised on Paper. Two filters
+                    // that look like one family read as one rail.
+                    "inline-flex h-9 items-center gap-2 rounded-control border border-mist bg-fog p-1 pl-3 pr-2",
+                    "text-body-sm transition-colors duration-100",
+                    scope.selected.length ? "text-ink" : "text-graphite hover:text-ink"
                 )}
             >
-                <Landmark size={15} aria-hidden />
-                <span className="hidden max-w-40 truncate sm:inline">{label}</span>
+                <Landmark size={14} aria-hidden className="text-ash" />
+                <span
+                    className={cn(
+                        "max-w-40 truncate rounded-control px-2 py-0.5",
+                        scope.selected.length && "bg-paper font-medium shadow-card"
+                    )}
+                >
+                    {label}
+                </span>
                 <ChevronDown
                     size={13}
                     aria-hidden
@@ -87,7 +96,10 @@ export function BankFilter({ scope }: { scope: BankScope }) {
                     <li
                         role="option"
                         aria-selected={scope.selected.length === 0}
-                        onClick={() => scope.setSelected([])}
+                        onClick={() => {
+                            track("bank.select", { count: 0 });
+                            scope.setSelected([]);
+                        }}
                         className={cn(
                             "flex cursor-pointer items-center justify-between gap-3 px-3.5 py-2",
                             "text-body-sm",

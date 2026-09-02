@@ -25,8 +25,8 @@ export function CategoryFilterBar({
     onClearMonth,
 }: {
     chips: CategoryChip[];
-    /** Category name, or null for "todas". */
-    picked: string | null;
+    /** Category names in the set, empty for "todas". */
+    picked: string[];
     onPick: (name: string | null) => void;
     month: string | null;
     monthLabel?: string;
@@ -36,11 +36,11 @@ export function CategoryFilterBar({
         <div className="flex flex-wrap items-center gap-1.5">
             <button
                 type="button"
-                aria-pressed={picked === null}
+                aria-pressed={picked.length === 0}
                 onClick={() => onPick(null)}
                 className={cn(
                     CHIP,
-                    picked === null
+                    picked.length === 0
                         ? "bg-soot font-medium text-paper"
                         : "border border-mist text-graphite hover:text-ink"
                 )}
@@ -49,14 +49,14 @@ export function CategoryFilterBar({
             </button>
 
             {chips.map((c) => {
-                const active = picked === c.name;
+                const active = picked.some((n) => n === c.name);
                 return (
                     <button
                         key={c.name}
                         type="button"
                         aria-pressed={active}
                         title={`${c.name} · ${mxn(c.amount)}`}
-                        onClick={() => onPick(active ? null : c.name)}
+                        onClick={() => onPick(c.name)}
                         className={cn(
                             CHIP,
                             "gap-1.5",

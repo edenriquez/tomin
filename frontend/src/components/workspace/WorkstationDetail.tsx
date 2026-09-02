@@ -10,7 +10,6 @@ import { useAppData } from "@/components/AppChrome";
 import { useCategories } from "@/lib/categories";
 import { useMetricBatch } from "@/lib/useMetricBatch";
 import { isMetricError, type MetricQuery } from "@/lib/metrics";
-import { windowToPeriod } from "@/lib/window";
 import { describeRule, readProfile, type Workstation } from "@/lib/workstations";
 import { CohortChart, toMonthPoints } from "./CohortChart";
 import { CohortStats } from "./CohortStats";
@@ -31,15 +30,13 @@ const ACTIVITY_KEY = "activity";
  * scenario, which is what they do once they have read.
  */
 export function WorkstationDetail({ workstation }: { workstation: Workstation }) {
-    const { windowId } = useAppData();
+    const { period } = useAppData();
     const { update, remove } = useWorkspace();
     const categories = useCategories();
     const router = useRouter();
 
     const [editing, setEditing] = useState(false);
     const [scenario, setScenario] = useState<Scenario | null>(null);
-
-    const period = useMemo(() => windowToPeriod(windowId), [windowId]);
 
     // Both reads go out in one batched request, keyed per panel. Two fetches
     // would be two chances for the tiles and the chart to describe different
@@ -81,7 +78,7 @@ export function WorkstationDetail({ workstation }: { workstation: Workstation })
                 className="mb-4 inline-flex items-center gap-1.5 text-body-sm text-graphite hover:text-ink lg:hidden"
             >
                 <ArrowLeft size={14} aria-hidden />
-                Análisis
+                Lecturas
             </Link>
 
             <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
@@ -103,7 +100,7 @@ export function WorkstationDetail({ workstation }: { workstation: Workstation })
                     <Button
                         variant="ghost"
                         icon={<Trash2 size={15} />}
-                        aria-label="Borrar análisis"
+                        aria-label="Borrar lectura"
                         onClick={async () => {
                             if (await remove(workstation.id)) router.replace("/workspace");
                         }}
@@ -114,7 +111,7 @@ export function WorkstationDetail({ workstation }: { workstation: Workstation })
             {failed && (
                 <div className="mt-5">
                     <BackendNotice
-                        what="los números de este análisis"
+                        what="los números de esta lectura"
                         detail={profileEntry.error.message}
                     />
                 </div>

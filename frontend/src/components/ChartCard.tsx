@@ -7,6 +7,7 @@ export function ChartCard({
     title,
     badge,
     controls,
+    action,
     className,
     children,
 }: {
@@ -17,6 +18,9 @@ export function ChartCard({
     /** This card's own settings controls — `PanelControl` rows, built from
      *  `usePanelSettings`. Rendered only in editor mode, below the title. */
     controls?: ReactNode;
+    /** A single control at the far right of the title row — the card's own
+     *  settings toggle, typically. */
+    action?: ReactNode;
     className?: string;
     children: ReactNode;
 }) {
@@ -34,6 +38,7 @@ export function ChartCard({
                         {badge}
                     </span>
                 )}
+                {action && <span className="ml-auto">{action}</span>}
             </div>
             {controls && <PanelControls>{controls}</PanelControls>}
             <div className="mt-4">{children}</div>

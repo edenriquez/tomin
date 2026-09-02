@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flame, SlidersHorizontal, Upload, type LucideIcon } from "lucide-react";
-import { FileText, FlaskConical, LineChart, Repeat, Shapes } from "lucide-react";
+import { Flame, Upload, type LucideIcon } from "lucide-react";
+import { FileText, LineChart, Pin, Scale, Shapes, Tag } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui";
-import { useEditorMode } from "@/components/settings/usePanelSettings";
 import { useStatementUpload } from "@/components/StatementDropzone";
 import { useBankScope } from "@/lib/banks";
 import { BankFilter } from "@/components/BankFilter";
+import { TimeWindowBar } from "@/components/TimeWindowBar";
+import { LecturasMenu } from "@/components/lectura/LecturasMenu";
+import { track } from "@/lib/telemetry";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -23,10 +25,11 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 const NAV: NavItem[] = [
     { href: "/", label: "Movimientos", icon: LineChart },
     { href: "/categorias", label: "Categorías", icon: Shapes },
-    { href: "/recurrentes", label: "Recurrentes", icon: Repeat },
-    // Spanish, like every other item. The route stays `/workspace` because the
-    // code of this repo is English; only the label the user reads is not.
-    { href: "/workspace", label: "Análisis", icon: FlaskConical },
+    { href: "/fijos", label: "Fijos", icon: Pin },
+    { href: "/pronostico", label: "Pronóstico", icon: Scale },
+    // The basket behind a charge. A statement can only say "SORIANA $1,412.60";
+    // this is the view where that becomes "la leche te subió 19%".
+    { href: "/precios", label: "Precios", icon: Tag },
     { href: "/documentos", label: "Documentos", icon: FileText },
 ];
 
@@ -38,13 +41,17 @@ const NAV: NavItem[] = [
 export function AppShell({
     children,
     onUploaded,
+    timeScoped = false,
 }: {
     children: ReactNode;
+    /** Whether the view under this shell reads through the time filter. The
+     *  bar shows regardless — the selection persists across views — but on a
+     *  whole-history view it says it does not apply. */
+    timeScoped?: boolean;
     /** Fired after a successful upload — each view refreshes what it shows. */
     onUploaded?: () => void;
 }) {
     const pathname = usePathname();
-    const [editing, setEditing] = useEditorMode();
     const [uploadBump, setUploadBump] = useState(0);
     const scope = useBankScope(uploadBump);
     const { pick, uploading, input } = useStatementUpload(() => {
@@ -82,6 +89,7 @@ export function AppShell({
                                 <li key={item.href}>
                                     <Link
                                         href={item.href}
+                                        onClick={() => track("nav.view", { to: item.href })}
                                         aria-current={active ? "page" : undefined}
                                         className={cn(
                                             "inline-flex h-9 items-center gap-2 rounded-control px-3 text-body",
@@ -105,32 +113,15 @@ export function AppShell({
                 </nav>
 
                 <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-                    <BankFilter scope={scope} />
-                    {/* Editor mode: the one switch that makes every panel's own
-                        controls appear, in place. A pressed toggle rather than a
-                        menu item — the user must be able to see, at a glance,
-                        why their views grew control strips. */}
-                    <button
-                        type="button"
-                        aria-label="Modo edición"
-                        title="Modo edición"
-                        aria-pressed={editing}
-                        onClick={() => setEditing(!editing)}
-                        className={cn(
-                            "inline-flex h-9 w-9 items-center justify-center rounded-control border",
-                            "transition-colors duration-100",
-                            editing
-                                ? "border-edge bg-soot text-paper"
-                                : "border-mist text-graphite hover:bg-paper hover:text-ink"
-                        )}
-                    >
-                        <SlidersHorizontal size={16} aria-hidden />
-                    </button>
+                    {/* Secondary, not the accent: uploading is frequent but it
+                        is not the point of any screen, and a cyan button in the
+                        chrome competes with the one place cyan means something
+                        (a selection). A hairline button belongs to the header. */}
                     <Button
+                        variant="secondary"
                         loading={uploading}
                         onClick={pick}
-                        icon={<Upload size={16} />}
-                        className="text-ink"
+                        icon={<Upload size={15} />}
                     >
                         <span className="hidden sm:inline">Subir documento</span>
                         <span className="sm:hidden">Subir</span>
@@ -138,6 +129,17 @@ export function AppShell({
                 </div>
                 {input}
             </header>
+
+            {/* Two rows, two questions. The header answers "where am I" — the
+                brand, the views, the one action that works everywhere. This
+                rail answers "what am I looking at" — which accounts, which span
+                of time — and it is drawn as one family of capsules so the two
+                filters read as one control rather than as two more toolbars. */}
+            <div className="-mt-2 flex flex-wrap items-center gap-2 pb-6">
+                <BankFilter scope={scope} />
+                <TimeWindowBar disabled={!timeScoped} />
+                <LecturasMenu />
+            </div>
 
             {children}
         </main>

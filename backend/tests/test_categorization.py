@@ -46,3 +46,37 @@ def test_longest_label_wins():
     result = svc.classify("compra uber eats centro")
     b = next(c for c in categories if c.name == "B")
     assert result.category_id == b.id
+
+
+
+def test_payroll_wording_files_under_ingresos(app):
+    container = app.extensions["container"]
+    cats = {c.name: c.id for c in container.categories.get_all()}
+    assert "Ingresos" in cats
+    classifier = container.categorizer if hasattr(container, "categorizer") else None
+    from tomin.domain.services.categorization import CategorizationService
+
+    svc = CategorizationService(container.categories.get_all(), container.merchants.get_all())
+    nomina = svc.classify(
+        "PAGO RECIBIDO DE SIST TRANSF Y PAGOS POR ORDEN DE VECH SOLUCIONES EN TRANSPORTE "
+        "Nomina 2Q Noviembre"
+    )
+    assert nomina.category_id == cats["Ingresos"]
+    # "abono nomina": the longer label wins over Transferencias' "abono".
+    assert svc.classify("ABONO NOMINA QUINCENAL").category_id == cats["Ingresos"]
+    # A transfer from a person is not income by wording alone.
+    assert svc.classify("PAGO RECIBIDO DE AZTECA POR ORDEN DE ALGUIEN").category_id == cats["Sin Categoria"]
+
+
+def test_a_default_added_later_reaches_an_existing_database(app):
+    """The seed is per-name: a populated database gains "Ingresos" without
+    losing anything the user changed in the categories it already had."""
+    from tomin.adapters.outbound.persistence.seed import seed_reference_data
+
+    container = app.extensions["container"]
+    before = {c.name: c for c in container.categories.get_all()}
+    assert "Ingresos" in before  # bootstrap already ran the seed once
+    # Run it again: nothing duplicates.
+    seed_reference_data(container.categories, container.merchants)
+    after = [c.name for c in container.categories.get_all()]
+    assert sorted(after) == sorted(before)

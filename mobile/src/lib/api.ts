@@ -55,6 +55,20 @@ async function deleteStatement(id: string): Promise<DeleteStatementResult> {
     return res.json();
 }
 
+/** Points a stored ticket at a movement, or detaches it (`null`). */
+async function attachReceipt(receiptId: string, transactionId: string | null) {
+    const res = await fetch(`${API_URL}/api/receipts/${receiptId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transaction_id: transactionId }),
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `API ${res.status}`);
+    }
+    return res.json();
+}
+
 export const api = {
     baseUrl: API_URL,
     summary: () => get<SpendingSummary>("/api/analytics/summary"),
@@ -65,6 +79,10 @@ export const api = {
      * on this device is not touched (see lib/storage).
      */
     deleteStatement,
+    /** Recent expenses, for picking which one a ticket belongs to. */
+    expenses: () =>
+        get<{ items: Transaction[]; total: number }>("/api/transactions?limit=40"),
+    attachReceipt,
     // NOTE: there is deliberately no `uploadStatement` here any more. Sending a
     // statement now means extracting it on-device and sealing the result — see
     // lib/extract.ts and lib/secure-transport.ts. The raw file never leaves the

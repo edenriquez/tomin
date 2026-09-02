@@ -91,6 +91,10 @@ export function matchMerchant(description: string): string | null {
     return null;
 }
 
+export function merchantBySlug(slug: string): Merchant | undefined {
+    return MERCHANTS.find((m) => m.slug === slug);
+}
+
 export function merchantLogoUrl(slug: string): string {
     return `/logos/${slug}.png`;
 }

@@ -8,5 +8,6 @@ export { ChartSkeleton, Skeleton } from "./Skeleton";
 export { SearchInput, type SearchInputProps } from "./SearchInput";
 export { Select, type SelectOption } from "./Select";
 export { Sheet } from "./Sheet";
+export { BottomSheet } from "./BottomSheet";
 export { Switch } from "./Switch";
 export { ToastProvider, useToast, type ToastTone } from "./Toast";

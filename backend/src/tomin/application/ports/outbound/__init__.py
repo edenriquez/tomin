@@ -8,6 +8,15 @@ from .extraction import (
     TemplateClassifier,
 )
 from .metrics import MetricEngine, MetricResolver
+from .receipts import ReceiptReader
+from .references import (
+    CompositePriceReference,
+    NullPriceReference,
+    PriceQuote,
+    PriceReference,
+    ProductTermRepository,
+    ReferenceTerm,
+)
 from .repositories import (
     AccountRepository,
     CategoryRepository,
@@ -16,6 +25,7 @@ from .repositories import (
     DuplicateTagError,
     GoalRepository,
     MerchantRepository,
+    ReceiptRepository,
     UserAliasRepository,
     UserLabelRepository,
     UserTransferPartyRepository,
@@ -27,6 +37,12 @@ from .repositories import (
 from .storage import FileStorage
 
 __all__ = [
+    "CompositePriceReference",
+    "ReferenceTerm",
+    "ProductTermRepository",
+    "NullPriceReference",
+    "PriceQuote",
+    "PriceReference",
     "AccountRepository",
     "ChatMessage",
     "ChatPort",
@@ -37,6 +53,8 @@ __all__ = [
     "DuplicateTagError",
     "GoalRepository",
     "MerchantRepository",
+    "ReceiptReader",
+    "ReceiptRepository",
     "UserAliasRepository",
     "UserLabelRepository",
     "UserTransferPartyRepository",

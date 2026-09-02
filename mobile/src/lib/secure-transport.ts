@@ -17,6 +17,11 @@
  *        -> 201 { statement_id, template, transactions_created, statement, dashboard_url }
  *        -> 409 ya procesado · 400 envelope/payload inválido
  *
+ *   POST /api/ingest/receipt   (misma envoltura, otro contenido: un ticket)
+ *        <- { v: 1, key_id, epk, nonce, box }
+ *        -> 201 { receipt_id, receipt, attached, suggestions, prices_url }
+ *        -> 409 esa foto ya fue procesada · 404 movimiento no encontrado
+ *
  * Key trust is TOFU: the first key we ever see is pinned to disk next to the
  * statements index. If the server later offers a different key we refuse to
  * send and ask the user — a silent key swap is precisely the MITM this layer
@@ -32,6 +37,7 @@ import naclUtil from "tweetnacl-util";
 
 import { api } from "@/lib/api";
 import type { ExtractedPayload } from "@/lib/extract";
+import type { ReceiptPayload } from "@/lib/receipt";
 import { ensureStatementsDir, STATEMENTS_DIR } from "@/lib/storage";
 
 export const ENVELOPE_VERSION = 1;
@@ -234,8 +240,12 @@ export function forgetCachedKey(): void {
 /* seal + send                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/** Everything the phone is allowed to put in an envelope: a statement's text,
+ *  or a ticket's. Never a file, in either case. */
+export type SealablePayload = ExtractedPayload | ReceiptPayload;
+
 /** Seals a payload for a given server key. Pure, so it can be tested offline. */
-export function sealPayload(payload: ExtractedPayload, key: ServerKey): Envelope {
+export function sealPayload(payload: SealablePayload, key: ServerKey): Envelope {
     ensurePrng();
 
     const message = naclUtil.decodeUTF8(JSON.stringify(payload));
@@ -286,6 +296,79 @@ export async function sendExtracted(payload: ExtractedPayload): Promise<IngestRe
         throw new TransportError(detail, res.status);
     }
     return (await res.json()) as IngestResponse;
+}
+
+export type ReceiptSuggestion = {
+    transaction: {
+        id: string;
+        date: string;
+        description: string | null;
+        raw_description: string;
+        amount: number;
+    };
+    score: number;
+    /** Why it scored, in the user's words: "mismo monto, mismo día". */
+    reason: string;
+};
+
+export type ReceiptItemJson = {
+    id: string;
+    raw_text: string;
+    description: string;
+    amount: number;
+    quantity: number | null;
+    unit_price: number | null;
+    each: number | null;
+};
+
+export type ReceiptJson = {
+    id: string;
+    transaction_id: string | null;
+    store: string | null;
+    purchased_at: string | null;
+    total: number | null;
+    items_total: number;
+    reader: string;
+    items: ReceiptItemJson[];
+};
+
+export type ReceiptResponse = {
+    receipt_id: string;
+    receipt: ReceiptJson;
+    attached: boolean;
+    suggestions: ReceiptSuggestion[];
+    prices_url: string;
+};
+
+/**
+ * Seals the ticket's text and posts it. The photo is not touched here and
+ * never leaves the device — this function has no way to send one.
+ */
+export async function sendReceipt(payload: ReceiptPayload): Promise<ReceiptResponse> {
+    const key = await resolveServerKey();
+    const envelope = sealPayload(payload, key);
+
+    let res: Response;
+    try {
+        res = await fetch(`${api.baseUrl}/api/ingest/receipt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(envelope),
+        });
+    } catch (e) {
+        throw new TransportError(`No se pudo enviar: ${(e as Error).message}`);
+    }
+
+    if (res.status === 409) {
+        throw new AlreadyProcessedError(await safeJson(res));
+    }
+    if (!res.ok) {
+        const body = await safeJson(res);
+        const detail =
+            body && typeof body.error === "string" ? body.error : `HTTP ${res.status}`;
+        throw new TransportError(detail, res.status);
+    }
+    return (await res.json()) as ReceiptResponse;
 }
 
 async function safeJson(res: Response): Promise<Record<string, unknown> | null> {

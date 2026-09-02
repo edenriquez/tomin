@@ -20,7 +20,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator, Sequence
 
-from ....application.ports.outbound.chat import ChatMessage, ChatUnavailable
+from ....application.ports.outbound.chat import ChatMessage, ChatPort, ChatUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,40 @@ class OpenAiCompatibleChat:
 
         with response:
             yield from _parse_sse(response)
+
+
+class FallbackChat:
+    """Primary model, then the configured fallback if that one refuses.
+
+    The HTTP error happens before any token is yielded, so a 429 or an
+    outage on the first model can still produce a full answer from the
+    second. A mid-stream failure is left as-is — half an answer plus an
+    error is better than restarting the question on a different model.
+    """
+
+    def __init__(self, primary: ChatPort, fallback: ChatPort) -> None:
+        self._primary = primary
+        self._fallback = fallback
+
+    @property
+    def available(self) -> bool:
+        return self._primary.available
+
+    @property
+    def model_label(self) -> str:
+        return f"{self._primary.model_label} · {self._fallback.model_label}"
+
+    def stream(self, *, system: str, messages: Sequence[ChatMessage]) -> Iterator[str]:
+        try:
+            iterator = self._primary.stream(system=system, messages=messages)
+            first = next(iterator)
+        except ChatUnavailable:
+            yield from self._fallback.stream(system=system, messages=messages)
+            return
+        except StopIteration:
+            return
+        yield first
+        yield from iterator
 
 
 def _parse_sse(response) -> Iterator[str]:

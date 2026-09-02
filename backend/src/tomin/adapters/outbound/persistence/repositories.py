@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
+from ....application.ports.outbound.references import ReferenceTerm
 from ....application.ports.outbound.repositories import DuplicateTagError
 from ....domain.entities import (
     Account,
@@ -18,6 +19,8 @@ from ....domain.entities import (
     DashboardWidget,
     Goal,
     Merchant,
+    Receipt,
+    ReceiptItem,
     Statement,
     Tag,
     Transaction,
@@ -40,6 +43,10 @@ from .models import (
     DashboardWidgetModel,
     GoalModel,
     MerchantModel,
+    ProductReferenceTermModel,
+    UiEventModel,
+    ReceiptItemModel,
+    ReceiptModel,
     StatementModel,
     TagModel,
     TransactionModel,
@@ -117,6 +124,77 @@ def _to_transaction(m: TransactionModel, tag_ids: list[UUID] | None = None) -> T
         transfer_source=m.transfer_source or "auto",
         is_cash_withdrawal=bool(m.is_cash_withdrawal),
         updated_at=m.updated_at,
+    )
+
+
+
+def _to_receipt(m: ReceiptModel, items: list[ReceiptItem]) -> Receipt:
+    return Receipt(
+        id=UUID(m.id),
+        user_id=UUID(m.user_id),
+        transaction_id=UUID(m.transaction_id) if m.transaction_id else None,
+        store=m.store,
+        purchased_at=m.purchased_at,
+        total=Decimal(m.total) if m.total is not None else None,
+        currency=m.currency,
+        match_source=m.match_source,
+        content_sha256=m.content_sha256,
+        extractor=m.extractor,
+        reader=m.reader,
+        captured_at=m.captured_at,
+        created_at=m.created_at,
+        items=items,
+    )
+
+
+def _to_receipt_item(m: ReceiptItemModel) -> ReceiptItem:
+    return ReceiptItem(
+        id=UUID(m.id),
+        user_id=UUID(m.user_id),
+        receipt_id=UUID(m.receipt_id),
+        line_no=m.line_no,
+        raw_text=m.raw_text,
+        description=m.description,
+        product_key=m.product_key,
+        amount=Decimal(m.amount),
+        quantity=Decimal(m.quantity) if m.quantity is not None else None,
+        unit_price=Decimal(m.unit_price) if m.unit_price is not None else None,
+        size=Decimal(m.size) if m.size is not None else None,
+        size_unit=m.size_unit,
+    )
+
+
+def _receipt_model(r: Receipt) -> ReceiptModel:
+    return ReceiptModel(
+        id=_u(r.id),
+        user_id=_u(r.user_id),
+        transaction_id=_u(r.transaction_id) if r.transaction_id else None,
+        store=r.store,
+        purchased_at=r.purchased_at,
+        total=r.total,
+        currency=r.currency,
+        match_source=r.match_source,
+        content_sha256=r.content_sha256,
+        extractor=r.extractor,
+        reader=r.reader,
+        captured_at=r.captured_at,
+    )
+
+
+def _receipt_item_model(i: ReceiptItem) -> ReceiptItemModel:
+    return ReceiptItemModel(
+        id=_u(i.id),
+        user_id=_u(i.user_id),
+        receipt_id=_u(i.receipt_id),
+        line_no=i.line_no,
+        raw_text=i.raw_text,
+        description=i.description,
+        product_key=i.product_key,
+        amount=i.amount,
+        quantity=i.quantity,
+        unit_price=i.unit_price,
+        size=i.size,
+        size_unit=i.size_unit,
     )
 
 
@@ -275,6 +353,25 @@ class SqlTransactionRepository:
                 filters.get("statement_ids"),
             )
             return s.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+    def span_for_user(
+        self, user_id: UUID, *, statement_ids: list[UUID] | None = None
+    ) -> tuple[date | None, date | None]:
+        """The first and last transaction dates on record.
+
+        The time filter anchors on the *last* one rather than on today: a
+        ledger whose newest statement is from June has nothing in "the last 15
+        days" of the calendar, and everything in the last 15 days of its own
+        history. Same seam as the bank filter (statement ids), so the anchor can
+        follow the scope.
+        """
+        with self._db.session() as s:
+            # Aggregate over the *filtered* rows: min/max must read the subquery's
+            # own columns, or SQLAlchemy joins the base table back in as a
+            # cartesian product and the answer is right only by accident.
+            sub = self._base_query(user_id, None, None, None, None, statement_ids).subquery()
+            row = s.execute(select(func.min(sub.c.tx_date), func.max(sub.c.tx_date))).one()
+            return (row[0], row[1])
 
     def delete_for_statement(self, statement_id: UUID) -> list[UUID]:
         with self._db.session() as s:
@@ -642,13 +739,10 @@ class SqlWorkstationRepository:
             id=UUID(m.id),
             user_id=UUID(m.user_id),
             name=m.name,
-            rule=WorkstationRule(
-                description_contains=raw.get("description_contains"),
-                amount_min=raw.get("amount_min"),
-                amount_max=raw.get("amount_max"),
-                category_id=_uuid_or_none(raw.get("category_id")),
-                tag_id=_uuid_or_none(raw.get("tag_id")),
-            ),
+            # Rows written before groups existed are flat, and `from_json`
+            # reads both shapes -- so an old lens loads as a one-clause rule
+            # without a migration touching the JSON column.
+            rule=WorkstationRule.from_json(raw),
             excluded_tx_ids=[UUID(i) for i in (m.excluded_tx_ids or [])],
             created_at=m.created_at,
             updated_at=m.updated_at,
@@ -792,6 +886,14 @@ class SqlConversationRepository:
             # the picker's "most recent first" needs microseconds to be true.
             conversation.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
+    def rename(self, user_id: UUID, conversation: Conversation) -> Conversation | None:
+        with self._db.session() as s:
+            model = s.get(WorkstationConversationModel, _u(conversation.id))
+            if model is None or model.user_id != _u(user_id):
+                return None
+            model.title = conversation.title
+            return self._to_entity(model)
+
     @staticmethod
     def _to_entity(m: WorkstationConversationModel) -> Conversation:
         return Conversation(
@@ -805,15 +907,13 @@ class SqlConversationRepository:
 
 
 def _rule_json(rule: WorkstationRule) -> dict:
-    """The rule as JSON. Decimals and UUIDs go out as strings.
+    """The rule as JSON, in the entity's own words.
 
-    JSON's float would not carry an amount bound back unchanged, and a bound
-    that drifts by a centavo silently changes which movements are in the set.
+    Decimals and UUIDs go out as strings: JSON's float would not carry an amount
+    bound back unchanged, and a bound that drifts by a centavo silently changes
+    which movements are in the set.
     """
-    out: dict = {}
-    for name, value in rule.conditions.items():
-        out[name] = str(value)
-    return out
+    return rule.to_json()
 
 
 def _uuid_or_none(value) -> UUID | None:
@@ -876,6 +976,108 @@ class SqlUserAliasRepository:
                     id=str(uuid4()), user_id=_u(user_id), label=label, alias=alias
                 )
             )
+
+
+class SqlProductReferenceTermRepository:
+    """Which word a product is looked up by, outside this app."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def all_for_user(self, user_id: UUID) -> list[ReferenceTerm]:
+        with self._db.session() as s:
+            stmt = select(ProductReferenceTermModel).where(
+                ProductReferenceTermModel.user_id == _u(user_id)
+            )
+            return [_term(m) for m in s.scalars(stmt).all()]
+
+    def get(self, user_id: UUID, product_key: str) -> ReferenceTerm | None:
+        with self._db.session() as s:
+            model = self._row(s, user_id, product_key)
+            return _term(model) if model else None
+
+    def upsert(self, user_id: UUID, product_key: str, term: str, source: str) -> None:
+        with self._db.session() as s:
+            existing = self._row(s, user_id, product_key)
+            if existing:
+                # A person's answer outranks a model's proposal, always and in
+                # one direction. Without this the next automatic lookup would
+                # quietly undo every correction the user ever made.
+                if existing.source == "user" and source != "user":
+                    return
+                existing.term = term
+                existing.source = source
+                existing.updated_at = datetime.now(timezone.utc)
+                return
+            s.add(
+                ProductReferenceTermModel(
+                    id=str(uuid4()),
+                    user_id=_u(user_id),
+                    product_key=product_key,
+                    term=term,
+                    source=source,
+                )
+            )
+
+    @staticmethod
+    def _row(session, user_id: UUID, product_key: str):
+        return session.scalars(
+            select(ProductReferenceTermModel).where(
+                ProductReferenceTermModel.user_id == _u(user_id),
+                ProductReferenceTermModel.product_key == product_key,
+            )
+        ).first()
+
+
+def _term(model) -> ReferenceTerm:
+    return ReferenceTerm(
+        product_key=model.product_key, term=model.term, source=model.source
+    )
+
+
+class SqlUiEventRepository:
+    """Interaction events: written in batches, read back as counts."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def add_many(self, user_id: UUID, events: list[dict]) -> int:
+        with self._db.session() as s:
+            for e in events:
+                s.add(UiEventModel(
+                    id=str(uuid4()), user_id=_u(user_id), name=e["name"], path=e["path"],
+                    props=e.get("props") or {}, occurred_at=e["occurred_at"],
+                ))
+        return len(events)
+
+    def recent(self, user_id: UUID, since: datetime, *, limit: int = 5000) -> list[dict]:
+        """Raw events, newest first, for the developer heat view. Capped: the
+        view aggregates in the browser, and five thousand rows is a month of
+        heavy use, not a year of history."""
+        with self._db.session() as s:
+            stmt = (
+                select(UiEventModel)
+                .where(UiEventModel.user_id == _u(user_id), UiEventModel.occurred_at >= since)
+                .order_by(UiEventModel.occurred_at.desc())
+                .limit(limit)
+            )
+            return [
+                {"name": m.name, "path": m.path, "props": m.props or {},
+                 "occurred_at": m.occurred_at.isoformat() + "Z"}
+                for m in s.scalars(stmt).all()
+            ]
+
+    def summary(self, user_id: UUID, since: datetime) -> list[tuple[str, str, int]]:
+        """``(name, path, count)`` rows, most frequent first. The heat map's raw
+        material -- what people touch, where."""
+        with self._db.session() as s:
+            stmt = (
+                select(UiEventModel.name, UiEventModel.path, func.count())
+                .where(UiEventModel.user_id == _u(user_id), UiEventModel.occurred_at >= since)
+                .group_by(UiEventModel.name, UiEventModel.path)
+                .order_by(func.count().desc())
+            )
+            return [(n, p, int(c)) for n, p, c in s.execute(stmt).all()]
 
 
 class SqlUserTransferPartyRepository:
@@ -1083,3 +1285,191 @@ class SqlMerchantRepository:
         with self._db.session() as s:
             for m in merchants:
                 s.add(MerchantModel(id=_u(m.id), name=m.name, labels=list(m.labels)))
+
+
+class SqlReceiptRepository:
+    """Photographed tickets and their line items.
+
+    Every read is user-scoped in the query itself, so a guessed id is a 404 and
+    never someone else's groceries — the same discipline as the workstation and
+    conversation repositories.
+
+    Items are always loaded with their receipt. A receipt without its items is
+    not a useful object anywhere in this codebase (the detail panel renders
+    them, the price book groups them), so lazy loading would only buy the
+    chance to forget.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    # --- writes ----------------------------------------------------------
+    def add(self, receipt: Receipt) -> None:
+        with self._db.session() as s:
+            s.add(_receipt_model(receipt))
+            for item in receipt.items:
+                s.add(_receipt_item_model(item))
+
+    def attach(
+        self, user_id: UUID, receipt_id: UUID, transaction_id: UUID | None, *, source: str
+    ) -> Receipt | None:
+        """Point a receipt at a movement (or at nothing). Returns the new state.
+
+        ``None`` for ``transaction_id`` is a real instruction — "this is not
+        that purchase" — and detaching is how a user undoes a wrong automatic
+        match.
+        """
+        with self._db.session() as s:
+            model = s.get(ReceiptModel, _u(receipt_id))
+            if model is None or model.user_id != _u(user_id):
+                return None
+            model.transaction_id = _u(transaction_id) if transaction_id else None
+            model.match_source = source
+            s.flush()
+            return self._hydrate(s, [model])[0]
+
+    def detach_transactions(self, transaction_ids: list[UUID]) -> None:
+        """Unpoint receipts whose movement no longer exists.
+
+        Called when a statement is deleted. The ticket itself survives: the
+        user photographed it, the store did print it, and the price history it
+        contributed is still true. Only the link dies.
+        """
+        if not transaction_ids:
+            return
+        ids = [_u(i) for i in transaction_ids]
+        with self._db.session() as s:
+            for model in s.scalars(
+                select(ReceiptModel).where(ReceiptModel.transaction_id.in_(ids))
+            ).all():
+                model.transaction_id = None
+                # Back to "auto": the user attached it to a row that is gone,
+                # so their answer no longer protects anything from re-matching.
+                model.match_source = "auto"
+
+    def delete(self, user_id: UUID, receipt_id: UUID) -> bool:
+        with self._db.session() as s:
+            model = s.get(ReceiptModel, _u(receipt_id))
+            if model is None or model.user_id != _u(user_id):
+                return False
+            # Explicit, not left to the FK: SQLite does not enforce cascades
+            # unless PRAGMA foreign_keys is on, which it is not here.
+            s.execute(
+                delete(ReceiptItemModel).where(ReceiptItemModel.receipt_id == _u(receipt_id))
+            )
+            s.delete(model)
+            return True
+
+    # --- reads -----------------------------------------------------------
+    def exists_hash(self, user_id: UUID, content_sha256: str) -> bool:
+        with self._db.session() as s:
+            return (
+                s.scalar(
+                    select(func.count())
+                    .select_from(ReceiptModel)
+                    .where(
+                        ReceiptModel.user_id == _u(user_id),
+                        ReceiptModel.content_sha256 == content_sha256,
+                    )
+                )
+                or 0
+            ) > 0
+
+    def get(self, user_id: UUID, receipt_id: UUID) -> Receipt | None:
+        with self._db.session() as s:
+            model = s.scalars(
+                select(ReceiptModel).where(
+                    ReceiptModel.id == _u(receipt_id),
+                    ReceiptModel.user_id == _u(user_id),
+                )
+            ).first()
+            return self._hydrate(s, [model])[0] if model else None
+
+    def attached_transaction_ids(self, user_id: UUID) -> set[str]:
+        """The movements that already carry a ticket.
+
+        Read as one set rather than asked per candidate: the matcher considers
+        a handful of movements per receipt and a query each would be a join
+        done badly, in Python, once per photo.
+        """
+        with self._db.session() as s:
+            return {
+                row
+                for row in s.scalars(
+                    select(ReceiptModel.transaction_id).where(
+                        ReceiptModel.user_id == _u(user_id),
+                        ReceiptModel.transaction_id.is_not(None),
+                    )
+                ).all()
+                if row
+            }
+
+    def get_for_transaction(self, user_id: UUID, transaction_id: UUID) -> Receipt | None:
+        with self._db.session() as s:
+            model = s.scalars(
+                select(ReceiptModel).where(
+                    ReceiptModel.transaction_id == _u(transaction_id),
+                    ReceiptModel.user_id == _u(user_id),
+                )
+            ).first()
+            return self._hydrate(s, [model])[0] if model else None
+
+    def list_for_user(
+        self, user_id: UUID, *, limit: int = 100, offset: int = 0
+    ) -> list[Receipt]:
+        with self._db.session() as s:
+            models = s.scalars(
+                select(ReceiptModel)
+                .where(ReceiptModel.user_id == _u(user_id))
+                # Newest purchase first; an undated ticket sorts by when it was
+                # captured rather than disappearing to the bottom forever.
+                .order_by(
+                    ReceiptModel.purchased_at.desc().nullslast(),
+                    ReceiptModel.created_at.desc(),
+                )
+                .limit(limit)
+                .offset(offset)
+            ).all()
+            return self._hydrate(s, list(models))
+
+    def count_for_user(self, user_id: UUID) -> int:
+        with self._db.session() as s:
+            return (
+                s.scalar(
+                    select(func.count())
+                    .select_from(ReceiptModel)
+                    .where(ReceiptModel.user_id == _u(user_id))
+                )
+                or 0
+            )
+
+    def all_for_user(self, user_id: UUID) -> list[Receipt]:
+        """Every receipt the user owns, items included — the price book's input.
+
+        Unpaginated on purpose, and safe to be: a receipt is one shopping trip,
+        so this is bounded by how often a person buys groceries, not by how
+        much they spend. The statement path, which *is* unbounded, streams
+        instead (``TransactionRepository.iter_for_user``).
+        """
+        with self._db.session() as s:
+            models = s.scalars(
+                select(ReceiptModel)
+                .where(ReceiptModel.user_id == _u(user_id))
+                .order_by(ReceiptModel.purchased_at.desc().nullslast())
+            ).all()
+            return self._hydrate(s, list(models))
+
+    # --- mapping ---------------------------------------------------------
+    def _hydrate(self, session, models: list[ReceiptModel]) -> list[Receipt]:
+        """Attach each receipt's items in one extra query, not N."""
+        if not models:
+            return []
+        ids = [m.id for m in models]
+        items: dict[str, list[ReceiptItem]] = {}
+        for row in session.scalars(
+            select(ReceiptItemModel)
+            .where(ReceiptItemModel.receipt_id.in_(ids))
+            .order_by(ReceiptItemModel.line_no)
+        ).all():
+            items.setdefault(row.receipt_id, []).append(_to_receipt_item(row))
+        return [_to_receipt(m, items.get(m.id, [])) for m in models]

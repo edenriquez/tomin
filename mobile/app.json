@@ -17,9 +17,18 @@
         "android": {
             "package": "mx.tomin.app"
         },
-        "plugins": ["expo-router"],
+        "plugins": [
+            "expo-router",
+            [
+                "expo-image-picker",
+                {
+                    "photosPermission": "Tomin lee tus tickets en el teléfono; la foto no se sube a ningún servidor.",
+                    "cameraPermission": "Tomin lee el ticket aquí mismo, en tu teléfono; la foto no se sube a ningún servidor."
+                }
+            ]
+        ],
         "extra": {
-            "apiUrl": "http://127.0.0.1:8010"
+            "apiUrl": "http://192.168.68.101:8000"
         }
     }
 }

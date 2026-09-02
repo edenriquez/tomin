@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppChrome } from "@/components/AppChrome";
 import { RuleEditorSheet } from "@/components/workspace/RuleEditorSheet";
-import { WorkspaceProvider, useWorkspace } from "@/components/workspace/WorkspaceProvider";
+import { useWorkspace } from "@/components/workspace/WorkspaceProvider";
 import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
 
 /**
@@ -13,7 +13,7 @@ import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
  * The sidebar lives in the layout rather than in each page so it does not
  * remount on navigation — and so its list and the open detail read the same
  * array through `WorkspaceProvider`. Below `lg` it disappears entirely and
- * `/workspace` becomes the list; the detail carries its own "← Análisis". One
+ * `/workspace` becomes the list; the detail carries its own "← Lecturas". One
  * route pair, two widths, no drawer and no gestures to teach.
  *
  * `withWindow` because a cohort reading is scoped to the period the user is
@@ -24,9 +24,7 @@ import { WorkspaceSidebar } from "@/components/workspace/WorkspaceSidebar";
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     return (
         <AppChrome withWindow>
-            <WorkspaceProvider>
-                <Shell>{children}</Shell>
-            </WorkspaceProvider>
+            <Shell>{children}</Shell>
         </AppChrome>
     );
 }

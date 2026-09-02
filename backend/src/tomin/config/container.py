@@ -9,13 +9,26 @@ from ..adapters.outbound.extraction import (
     PdfExtractor,
     SatXmlExtractor,
 )
-from ..adapters.outbound.chat import NullChat, OpenAiCompatibleChat
+from ..adapters.outbound.chat import FallbackChat, NullChat, OpenAiCompatibleChat
 from ..adapters.outbound.metrics import (
     CohortProfileResolver,
     FinancialAdviceResolver,
     InvestmentProjectionResolver,
 )
 from ..adapters.outbound.parsing import DefaultParserFactory
+from ..adapters.outbound.receipts import HeuristicReceiptReader, LlmReceiptReader
+from ..adapters.outbound.references import (
+    AmazonListingsReference,
+    BraveSearch,
+    FirecrawlSearch,
+    ProfecoPriceReference,
+    WebPriceReference,
+)
+from ..application.ports.outbound.references import (
+    CompositePriceReference,
+    NullPriceReference,
+    PriceReference,
+)
 from ..adapters.outbound.persistence import (
     Database,
     SqlAccountRepository,
@@ -23,6 +36,9 @@ from ..adapters.outbound.persistence import (
     SqlDashboardRepository,
     SqlGoalRepository,
     SqlMerchantRepository,
+    SqlProductReferenceTermRepository,
+    SqlReceiptRepository,
+    SqlUiEventRepository,
     SqlStatementRepository,
     SqlTagRepository,
     SqlTransactionRepository,
@@ -36,13 +52,18 @@ from ..adapters.outbound.persistence.migrator import upgrade_to_head
 from ..adapters.outbound.persistence.seed import seed_reference_data
 from ..adapters.outbound.storage import TransientFileStorage
 from ..application.use_cases import (
+    AnswerPriceQuestion,
+    ComparePricesUseCase,
+    ResolveProductTerms,
     DetectRecurringUseCase,
     GetForecastUseCase,
     GetHomeDashboardUseCase,
     GetMetricCatalogUseCase,
     GetSpendingSummaryUseCase,
     ListTransactionsUseCase,
+    IngestReceiptUseCase,
     ManageGoalsUseCase,
+    ManageReceiptsUseCase,
     ManageStatementsUseCase,
     ManageTagsUseCase,
     AnswerWorkstationQuestion,
@@ -117,6 +138,14 @@ class Container:
     @cached_property
     def statements(self) -> SqlStatementRepository:
         return SqlStatementRepository(self.database)
+
+    @cached_property
+    def receipts(self) -> SqlReceiptRepository:
+        return SqlReceiptRepository(self.database)
+
+    @cached_property
+    def ui_events(self) -> SqlUiEventRepository:
+        return SqlUiEventRepository(self.database)
 
     @cached_property
     def accounts(self) -> SqlAccountRepository:
@@ -216,6 +245,9 @@ class Container:
         return ManageStatementsUseCase(
             statements=self.statements,
             transactions=self.transactions,
+            # So deleting a statement detaches its tickets instead of leaving
+            # them pointing at rows that no longer exist.
+            receipts=self.receipts,
             cube=self.cube,
         )
 
@@ -273,12 +305,123 @@ class Container:
         """
         settings = self.settings
         if settings.llm_base_url and settings.llm_api_key and settings.llm_model:
-            return OpenAiCompatibleChat(
+            primary = OpenAiCompatibleChat(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
                 model=settings.llm_model,
             )
+            fallback_name = settings.llm_fallback_model.strip()
+            if fallback_name and fallback_name != settings.llm_model:
+                return FallbackChat(
+                    primary,
+                    OpenAiCompatibleChat(
+                        base_url=settings.llm_base_url,
+                        api_key=settings.llm_api_key,
+                        model=fallback_name,
+                    ),
+                )
+            return primary
         return NullChat()
+
+    @cached_property
+    def receipt_reader(self):
+        """Who turns OCR lines into products.
+
+        The model when one is configured, the regexes otherwise — and the model
+        one falls back to the regexes on its own whenever its answer does not
+        survive checking, so this is a preference, never a dependency.
+        """
+        if self.chat.available:
+            return LlmReceiptReader(self.chat, HeuristicReceiptReader())
+        return HeuristicReceiptReader()
+
+    @cached_property
+    def ingest_receipt(self) -> IngestReceiptUseCase:
+        return IngestReceiptUseCase(
+            reader=self.receipt_reader,
+            receipts=self.receipts,
+            transactions=self.transactions,
+        )
+
+    @cached_property
+    def manage_receipts(self) -> ManageReceiptsUseCase:
+        return ManageReceiptsUseCase(
+            receipts=self.receipts,
+            transactions=self.transactions,
+        )
+
+    @cached_property
+    def compare_prices(self) -> ComparePricesUseCase:
+        # No cube: a price book is built from receipt lines, which the cube
+        # does not hold — it aggregates movements, and a movement is one number
+        # for a whole basket.
+        return ComparePricesUseCase(self.receipts)
+
+    @cached_property
+    def price_reference(self) -> PriceReference:
+        """External reference prices, or nothing.
+
+        Nothing is a first-class option: an empty city means the chat makes no
+        outbound call at all, and every answer is built from the user's own
+        tickets exactly as it was before this port existed.
+        """
+        sources: list[PriceReference] = []
+        city = self.settings.price_reference_city.strip()
+        if city:
+            sources.append(ProfecoPriceReference(city=city))
+        listings = self.settings.listings_source.strip().lower()
+        if listings == "amazon":
+            sources.append(AmazonListingsReference())
+        elif listings == "brave":
+            # Extraction rides on the chat port; with no model configured the
+            # composite drops this source by its own `available`.
+            sources.append(WebPriceReference(
+                BraveSearch(self.settings.brave_search_api_key.strip()), self.chat, engine="Brave"
+            ))
+        elif listings == "firecrawl":
+            sources.append(WebPriceReference(
+                FirecrawlSearch(self.settings.firecrawl_api_key.strip()),
+                self.chat, engine="Firecrawl", fallback=self.listings_reader_fallback,
+            ))
+        composite = CompositePriceReference(sources)
+        return composite if composite.available else NullPriceReference()
+
+    @cached_property
+    def product_reference_terms(self) -> SqlProductReferenceTermRepository:
+        return SqlProductReferenceTermRepository(self.database)
+
+    @cached_property
+    def resolve_product_terms(self) -> ResolveProductTerms:
+        """The association between a ticket's shorthand and the world's word.
+
+        Given the chat port on purpose, not a second model client: when no model
+        is configured it proposes nothing, the screen says "sin asociar", and the
+        user can still type the term themselves.
+        """
+        return ResolveProductTerms(self.product_reference_terms, self.chat)
+
+    @cached_property
+    def listings_reader_fallback(self):
+        """A second model to read store pages with when the main one says 429.
+
+        Same gateway and key, different model; ``None`` when unconfigured or
+        when it would be the same model twice.
+        """
+        model = self.settings.listings_reader_fallback_model.strip()
+        if not model or model == self.settings.llm_model or not self.chat.available:
+            return None
+        return OpenAiCompatibleChat(
+            base_url=self.settings.llm_base_url, api_key=self.settings.llm_api_key, model=model
+        )
+
+    @cached_property
+    def answer_price_question(self) -> AnswerPriceQuestion:
+        return AnswerPriceQuestion(
+            chat=self.chat,
+            compare=self.compare_prices,
+            references=self.price_reference,
+            product_terms=self.resolve_product_terms,
+        )
 
     @cached_property
     def answer_workstation_question(self) -> AnswerWorkstationQuestion:

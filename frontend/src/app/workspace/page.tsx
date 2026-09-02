@@ -38,8 +38,8 @@ export default function WorkspacePage() {
 
             <div className="hidden lg:block">
                 {items?.length ? (
-                    <EmptyState icon={FlaskConical} title="Elige un análisis">
-                        O crea uno nuevo para aislar un grupo de movimientos y entenderlo.
+                    <EmptyState icon={FlaskConical} title="Elige una lectura">
+                        O crea una nueva para aislar un grupo de movimientos y entenderlo.
                     </EmptyState>
                 ) : (
                     <EmptyState
@@ -59,8 +59,9 @@ export default function WorkspacePage() {
                             </div>
                         }
                     >
-                        Un análisis es una regla guardada — «recarga», entre $10 y $300 — y la
-                        lectura de lo que cae dentro.
+                        Una lectura es una regla guardada — «recarga», entre $10 y $300 — y lo
+                        que cae dentro. Puedes sumar varios filtros en un mismo grupo: spotify{" "}
+                        <em>y</em> netflix <em>y</em> el gimnasio, leídos juntos.
                     </EmptyState>
                 )}
             </div>

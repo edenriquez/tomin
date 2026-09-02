@@ -82,6 +82,20 @@ class ManageConversations:
             ),
         )
 
+    def rename(
+        self, *, user_id: UUID, conversation_id: UUID, title: str
+    ) -> Conversation:
+        """Replace the list name. Empty is refused: a thread without a title
+        cannot be found again in the rail."""
+        conversation = self.get(user_id=user_id, conversation_id=conversation_id)
+        conversation.title = " ".join(title.split())
+        if not conversation.title:
+            raise ValueError("A conversation needs a title.")
+        renamed = self._conversations.rename(user_id, conversation)
+        if renamed is None:
+            raise ConversationNotFound(str(conversation_id))
+        return renamed
+
     def delete(self, *, user_id: UUID, conversation_id: UUID) -> None:
         if not self._conversations.delete(user_id, conversation_id):
             raise ConversationNotFound(str(conversation_id))

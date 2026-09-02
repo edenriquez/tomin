@@ -281,4 +281,159 @@ def test_rule_amounts_survive_as_decimals_not_floats():
     # A bound that drifts by a centavo silently changes which movements are in
     # the set, which is why these travel as strings.
     assert rule.to_filters([])["amount_min"] == "0.1"
-    assert rule.amount_min == Decimal("0.1")
+    # The conditions live on the clause; the rule is the union of clauses.
+    assert rule.clauses[0].amount_min == Decimal("0.1")
+
+
+# --- groups: several filters, unioned -------------------------------------
+def test_one_filter_still_compiles_flat(client):
+    """The back-compat property, stated as a test.
+
+    Every lens saved before groups existed, and every one saved with a single
+    filter after, must compile to the *same* query it always did -- no `any_of`
+    wrapper, no new shape for a client to learn.
+    """
+    body = _create(client, rule={"description_contains": "recarga"}).get_json()
+    assert body["rule"] == {"description_contains": "recarga"}
+    assert body["filters"] == {"description_contains": "recarga"}
+
+
+def test_a_group_round_trips_and_compiles_to_a_union(client):
+    resp = _create(
+        client,
+        name="Suscripciones",
+        rule={
+            "any_of": [
+                {"description_contains": "spotify"},
+                {"description_contains": "netflix", "amount_max": "300"},
+            ]
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.get_json()
+    assert body["rule"] == {
+        "any_of": [
+            {"description_contains": "spotify"},
+            {"description_contains": "netflix", "amount_max": "300"},
+        ]
+    }
+    assert body["filters"] == {
+        "any_of": [
+            {"description_contains": "spotify"},
+            {"description_contains": "netflix", "amount_max": "300"},
+        ]
+    }
+
+
+def test_a_group_selects_the_union_through_the_metric_endpoint(client, ledger):
+    """The property that makes groups worth having.
+
+    Each filter carries its *own* bounds: the 100-peso cap applies to the
+    top-ups and not to the Uber. Under one flat rule that is not expressible,
+    which is why the user was previously forced into two lenses and mental
+    arithmetic.
+    """
+    created = _create(
+        client,
+        rule={
+            "any_of": [
+                {"description_contains": "recarga", "amount_max": "100"},
+                {"description_contains": "uber"},
+            ]
+        },
+    ).get_json()
+
+    resp = client.post(
+        "/api/metrics/query",
+        json={
+            "period": {"start": "2024-01-01", "end": "2024-12-31"},
+            "queries": [
+                {"key": "p", "metric": "cohort_profile", "filters": created["filters"]}
+            ],
+        },
+    )
+    entry = resp.get_json()["results"]["p"]
+    assert "error" not in entry, entry
+    row = entry["rows"][0]
+    # The two 15-peso top-ups and the 450 Uber. Not the 200-peso plan: it is
+    # over the first filter's cap and the second filter never mentions it.
+    assert row["count"] == 3
+    assert Decimal(row["total"]) == Decimal("480")
+
+
+def test_exclusions_apply_across_the_whole_group(client, ledger):
+    """An exclusion says "not this movement", whichever filter let it in."""
+    created = _create(
+        client,
+        rule={
+            "any_of": [
+                {"description_contains": "recarga", "amount_max": "100"},
+                {"description_contains": "uber"},
+            ]
+        },
+        excluded_tx_ids=[str(ledger[3].id)],  # the Uber
+    ).get_json()
+
+    resp = client.post(
+        "/api/metrics/query",
+        json={
+            "period": {"start": "2024-01-01", "end": "2024-12-31"},
+            "queries": [
+                {"key": "p", "metric": "cohort_profile", "filters": created["filters"]}
+            ],
+        },
+    )
+    row = resp.get_json()["results"]["p"]["rows"][0]
+    assert row["count"] == 2
+    assert Decimal(row["total"]) == Decimal("30")
+
+
+def test_an_empty_group_is_a_400(client):
+    assert _create(client, rule={"any_of": []}).status_code == 400
+
+
+def test_a_group_filter_with_no_conditions_is_a_400(client):
+    assert _create(
+        client, rule={"any_of": [{"description_contains": "x"}, {}]}
+    ).status_code == 400
+
+
+def test_a_group_alongside_a_flat_condition_is_a_400(client):
+    """Half group, half flat has two readings, so it has none."""
+    resp = _create(
+        client,
+        rule={"any_of": [{"description_contains": "x"}], "amount_max": "300"},
+    )
+    assert resp.status_code == 400
+
+
+def test_an_undeclared_condition_inside_a_group_is_a_400(client):
+    assert _create(
+        client, rule={"any_of": [{"description_starts_with": "x"}]}
+    ).status_code == 400
+
+
+def test_a_nested_group_is_a_400(client):
+    """One level of union. A tree is a query language, and this is not one."""
+    resp = _create(
+        client, rule={"any_of": [{"any_of": [{"description_contains": "x"}]}]}
+    )
+    assert resp.status_code == 400
+
+
+def test_too_many_filters_in_one_group_is_a_400(client):
+    from tomin.domain.entities import MAX_CLAUSES
+
+    resp = _create(
+        client,
+        rule={"any_of": [{"description_contains": f"x{i}"} for i in range(MAX_CLAUSES + 1)]},
+    )
+    assert resp.status_code == 400
+
+
+def test_an_inverted_bound_inside_a_group_is_a_400(client):
+    resp = _create(
+        client,
+        rule={"any_of": [{"description_contains": "x", "amount_min": "300", "amount_max": "10"}]},
+    )
+    assert resp.status_code == 400

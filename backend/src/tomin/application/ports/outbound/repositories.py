@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from collections.abc import Iterator
 from typing import Protocol, runtime_checkable
 from uuid import UUID
@@ -13,6 +15,7 @@ from ....domain.entities import (
     DashboardWidget,
     Goal,
     Merchant,
+    Receipt,
     Statement,
     Tag,
     Transaction,
@@ -39,6 +42,12 @@ class TransactionRepository(Protocol):
     ) -> list[Transaction]: ...
 
     def count_for_user(self, user_id: UUID, **filters) -> int: ...
+
+    def span_for_user(
+        self, user_id: UUID, *, statement_ids: list[UUID] | None = None
+    ) -> tuple[date | None, date | None]:
+        """``(first, last)`` transaction dates, or ``(None, None)`` for an empty ledger."""
+        ...
 
     def get(self, transaction_id: UUID) -> Transaction | None: ...
 
@@ -178,6 +187,10 @@ class ConversationRepository(Protocol):
         """Store one message and bump the conversation's ``updated_at``."""
         ...
 
+    def rename(self, user_id: UUID, conversation: Conversation) -> Conversation | None:
+        """Persist a new list title. ``None`` when the thread is not theirs."""
+        ...
+
 
 class DuplicateTagError(ValueError):
     """Two tags with the same slug for one user.
@@ -279,3 +292,44 @@ class UserLabelRepository(Protocol):
     def add(self, user_id: UUID, category_id: UUID, label: str) -> None:
         """Idempotent: re-teaching the same triple is a no-op."""
         ...
+
+
+@runtime_checkable
+class ReceiptRepository(Protocol):
+    """Photographed tickets and their line items, always read together."""
+
+    def add(self, receipt: Receipt) -> None: ...
+
+    def get(self, user_id: UUID, receipt_id: UUID) -> Receipt | None: ...
+
+    def get_for_transaction(self, user_id: UUID, transaction_id: UUID) -> Receipt | None: ...
+
+    def list_for_user(
+        self, user_id: UUID, *, limit: int = 100, offset: int = 0
+    ) -> list[Receipt]: ...
+
+    def count_for_user(self, user_id: UUID) -> int: ...
+
+    def attached_transaction_ids(self, user_id: UUID) -> set[str]:
+        """The movements that already carry a ticket, as one set."""
+        ...
+
+    def all_for_user(self, user_id: UUID) -> list[Receipt]:
+        """Every receipt, items included. The price comparison's whole input."""
+        ...
+
+    def exists_hash(self, user_id: UUID, content_sha256: str) -> bool:
+        """Dedup on the phone's digest of the original photo."""
+        ...
+
+    def attach(
+        self, user_id: UUID, receipt_id: UUID, transaction_id: UUID | None, *, source: str
+    ) -> Receipt | None:
+        """Point a receipt at a movement, or at nothing. Returns the new state."""
+        ...
+
+    def detach_transactions(self, transaction_ids: list[UUID]) -> None:
+        """Unpoint receipts whose movement was deleted; keep the receipts."""
+        ...
+
+    def delete(self, user_id: UUID, receipt_id: UUID) -> bool: ...

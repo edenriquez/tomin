@@ -5,7 +5,12 @@ from uuid import UUID
 
 from ...domain.entities import Statement
 from ...domain.value_objects.enums import AccountKind
-from ..ports.outbound import CubeWriter, StatementRepository, TransactionRepository
+from ..ports.outbound import (
+    CubeWriter,
+    ReceiptRepository,
+    StatementRepository,
+    TransactionRepository,
+)
 
 
 class StatementNotFoundError(Exception):
@@ -35,6 +40,11 @@ class ManageStatementsUseCase:
     from it -- in the relational store and in the analytics cube -- so the
     dashboards stop counting them. The user's own copy of the raw file lives on
     their phone and is untouched by this.
+
+    Receipts are *detached*, not deleted, by the same operation. A ticket the
+    user photographed is their document, and the prices on it are still true
+    after the statement that explained the charge goes away; only the link
+    between the two dies.
     """
 
     def __init__(
@@ -42,10 +52,12 @@ class ManageStatementsUseCase:
         *,
         statements: StatementRepository,
         transactions: TransactionRepository,
+        receipts: ReceiptRepository,
         cube: CubeWriter,
     ) -> None:
         self._statements = statements
         self._transactions = transactions
+        self._receipts = receipts
         self._cube = cube
 
     def list(self, *, user_id: UUID) -> list[Statement]:
@@ -93,6 +105,10 @@ class ManageStatementsUseCase:
             raise StatementNotFoundError(str(statement_id))
 
         tx_ids = self._transactions.delete_for_statement(statement_id)
+        # Before the rows are gone from anyone else's point of view: a receipt
+        # pointing at a deleted movement would render as a ticket attached to
+        # nothing, which is worse than one honestly unattached.
+        self._receipts.detach_transactions(tx_ids)
         self._statements.delete(statement_id)
 
         self._cube.delete_transactions(tx_ids)

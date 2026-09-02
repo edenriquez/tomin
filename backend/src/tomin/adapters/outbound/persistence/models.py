@@ -284,6 +284,53 @@ class DashboardWidgetModel(Base):
     title_override: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
+class ProductReferenceTermModel(Base):
+    """What a ticket's shorthand is called out in the world.
+
+    ``GV DETE 7L`` is not a normalisation away from ``detergente``; it is
+    knowledge, so it is a row. Keyed by ``product_key`` rather than by receipt
+    line: the association belongs to the *product*, and once it is made every
+    ticket that ever printed that shorthand inherits it.
+
+    ``source`` is what protects a human's answer from the next guess: a model
+    may overwrite its own ``auto`` proposal, never a ``user`` correction.
+    """
+
+    __tablename__ = "product_reference_terms"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    product_key: Mapped[str] = mapped_column(String(200))
+    term: Mapped[str] = mapped_column(String(80))
+    source: Mapped[str] = mapped_column(String(10), default="auto")
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _created_at()
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_key", name="uq_reference_term_product"),
+    )
+
+
+class UiEventModel(Base):
+    """One interaction, as the client reported it. Append-only.
+
+    No entity behind it on purpose: an event is a fact about attention, not a
+    thing the domain reasons about. When the rows have taught us how people
+    work through Movimientos, the *result* of that becomes domain -- a sort
+    order, a default view -- and this table stays what it is.
+    """
+
+    __tablename__ = "ui_events"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    path: Mapped[str] = mapped_column(String(200))
+    props: Mapped[dict] = mapped_column(JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = _created_at()
+
+
 class WorkstationModel(Base):
     """A user's saved lens over the ledger.
 
@@ -354,6 +401,82 @@ class WorkstationChatMessageModel(Base):
     #: and a question and its answer land in the same second; sorting on time
     #: alone could show an answer above its question.
     position: Mapped[int] = mapped_column(Integer)
+
+
+class ReceiptModel(Base):
+    """A photographed ticket, as structured lines. The photo is not here.
+
+    Deliberately *not* a statement: a statement is the bank's account of what
+    left the account, and a receipt is the store's account of what was bought.
+    They meet at ``transaction_id``, which is nullable because a ticket can
+    arrive before the statement that will explain it — and a receipt with no
+    movement yet is a normal state, not an orphan.
+
+    ``content_sha256`` is the phone's digest of the original image. Same column
+    meaning as ``statements.file_hash``: re-sending the same photo is the same
+    event, deduped on a hash of bytes the server never saw.
+    """
+
+    __tablename__ = "receipts"
+    __table_args__ = (
+        # One movement, one ticket. A second photo of the same purchase is a
+        # correction of the first, not a second basket, and the constraint is
+        # what stops "total gastado" from being counted twice by any future
+        # reader of this table.
+        UniqueConstraint("transaction_id", name="uq_receipts_transaction"),
+    )
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    transaction_id: Mapped[str | None] = mapped_column(UUIDStr, index=True, nullable=True)
+    store: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    purchased_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    total: Mapped[Numeric | None] = mapped_column(Numeric(14, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="MXN")
+    # Who attached it: the matcher ("auto") or the user ("user"). Same contract
+    # as `transactions.category_source` — a human's answer is never re-guessed.
+    match_source: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="auto", default="auto"
+    )
+    content_sha256: Mapped[str] = mapped_column(String(64), index=True)
+    # Which OCR engine read the image, and which reader structured the lines.
+    # Quality telemetry: a wrong basket is much easier to explain when you know
+    # whether a regex or a model wrote it.
+    extractor: Mapped[str] = mapped_column(String(40), default="unknown")
+    reader: Mapped[str] = mapped_column(String(60), default="heuristic")
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class ReceiptItemModel(Base):
+    """One product line. Owned by its receipt, and deleted with it.
+
+    ``product_key`` is the normalised identity two tickets are compared by
+    (``domain/services/products.py``), stored rather than derived at query
+    time: the price book groups on it, and a comparison that recomputed the key
+    on every read would change its own history the day the normaliser improves.
+    """
+
+    __tablename__ = "receipt_items"
+
+    id: Mapped[str] = mapped_column(UUIDStr, primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUIDStr, index=True)
+    receipt_id: Mapped[str] = mapped_column(
+        UUIDStr, ForeignKey("receipts.id", ondelete="CASCADE"), index=True
+    )
+    line_no: Mapped[int] = mapped_column(Integer)
+    # The OCR line exactly as the phone read it: the evidence behind every
+    # other column on this row.
+    raw_text: Mapped[str] = mapped_column(Text)
+    description: Mapped[str] = mapped_column(String(200))
+    product_key: Mapped[str] = mapped_column(String(200), index=True)
+    amount: Mapped[Numeric] = mapped_column(Numeric(14, 2))
+    quantity: Mapped[Numeric | None] = mapped_column(Numeric(12, 3), nullable=True)
+    unit_price: Mapped[Numeric | None] = mapped_column(Numeric(14, 2), nullable=True)
+    # The size printed in the name, normalised to litres or kilos. NULL is the
+    # common case (anything sold loose) and means "compare by piece".
+    size: Mapped[Numeric | None] = mapped_column(Numeric(12, 4), nullable=True)
+    size_unit: Mapped[str | None] = mapped_column(String(4), nullable=True)
 
 
 class GoalModel(Base):
