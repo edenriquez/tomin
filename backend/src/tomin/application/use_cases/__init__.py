@@ -1,4 +1,5 @@
 from .dashboards import GetHomeDashboardUseCase, SaveHomeDashboardUseCase
+from .attention import ListAttentionUseCase
 from .detect_recurring import DetectRecurringUseCase
 from .forecast import GetForecastUseCase, SimulateForecastUseCase
 from .get_spending_summary import GetSpendingSummaryUseCase
@@ -53,6 +54,7 @@ __all__ = [
     "UNSET",
     "DeleteStatementResult",
     "DetectRecurringUseCase",
+    "ListAttentionUseCase",
     "GetForecastUseCase",
     "GetHomeDashboardUseCase",
     "GetMetricCatalogUseCase",

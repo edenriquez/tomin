@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, SearchX, Inbox, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAppData } from "@/components/AppChrome";
@@ -8,7 +8,7 @@ import { useTimeWindow } from "@/components/TimeWindowProvider";
 import { msToIso } from "@/lib/window";
 import { track } from "@/lib/telemetry";
 import { PanelSettingsToggle } from "@/components/settings/PanelSettingsToggle";
-import { BackendNotice, ChartSkeleton, EmptyState, Skeleton, Switch } from "@/components/ui";
+import { BackendNotice, Button, ChartSkeleton, EmptyState, Skeleton, Switch } from "@/components/ui";
 import { ChartCard } from "@/components/ChartCard";
 import { LecturaDock } from "@/components/lectura/LecturaDock";
 import { useLectura } from "@/components/lectura/LecturaProvider";
@@ -26,12 +26,23 @@ import {
     COLOR_MODE_LABELS,
     COLOR_MODES,
     TransactionsChart,
+    dateToMs,
     type ChartMode,
     type ColorMode,
 } from "@/components/charts/TransactionsChart";
 import { useCategories } from "@/lib/categories";
 import { useBankScope } from "@/lib/banks";
+import { dayLabel, mxn2 } from "@/lib/format";
+import {
+    ChartLens,
+    LensChips,
+    LENS_KIND_LABELS,
+    type Lectura,
+    type LensFocus,
+    type LensGroup,
+} from "@/components/charts/lens";
 import { FETCH_CAP, useTransactions } from "./useTransactions";
+import { useAttention } from "./useAttention";
 import { TransactionsList } from "./TransactionsList";
 
 /** Rows revealed per "show more" step, and the initial page — a list setting.
@@ -56,6 +67,15 @@ export function MovimientosView() {
         statementIds
     );
     const categories = useCategories();
+    // The rings: charges in this window worth a second look, judged by the
+    // backend against the whole ledger. Same scope as the rows above, so a
+    // ring always has its dot.
+    const { items: attention, dismiss: dismissAttention } = useAttention(
+        bounds,
+        dataVersion,
+        statementIds
+    );
+    const [lensFocus, setLensFocus] = useState<LensFocus>(null);
 
     // Each panel owns its settings, keyed by its own id: the chart's are the
     // chart's, the list's are the list's, and both outlive this mount.
@@ -92,6 +112,7 @@ export function MovimientosView() {
         setSelectedId(null);
         setVisibleCount(page);
         setExcluded(new Set());
+        setLensFocus(null);
     }, [windowKey, search, dataVersion, page, statementIds]);
 
     const filtered = useMemo(() => {
@@ -107,6 +128,45 @@ export function MovimientosView() {
         }
         return out;
     }, [items, search]);
+
+    // Lecturas for the scatter: one chip per kind, each a tour of its
+    // charges. Anchored on the rows actually drawn — a flagged charge the
+    // search filtered out has no dot, so it has no ring either. Only the
+    // scatter has per-charge marks; the flujo aggregate shows none.
+    const lensGroups: LensGroup[] = useMemo(() => {
+        if (!filtered || mode !== "scatter") return [];
+        const byId = new Map(filtered.map((t) => [t.id, t]));
+        const byKind = new Map<string, Lectura[]>();
+        for (const a of attention) {
+            const t = byId.get(a.transaction_id);
+            if (!t || t.type !== "expense") continue;
+            const l: Lectura = {
+                id: a.transaction_id,
+                kind: a.kind,
+                anchor: { x: dateToMs(t.date), y: t.amount },
+                title: `${t.description} · ${mxn2(t.amount)} · ${dayLabel(new Date(dateToMs(t.date)))}`,
+                detail: a.reason,
+                severity: a.severity,
+                ref: t.id,
+            };
+            byKind.set(a.kind, [...(byKind.get(a.kind) ?? []), l]);
+        }
+        return Array.from(byKind.entries()).map(([kind, lecturas]) => {
+            const label = LENS_KIND_LABELS[lecturas[0]!.kind];
+            // The chip shows the count itself; the label only pluralises.
+            return { id: kind, label: lecturas.length === 1 ? label : plural(label), lecturas };
+        });
+    }, [filtered, attention, mode]);
+
+    const attentionByRow = useMemo(
+        () => new Map(attention.map((a) => [a.transaction_id, a.kind])),
+        [attention]
+    );
+
+    const onLensFocus = useCallback((next: LensFocus) => {
+        if (next) track("lens.open", { chart: "movimientos", kind: next.groupId, index: next.index });
+        setLensFocus(next);
+    }, []);
 
     // A range dragged over the chart is not a local zoom any more: it becomes
     // the app's time window. The list, the chart and every other view then
@@ -183,22 +243,59 @@ export function MovimientosView() {
                     />
                 ) : (
                     <div className={cn("transition-opacity duration-300", refreshing && "opacity-50")}>
-                    <TransactionsChart
-                        transactions={filtered}
-                        mode={mode}
-                        colorMode={colorMode}
-                        categories={categories}
-                        showIncome={chartCfg.showIncome}
-                        grain={grain}
-                        selectedId={selectedId}
-                        onSelect={(id) => {
-                            if (id) track("movimientos.row_select", { source: "chart" });
-                            handleSelect(id);
-                        }}
-                        onRangeSelect={(r) =>
-                            r && selectCustom(msToIso(r.start), msToIso(r.end), "drag:movimientos")
-                        }
+                    <LensChips
+                        groups={lensGroups}
+                        focus={lensFocus}
+                        onFocus={onLensFocus}
+                        className="mb-3"
                     />
+                    <ChartLens
+                        groups={lensGroups}
+                        focus={lensFocus}
+                        onFocus={onLensFocus}
+                        actions={(l) => (
+                            <>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => {
+                                        track("movimientos.row_select", { source: "lens" });
+                                        handleSelect(l.ref ?? null);
+                                    }}
+                                >
+                                    Ver
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                        track("lens.dismiss", { chart: "movimientos", kind: l.kind });
+                                        if (l.ref) dismissAttention(l.ref);
+                                        setLensFocus(null);
+                                    }}
+                                >
+                                    Es mío
+                                </Button>
+                            </>
+                        )}
+                    >
+                        <TransactionsChart
+                            transactions={filtered}
+                            mode={mode}
+                            colorMode={colorMode}
+                            categories={categories}
+                            showIncome={chartCfg.showIncome}
+                            grain={grain}
+                            selectedId={selectedId}
+                            onSelect={(id) => {
+                                if (id) track("movimientos.row_select", { source: "chart" });
+                                handleSelect(id);
+                            }}
+                            onRangeSelect={(r) =>
+                                r && selectCustom(msToIso(r.start), msToIso(r.end), "drag:movimientos")
+                            }
+                        />
+                    </ChartLens>
                     </div>
                 )}
             </ChartCard>
@@ -314,6 +411,7 @@ export function MovimientosView() {
                                 if (id) track("movimientos.row_select", { source: "list" });
                                 handleSelect(id);
                             }}
+                            attention={attentionByRow}
                             editing={{
                                 onPatch: (t, patch) => patchItem(t.id, patch),
                                 onBulkApplied: reload,
@@ -405,4 +503,14 @@ function EmptyNote({
                 : "Prueba con un periodo más amplio, o sube un estado de cuenta que lo cubra."}
         </EmptyState>
     );
+}
+
+/** "Cargo inusual" → "Cargos inusuales"; the other labels pluralise by a plain s. */
+function plural(label: string): string {
+    const known: Record<string, string> = {
+        "Cargo inusual": "Cargos inusuales",
+        "Posible duplicado": "Posibles duplicados",
+        "Comercio nuevo": "Comercios nuevos",
+    };
+    return known[label] ?? `${label}s`;
 }

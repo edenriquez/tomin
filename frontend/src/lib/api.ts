@@ -145,6 +145,26 @@ export type RecurringItem = {
     charges: RecurringCharge[];
 };
 
+/**
+ * A charge the Movimientos chart should ring, with the sentence behind it.
+ * Computed server-side against the whole ledger (see backend
+ * `domain/services/attention.py`); the window only decides which charges
+ * are reported.
+ */
+export type AttentionKind = "unusual_amount" | "possible_duplicate" | "new_merchant";
+
+export type AttentionItem = {
+    transaction_id: string;
+    kind: AttentionKind;
+    /** Spanish, one line, with its numbers: "3.2× lo que sueles gastar ahí (…)". */
+    reason: string;
+    /** unusual_amount: amount ÷ the merchant's median. Others: null. */
+    ratio: number | null;
+    /** The earlier leg(s) of a possible duplicate. */
+    related_ids: string[];
+    severity: "warn" | "info";
+};
+
 /** One occurrence of a recurring series. */
 export type RecurringCharge = {
     /** ISO date, no time. */
@@ -212,6 +232,9 @@ async function uploadError(res: Response): Promise<UploadError> {
 
 export const api = {
     transactions: (query = "") => request<TransactionPage>(`/api/transactions${query}`),
+    /** Charges in the window worth a second look. Same query shape as the list. */
+    attention: (query = "") =>
+        request<{ items: AttentionItem[] }>(`/api/transactions/attention${query}`),
     /** The ledger's first and last transaction dates; the time filter anchors
      *  its rolling presets on `last`, not on the calendar. */
     transactionSpan: (statementIds?: string[] | null) => {

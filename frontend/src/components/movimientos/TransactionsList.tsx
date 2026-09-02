@@ -10,7 +10,8 @@ import {
     ShoppingCart,
     type LucideIcon,
 } from "lucide-react";
-import type { Transaction, TransactionPatch } from "@/lib/api";
+import type { AttentionKind, Transaction, TransactionPatch } from "@/lib/api";
+import { LENS_KIND_LABELS } from "@/components/charts/lens/types";
 import { cn } from "@/lib/cn";
 import { categoryColor, categoryName, useCategories, type CategoryInfo } from "@/lib/categories";
 import { matchMerchant, merchantLogoUrl } from "@/lib/merchants";
@@ -48,9 +49,13 @@ export function TransactionsList({
     onSelect,
     editing,
     membership,
+    attention,
 }: {
     /** Already window+search filtered, `tx_date DESC` from the API. */
     items: Transaction[];
+    /** Row id → why the chart rings it. The list repeats the reading as a
+     *  quiet tag beside the amount, so it exists off the chart too. */
+    attention?: Map<string, AttentionKind>;
     visibleCount: number;
     onShowMore: () => void;
     selectedId: string | null;
@@ -114,6 +119,7 @@ export function TransactionsList({
                         dateLabel={rowDate(t)}
                         onToggle={() => toggle(t)}
                         editing={editing}
+                        flag={attention?.get(t.id)}
                     />
                 ))}
             </ul>
@@ -150,7 +156,9 @@ const Row = forwardRef<HTMLLIElement, {
         onPatch: (t: Transaction, patch: TransactionPatch) => void;
         onBulkApplied: () => void;
     };
-}>(function Row({ transaction: t, categories, selected, inSet, onMembership, dateLabel, onToggle, editing }, ref) {
+    /** Why the chart rings this row, if it does. */
+    flag?: AttentionKind;
+}>(function Row({ transaction: t, categories, selected, inSet, onMembership, dateLabel, onToggle, editing, flag }, ref) {
     // Unconditional (hooks) and cheap: it holds no fetch until a commit.
     const edit = useInlineEdit(
         t,
@@ -220,7 +228,10 @@ const Row = forwardRef<HTMLLIElement, {
                 </span>
 
                 <span className="min-w-0 max-w-[45%] shrink-0 text-right">
-                    <Amount t={t} />
+                    <span className="flex items-center justify-end gap-2">
+                        {flag && <FlagTag kind={flag} />}
+                        <Amount t={t} />
+                    </span>
                     {editable ? (
                         <InlineCategory transaction={t} edit={edit} />
                     ) : (
@@ -307,6 +318,22 @@ function RowAvatar({
             style={{ background: `${color}1a`, color }}
         >
             <Icon size={18} strokeWidth={1.75} />
+        </span>
+    );
+}
+
+/**
+ * The reading, off the chart: a hairline tag in the accent, one word. Signal
+ * is a border here, never text on light — the label stays Ink.
+ */
+function FlagTag({ kind }: { kind: AttentionKind }) {
+    const word = { unusual_amount: "inusual", possible_duplicate: "duplicado", new_merchant: "nuevo" }[kind];
+    return (
+        <span
+            title={LENS_KIND_LABELS[kind]}
+            className="rounded-tag border border-signal px-1.5 py-px text-caption font-medium uppercase text-ink"
+        >
+            {word}
         </span>
     );
 }

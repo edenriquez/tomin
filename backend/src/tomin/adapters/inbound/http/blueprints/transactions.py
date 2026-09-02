@@ -8,7 +8,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from .....application.use_cases.update_transaction import UNSET
 from ..auth import current_user_id, get_container
-from ..serialization import transaction_json
+from ..serialization import attention_json, transaction_json
 from ._helpers import query_date, query_int
 
 transactions_bp = Blueprint("transactions", __name__, url_prefix="/api/transactions")
@@ -45,6 +45,25 @@ def list_transactions():
         limit=page.limit,
         offset=page.offset,
     )
+
+
+@transactions_bp.get("/attention")
+def attention():
+    """Charges in the window worth a second look — the rings on the scatter.
+
+    Scoped like the list (``start``/``end``, repeatable ``statement_id``) so the
+    rings sit on dots that are actually drawn; the baselines behind each
+    reason come from the whole scoped history, not just the window.
+    """
+    user_id = current_user_id()
+    filters = _filters()
+    items = get_container().list_attention.execute(
+        user_id=user_id,
+        start=filters["start"],
+        end=filters["end"],
+        statement_ids=filters["statement_ids"],
+    )
+    return jsonify(items=[attention_json(i) for i in items])
 
 
 @transactions_bp.get("/span")

@@ -334,3 +334,70 @@
 .apexcharts-xaxistooltip::after {
     display: none !important;
 }
+
+/* -------------------------------------------------------------------------
+   Lecturas: the emphasis layer over a chart (components/charts/lens).
+   The ring is an Apex point annotation carrying `.lens-pulse`; it pulses
+   three times and rests as a static ring. Everything else recedes while a
+   lectura is in focus, except the series the anchor sits on. */
+.apexcharts-point-annotation-marker.lens-pulse {
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: 0.95;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .lens:not(.lens-reduced) .apexcharts-point-annotation-marker.lens-pulse {
+        animation: lens-pulse 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) 3 both;
+    }
+}
+
+@keyframes lens-pulse {
+    0% { transform: scale(0.55); opacity: 1; }
+    65% { transform: scale(1.9); opacity: 0.12; }
+    100% { transform: scale(1); opacity: 0.95; }
+}
+
+.lens .apexcharts-series {
+    transition: opacity 240ms ease;
+}
+
+.lens-active .apexcharts-series {
+    opacity: 0.28;
+}
+
+/* The anchored series stays legible: `rel` is Apex's 1-based series index. */
+.lens-active[data-lens-keep="1"] .apexcharts-series[rel="1"],
+.lens-active[data-lens-keep="2"] .apexcharts-series[rel="2"],
+.lens-active[data-lens-keep="3"] .apexcharts-series[rel="3"],
+.lens-active[data-lens-keep="4"] .apexcharts-series[rel="4"],
+.lens-active[data-lens-keep="5"] .apexcharts-series[rel="5"],
+.lens-active[data-lens-keep="6"] .apexcharts-series[rel="6"],
+.lens-active[data-lens-keep="7"] .apexcharts-series[rel="7"],
+.lens-active[data-lens-keep="8"] .apexcharts-series[rel="8"] {
+    opacity: 1;
+}
+
+.lens-active .apexcharts-point-annotations {
+    opacity: 1;
+}
+
+/* The callout's little pointer toward the ring. */
+.lens-callout::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: theme("colors.paper");
+    border-right: 1px solid theme("colors.mist");
+    border-bottom: 1px solid theme("colors.mist");
+}
+.lens-callout-above::after {
+    bottom: -5px;
+    transform: translateX(-50%) rotate(45deg);
+}
+.lens-callout-below::after {
+    top: -5px;
+    transform: translateX(-50%) rotate(-135deg);
+}

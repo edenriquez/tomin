@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        color-scheme: light;
+    }
+
+    /* Mist is the default border everywhere: a bare `border` is a hairline. */
+    *,
+    ::before,
+    ::after {
+        border-color: theme("colors.mist");
+    }
+
+    html {
+        -webkit-text-size-adjust: 100%;
+        background: theme("colors.canvas");
+    }
+
+    /* /b flips the whole document dark from the server render — no flash, and
+       iOS overscroll shows Night instead of a white gutter. */
+    html:has([data-theme="dark"]) {
+        background: theme("colors.night");
+        color-scheme: dark;
+    }
+
+    body {
+        @apply bg-canvas text-body text-graphite;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        font-feature-settings: "calt" 0, "liga" 0, "tnum" 1;
+    }
+
+    html:has([data-theme="dark"]) body {
+        @apply bg-night text-dust;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        @apply font-display font-normal text-ink;
+    }
+
+    [data-theme="dark"] h1,
+    [data-theme="dark"] h2,
+    [data-theme="dark"] h3,
+    [data-theme="dark"] h4 {
+        @apply text-bone;
+    }
+
+    :focus-visible {
+        outline: 2px solid theme("colors.signal");
+        outline-offset: 2px;
+    }
+
+    ::selection {
+        background: theme("colors.wash");
+        color: theme("colors.ink");
+    }
+}
+
+@layer components {
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* One phrase per headline: Edge text on a Wash pill. */
+    .highlight {
+        @apply rounded-[4px] bg-wash px-2 text-edge;
+        margin-inline: -0.125rem;
+        padding-block: 0.125rem;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+    }
+
+    [data-theme="dark"] .highlight {
+        @apply bg-edge/20 text-wash;
+    }
+
+    /* Eyebrow: the all-caps caption above a section title. */
+    .eyebrow {
+        @apply text-caption font-medium uppercase tracking-[0.08em] text-ash;
+    }
+
+    [data-theme="dark"] .eyebrow {
+        @apply text-dust;
+    }
+
+    /* ---- Merchant marquee: pure CSS, duplicated track, pauses on hover ---- */
+    .marquee {
+        mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+        -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+    }
+
+    .marquee-track {
+        display: flex;
+        width: max-content;
+        gap: 3.5rem;
+        padding-inline-end: 3.5rem;
+        animation: marquee 48s linear infinite;
+    }
+
+    .marquee:hover .marquee-track {
+        animation-play-state: paused;
+    }
+
+    @keyframes marquee {
+        to {
+            transform: translate3d(-50%, 0, 0);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .marquee-track {
+            animation: none;
+        }
+    }
+}
+

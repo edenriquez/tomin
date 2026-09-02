@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ....application.dtos.analytics import CategorySpend, MonthlyPoint, SpendingSummary
+from ....application.dtos.attention import AttentionDTO
 from ....application.dtos.metrics import MetricError, MetricResult
 from ....domain.entities import (
     Conversation,
@@ -29,6 +30,17 @@ def _num(value: Decimal | None) -> float:
 
 def _iso(value: date | datetime | None) -> str | None:
     return value.isoformat() if value else None
+
+
+def attention_json(a: AttentionDTO) -> dict:
+    return {
+        "transaction_id": a.transaction_id,
+        "kind": a.kind,
+        "reason": a.reason,
+        "ratio": float(a.ratio) if a.ratio is not None else None,
+        "related_ids": list(a.related_ids),
+        "severity": a.severity,
+    }
 
 
 def transaction_json(t: Transaction) -> dict:

@@ -56,6 +56,7 @@ from ..application.use_cases import (
     ComparePricesUseCase,
     ResolveProductTerms,
     DetectRecurringUseCase,
+    ListAttentionUseCase,
     GetForecastUseCase,
     GetHomeDashboardUseCase,
     GetMetricCatalogUseCase,
@@ -479,6 +480,10 @@ class Container:
     @cached_property
     def detect_recurring(self) -> DetectRecurringUseCase:
         return DetectRecurringUseCase(self.transactions, self.user_aliases)
+
+    @cached_property
+    def list_attention(self) -> ListAttentionUseCase:
+        return ListAttentionUseCase(self.transactions)
 
     @cached_property
     def get_forecast(self) -> GetForecastUseCase:
