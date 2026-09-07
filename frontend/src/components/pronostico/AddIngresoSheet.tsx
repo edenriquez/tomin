@@ -81,15 +81,15 @@ export function AddIngresoSheet({
         >
             <SearchInput
                 onSearch={setQuery}
-                placeholder="Buscar un depósito"
-                aria-label="Buscar un depósito"
+                placeholder="Buscar un abono"
+                aria-label="Buscar un abono"
             />
 
             {picked && preview && (
                 <div className="mt-4 rounded-card border border-mist bg-fog/60 p-3">
                     <p className="text-body text-ink">{picked.label}</p>
                     <p className="mt-0.5 text-body-sm text-graphite">
-                        {picked.txs.length} depósito{picked.txs.length === 1 ? "" : "s"} · ~
+                        {picked.txs.length} abono{picked.txs.length === 1 ? "" : "s"} · ~
                         {mxn(preview.monthly)}/mes
                     </p>
                     <p className="mt-1 text-label text-ash">
@@ -103,7 +103,7 @@ export function AddIngresoSheet({
                 {filtered.length === 0 ? (
                     <li className="py-4 text-body-sm text-graphite">
                         {clusters.length === 0
-                            ? "No hay depósitos en el ledger."
+                            ? "No hay abonos en tus movimientos."
                             : "Nada coincide, o ya está etiquetado."}
                     </li>
                 ) : (
@@ -126,7 +126,7 @@ export function AddIngresoSheet({
                                             {c.label}
                                         </span>
                                         <span className="text-body-sm text-graphite">
-                                            {c.txs.length} depósito{c.txs.length === 1 ? "" : "s"}
+                                            {c.txs.length} abono{c.txs.length === 1 ? "" : "s"}
                                             {last ? ` · ${isoToLabel(last.date)}` : ""}
                                         </span>
                                     </span>

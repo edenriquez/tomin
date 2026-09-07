@@ -59,7 +59,7 @@ export default function WorkspacePage() {
                             </div>
                         }
                     >
-                        Una lectura es una regla guardada — «recarga», entre $10 y $300 — y lo
+                        Una lectura es una regla guardada («recarga», entre $10 y $300) y lo
                         que cae dentro. Puedes sumar varios filtros en un mismo grupo: spotify{" "}
                         <em>y</em> netflix <em>y</em> el gimnasio, leídos juntos.
                     </EmptyState>

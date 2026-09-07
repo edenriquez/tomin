@@ -27,7 +27,7 @@ export function EmptyState({
             <div className="mx-auto mb-4 flex h-9 w-9 items-center justify-center rounded-input border border-mist bg-canvas text-ash">
                 <Icon size={18} aria-hidden />
             </div>
-            <p className="font-display text-title-sm font-normal text-ink">{title}</p>
+            <p className="font-display text-title-md font-normal text-ink">{title}</p>
             {children && (
                 <p className="mx-auto mt-1.5 max-w-sm text-body-sm text-graphite">{children}</p>
             )}

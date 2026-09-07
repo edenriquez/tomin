@@ -54,10 +54,10 @@ import { CategoryFilterBar, type CategoryChip } from "./CategoryFilterBar";
 const PAGE = 50;
 
 /**
- * The cube labels the unlabelled bucket "Sin Categoria"; the frontend says
- * "Sin categoría". Comparing raw strings would silently drop every
- * uncategorized movement out of its own filter, so names are compared
- * accent- and case-insensitively.
+ * The cube labels the unlabelled bucket "Sin Categoria" (no accent); the
+ * frontend says "Sin categoría" everywhere, including as the fallback below.
+ * Comparing raw strings would silently drop every uncategorized movement out
+ * of its own filter, so names are compared accent- and case-insensitively.
  */
 function normalize(name: string): string {
     return name
@@ -173,7 +173,7 @@ export function CategoriasView() {
                     return {
                         month,
                         monthLabel: date ? monthLabel(date, true) : month,
-                        category: String(row.category ?? "Sin Categoria"),
+                        category: String(row.category ?? "Sin categoría"),
                         amount: num(row.expense_amount),
                     };
                 })
@@ -336,7 +336,7 @@ export function CategoriasView() {
             {error && <BackendNotice what="el gasto por categoría" detail={error} />}
 
             {!loading && points.length === 0 && !error ? (
-                <EmptyState icon={Shapes} title="Sin gasto en este periodo">
+                <EmptyState icon={Shapes} title="Ningún cargo en este periodo">
                     Prueba con un periodo más amplio, o sube un estado de cuenta que lo cubra.
                 </EmptyState>
             ) : (
@@ -383,7 +383,7 @@ export function CategoriasView() {
 
                     <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
                         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                            <h2 className="font-display text-title-sm font-normal text-ink">
+                            <h2 className="text-title-sm font-normal text-ink">
                                 Movimientos
                                 {filtered && (
                                     <span className="ml-2 text-body-sm text-graphite">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Pin, Plus, X } from "lucide-react";
 import { api, type RecurringItem, type Transaction } from "@/lib/api";
 import { useBankScope } from "@/lib/banks";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/fijos";
 import { dayLabel, mxn, mxn2 } from "@/lib/format";
 import { parsePeriodKey } from "@/lib/metrics";
+import { track } from "@/lib/telemetry";
 import { useAppData } from "@/components/AppChrome";
 import { ChartCard } from "@/components/ChartCard";
 import {
@@ -64,12 +65,58 @@ const FREQUENCY_LABELS: Record<RecurringItem["frequency"], string> = {
 const MONTHS_BACK = 12;
 const RECENT_CHARGES = 6;
 
-export function FijosView() {
+export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = {}) {
     const { dataVersion } = useAppData();
     const [items, setItems] = useState<RecurringItem[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const categories = useCategories();
-    const { state, hydrated, replace, pin, unpin, addManual, addRest, pinRest, removeRest, setHorizon } = useFijos();
+    const fijos = useFijos();
+    const { state, hydrated, replace, removeRest } = fijos;
+    // Every decision the user makes here is recorded: which suggestions get
+    // pinned, how often pins are undone, which horizon people plan on. The
+    // store stays dumb; the view is where a click has a meaning.
+    const pin = useCallback(
+        (key: string) => {
+            track("plan.fijo_pin", { kind: isRestKey(key) ? "rest" : "series" });
+            fijos.pin(key);
+        },
+        [fijos]
+    );
+    const unpin = useCallback(
+        (key: string) => {
+            track("plan.fijo_unpin", { kind: isRestKey(key) ? "rest" : "series" });
+            fijos.unpin(key);
+        },
+        [fijos]
+    );
+    const addManual: typeof fijos.addManual = useCallback(
+        (manual) => {
+            track("plan.fijo_add_manual", { frequency: manual.frequency });
+            fijos.addManual(manual);
+        },
+        [fijos]
+    );
+    const addRest: typeof fijos.addRest = useCallback(
+        (mark) => {
+            track("plan.rest_add", { curated: mark.merchant !== null });
+            fijos.addRest(mark);
+        },
+        [fijos]
+    );
+    const pinRest: typeof fijos.pinRest = useCallback(
+        (mark) => {
+            track("plan.fijo_pin", { kind: "rest", curated: mark.merchant !== null });
+            fijos.pinRest(mark);
+        },
+        [fijos]
+    );
+    const setHorizon = useCallback(
+        (h: Horizon) => {
+            track("plan.horizon", { horizon: h, face: "fijos" });
+            fijos.setHorizon(h);
+        },
+        [fijos]
+    );
     const [chartCfg, setChartCfg] = usePanelSettings("fijos.timeline", {
         encoding: "barras" as string,
     });
@@ -244,8 +291,8 @@ export function FijosView() {
             {error && <BackendNotice what="tus cargos recurrentes" detail={error} />}
 
             {emptyDetection ? (
-                <EmptyState icon={Pin} title="Aún no detectamos cargos recurrentes">
-                    Se necesitan al menos tres cobros del mismo lugar con un ritmo
+                <EmptyState icon={Pin} title="Tomin aún no ve cobros que se repitan">
+                    Hacen falta al menos tres cobros del mismo lugar con un ritmo
                     reconocible. Sube más estados de cuenta y aparecen solos.
                 </EmptyState>
             ) : (
@@ -258,9 +305,11 @@ export function FijosView() {
                         horizon={horizon}
                         monthlyRate={timeline.totals.monthlyRate}
                         pinnedCount={pinned.length}
+                        suggestedCount={suggested.length + looseRest.length}
                         loading={loading}
                         onHorizon={setHorizon}
                         timeline={timeline}
+                        onGoToIngresos={onGoToIngresos}
                     />
 
                     <ChartCard
@@ -280,7 +329,7 @@ export function FijosView() {
                                 firstFutureIndex={timeline.firstFutureIndex}
                                 series={fijosBand}
                                 empty="Elige lo que sí o sí se cobra para dibujarlo."
-                                caption="La línea es la carga del mes. La banda es lo que se ha movido en el monto — un renta estable casi no abre, un cargo que varía sí."
+                                caption="La línea es la carga del mes. La banda es lo que se ha movido el monto: una renta estable casi no abre, un cargo que varía sí."
                             />
                         ) : (
                             <LoadTimelineChart
@@ -292,7 +341,7 @@ export function FijosView() {
 
                     <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h2 className="font-display text-title-sm font-normal text-ink">
+                            <h2 className="text-title-sm font-normal text-ink">
                                 Mis fijos
                                 {pinned.length > 0 && (
                                     <span className="ml-2 font-sans text-body-sm text-graphite">
@@ -322,7 +371,7 @@ export function FijosView() {
                                 </div>
                             ) : pinned.length === 0 ? (
                                 <p className="py-6 text-body text-graphite">
-                                    Elige lo que sí o sí se cobra — de las sugerencias, o añade uno.
+                                    Elige lo que sí o sí se cobra: de los que están por confirmar, o añade uno.
                                 </p>
                             ) : (
                                 <SeriesList
@@ -352,8 +401,8 @@ export function FijosView() {
 
                     <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h2 className="font-display text-title-sm font-normal text-ink">
-                                Sugeridos
+                            <h2 className="text-title-sm font-normal text-ink">
+                                Por confirmar
                                 {suggested.length > 0 && (
                                     <span className="ml-2 font-sans text-body-sm text-graphite">
                                         {suggested.length}
@@ -370,8 +419,8 @@ export function FijosView() {
                             </Button>
                         </div>
                         <p className="mt-1 text-body-sm text-graphite">
-                            Recurrentes que no fijaste, y gastos sin día fijo que
-                            tú marcas (Walmart, despensa). Los cargos atípicos no
+                            Cobros que se repiten y no has fijado, y gastos sin día fijo
+                            que tú marcas (Walmart, despensa). Los cargos atípicos no
                             cuentan hasta que los fijes.
                         </p>
                         <div className="mt-4">
@@ -384,8 +433,8 @@ export function FijosView() {
                             ) : looseRest.length === 0 && suggested.length === 0 ? (
                                 <p className="py-6 text-body text-graphite">
                                     {detected.length === 0
-                                        ? "Cuando detectemos series, aparecen aquí. Un gasto sin ritmo se suma al resto a mano."
-                                        : "Todas las series detectadas ya son fijos. Suma uno al resto si vas seguido sin fecha fija."}
+                                        ? "Cuando Tomin encuentre cobros que se repiten, aparecen aquí. Un gasto sin ritmo se suma al resto a mano."
+                                        : "Todos los cobros que se repiten ya son fijos. Suma uno al resto si vas seguido sin fecha fija."}
                                 </p>
                             ) : (
                                 <>
@@ -473,9 +522,11 @@ function Headline({
     horizon,
     monthlyRate,
     pinnedCount,
+    suggestedCount,
     loading,
     onHorizon,
     timeline,
+    onGoToIngresos,
 }: {
     need: number;
     fijosNeed: number;
@@ -484,10 +535,17 @@ function Headline({
     horizon: Horizon;
     monthlyRate: number;
     pinnedCount: number;
+    /** Detected series (and taught rest) still waiting for a decision. */
+    suggestedCount: number;
     loading: boolean;
     onHorizon: (h: Horizon) => void;
     timeline: Timeline;
+    onGoToIngresos?: () => void;
 }) {
+    // Nothing pinned yet: the headline is the work to do, not a total nobody
+    // chose. The unconfirmed estimate moves to the small print. Voice per
+    // docs/voice-and-type.md: "cobros que se repiten", never "series".
+    const unstarted = !loading && pinnedCount === 0;
     const stale = daysBetween(timeline.asOf, new Date());
     const { totals } = timeline;
 
@@ -495,29 +553,41 @@ function Headline({
         <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                    <p className="text-caption uppercase text-ash">Necesitas</p>
+                    <p className="eyebrow">
+                        {unstarted ? "Para empezar" : "Necesitas"}
+                    </p>
                     {loading ? (
                         <Skeleton className="mt-1 h-9 w-48" />
+                    ) : unstarted ? (
+                        <p className="mt-0.5 font-display text-title-md font-normal text-ink">
+                            {suggestedCount > 0
+                                ? `${suggestedCount} cobro${suggestedCount === 1 ? "" : "s"} que se repite${suggestedCount === 1 ? "" : "n"}`
+                                : "Aún nada que fijar"}
+                        </p>
                     ) : (
-                        <p className="tabular mt-0.5 font-display text-metric font-normal text-ink">
+                        <p className="tabular mt-0.5 text-metric font-normal text-ink">
                             {mxn(need)}
                         </p>
                     )}
                     <p className="mt-1 text-body text-graphite">
-                        en los próximos {horizon} meses
+                        {unstarted
+                            ? suggestedCount > 0
+                                ? "Confirma abajo los que sí o sí se cobran; el total aparece con el primero."
+                                : "Elige lo que sí o sí se cobra, o añade un cargo a mano."
+                            : `en los próximos ${horizon} meses`}
                     </p>
-                    {!loading && pinnedCount === 0 && !hasRest && (
+                    {unstarted && hasRest && (
                         <p className="mt-2 text-body-sm text-graphite">
-                            Elige lo que sí o sí se cobra.
+                            Lo que aún no confirmas suma ~{mxn(restNeed)} en {horizon} meses.
                         </p>
                     )}
-                    {!loading && (pinnedCount > 0 || hasRest) && (
+                    {!loading && pinnedCount > 0 && (
                         <p className="mt-2 text-body-sm text-graphite">
                             Fijos {mxn(fijosNeed)}
                             {hasRest && (
                                 <>
                                     <span className="text-ash"> · </span>
-                                    Resto recurrente {mxn(restNeed)}
+                                    Sin confirmar {mxn(restNeed)}
                                 </>
                             )}
                             {pinnedCount > 0 && (
@@ -531,6 +601,15 @@ function Headline({
                 </div>
 
                 <div className="flex flex-col items-end gap-3">
+                    {onGoToIngresos && !loading && (
+                        <button
+                            type="button"
+                            onClick={onGoToIngresos}
+                            className="text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+                        >
+                            ¿Y cuánto te entra? →
+                        </button>
+                    )}
                     <div
                         role="radiogroup"
                         aria-label="Horizonte"
@@ -572,7 +651,7 @@ function Headline({
                     )}
                     {stale > 30 && (
                         <>
-                            Tu último movimiento es del {dayLabel(timeline.asOf)} — sube un
+                            Tu último movimiento es del {dayLabel(timeline.asOf)}: sube un
                             estado de cuenta más reciente para afinar la proyección.
                         </>
                     )}
@@ -738,8 +817,8 @@ function SeriesDetail({ item, rest }: { item: RecurringItem; rest?: boolean }) {
             <p className="text-body text-ink">
                 {rhythm ??
                     (rest
-                        ? "Sin un día fijo — el mes típico es lo que cobraron, no un calendario."
-                        : "Sin un día fijo — el ritmo es regular, el día no.")}
+                        ? "Sin un día fijo: el mes típico es lo que cobraron, no un calendario."
+                        : "Sin un día fijo: el ritmo es regular, el día no.")}
             </p>
             <p className="mt-2 text-body-sm text-graphite">
                 Últimos cargos:{" "}

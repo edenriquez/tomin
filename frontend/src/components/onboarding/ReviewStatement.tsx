@@ -10,7 +10,8 @@ import {
     type AccountKind,
     type UploadResult,
 } from "@/lib/api";
-import { Button, Select, useToast } from "@/components/ui";
+import { Button, Notice, Select, useToast } from "@/components/ui";
+import { track } from "@/lib/telemetry";
 
 /**
  * The OCR shows its work. After the first upload, the user sees what was
@@ -42,6 +43,10 @@ export function ReviewStatement({
         if (trimmed !== (s.bank ?? "")) patch.bank = trimmed || null;
         if (kind !== s.account_kind) patch.account_kind = kind;
 
+        track("onboarding.review", {
+            decision: "confirm",
+            changed: Object.keys(patch).join(",") || "nothing",
+        });
         if (Object.keys(patch).length === 0) {
             onDone();
             return;
@@ -61,6 +66,15 @@ export function ReviewStatement({
         s.period_start || s.period_end
             ? `${s.period_start ?? "?"} – ${s.period_end ?? "?"}`
             : "No detectado";
+    // A parse that found nothing is the one outcome this screen must not
+    // dress up as success: "0 movimientos" with a Confirmar button reads as
+    // done. Say what happened and what to do.
+    const empty = result.transactions_created === 0;
+    // Banks without a dedicated parser (everything but Banamex and Banco
+    // Azteca today) are read by the generic template, which takes the first
+    // amount on each dated line. It works; it is also the one path where a
+    // confident "90 movimientos" can hide a misread column.
+    const generic = result.template === "generic_bank" && !empty;
 
     return (
         <div className="rounded-panel border border-mist bg-paper p-6 shadow-card sm:p-8">
@@ -72,12 +86,32 @@ export function ReviewStatement({
                     <FileCheck2 size={18} />
                 </div>
                 <div>
-                    <p className="text-caption font-medium uppercase text-ash">Detectamos</p>
-                    <h2 className="font-display text-title-sm font-normal text-ink">
-                        {result.transactions_created} movimientos
+                    <p className="eyebrow">
+                        {empty ? "Tomin leyó el archivo" : "Tomin leyó"}
+                    </p>
+                    <h2 className="text-title-sm font-normal text-ink">
+                        {empty
+                            ? "Sin movimientos legibles"
+                            : `${result.transactions_created} movimientos`}
                     </h2>
                 </div>
             </div>
+
+            {empty && (
+                <p className="mt-4 text-body-sm text-graphite">
+                    El documento se guardó, pero Tomin no encontró movimientos en él. Suele
+                    pasar con un PDF escaneado como imagen o con un resumen sin tabla de
+                    cargos. Prueba con el estado de cuenta completo de tu banco.
+                </p>
+            )}
+
+            {generic && (
+                <Notice className="mt-4">
+                    Leído con el lector genérico: {s.bank ?? "este banco"} todavía no tiene
+                    lector dedicado. Revisa fechas y montos en Movimientos; si algo no cuadra,
+                    corrígelo ahí.
+                </Notice>
+            )}
 
             <dl className="mt-6 space-y-1">
                 <FactRow label="Documento">
@@ -94,7 +128,7 @@ export function ReviewStatement({
                         type="text"
                         value={bank}
                         onChange={(e) => setBank(e.target.value)}
-                        placeholder="No identificado — escríbelo"
+                        placeholder="No identificado: escríbelo"
                         maxLength={120}
                         className="h-10 w-full rounded-input border border-muted bg-paper px-3 text-body text-ink outline-none placeholder:text-ash focus:border-signal"
                     />
@@ -121,7 +155,13 @@ export function ReviewStatement({
                 <Button loading={saving} onClick={confirm} className="text-ink">
                     Confirmar y continuar
                 </Button>
-                <Button variant="ghost" onClick={onDone}>
+                <Button
+                    variant="ghost"
+                    onClick={() => {
+                        track("onboarding.review", { decision: "skip" });
+                        onDone();
+                    }}
+                >
                     Corregir después
                 </Button>
             </div>

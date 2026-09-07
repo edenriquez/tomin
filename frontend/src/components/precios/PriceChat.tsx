@@ -1,10 +1,12 @@
 "use client";
 
+import { ChatOffNotice } from "@/components/ui";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Info, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { API_URL } from "@/lib/api";
 import { pricesApi } from "@/lib/prices";
+import { track } from "@/lib/telemetry";
 import { ChatMarkdown } from "@/components/workspace/ChatMarkdown";
 
 export type Turn = { role: "user" | "assistant"; content: string };
@@ -138,6 +140,11 @@ export function PriceChat({
     async function ask(text: string) {
         const asked = text.trim();
         if (!asked || streaming) return;
+        track("precios.ask", {
+            scope: receiptId ? "ticket" : "all",
+            attachments: attachments.length,
+            turn: turns.length,
+        });
 
         // The transcript as it stood *before* this question: what the server
         // needs to understand a follow-up, without the empty answer slot the
@@ -148,7 +155,7 @@ export function PriceChat({
         setError(null);
         setStatus(null);
         const about = attachments.length
-            ? ` — sobre: ${attachments.map((a) => a.label).join(", ")}`
+            ? ` · sobre: ${attachments.map((a) => a.label).join(", ")}`
             : "";
         onTurns((cur) => [
             ...cur,
@@ -237,7 +244,7 @@ export function PriceChat({
             <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2
                     className={cn(
-                        "font-display font-normal text-ink",
+                        "font-normal text-ink",
                         variant === "card" ? "text-title-sm" : "text-body"
                     )}
                 >
@@ -256,17 +263,13 @@ export function PriceChat({
             </div>
 
             {disabled ? (
-                <p className="mt-2 text-body-sm text-graphite">
-                    No hay un modelo configurado. Define <code>LLM_BASE_URL</code>,{" "}
-                    <code>LLM_API_KEY</code> y <code>LLM_MODEL</code> en el backend para
-                    activar esta banda. Todo lo demás de esta pantalla funciona sin ella.
-                </p>
+                <ChatOffNotice className="mt-2"> Todo lo demás de esta pantalla funciona sin él.</ChatOffNotice>
             ) : (
                 <>
                     <p className="mt-1 text-body-sm text-graphite">
                         {receiptId
-                            ? "Sabe lo que dice este ticket. Toca «Preguntar» en una línea para compararla con Profeco y listados en línea."
-                            : "Solo sabe lo que dicen tus tickets. No consulta precios de ninguna tienda en internet."}
+                            ? `Sabe lo que dice este ticket. Toca «Preguntar» en una línea para compararla con ${chat?.reference ?? "precios de referencia"}.`
+                            : `Sabe lo que dicen tus tickets. Solo cuando preguntas por una línea, dentro de un ticket, la compara con ${chat?.reference ?? "precios de referencia"}; aquí responde con tus tickets nada más.`}
                     </p>
 
                     {turns.length > 0 && (

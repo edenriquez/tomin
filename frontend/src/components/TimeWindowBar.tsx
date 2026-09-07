@@ -2,7 +2,7 @@
 
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarDays, X } from "lucide-react";
+import { CalendarDays, History, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { dayLabel } from "@/lib/format";
 import { WINDOW_LABELS, WINDOW_VOCABULARY, type TimeWindow } from "@/lib/window";
@@ -22,13 +22,36 @@ import { useTimeWindow } from "@/components/TimeWindowProvider";
  * the active segment raised on Paper. That is what makes it read as part of
  * the header furniture rather than as a toolbar someone bolted on below it.
  *
- * `disabled` is for views that read the whole history on purpose (Precios,
- * Fijos, Documentos). The control stays — the selection is still yours
- * and still waits for the next view — but it says so instead of pretending to act.
+ * `disabled` is for views that read the whole history on purpose (Plan,
+ * Precios, Documentos). There the control is *replaced*, not greyed: a dimmed
+ * "30 días" on a view that reads every month is a false statement about what
+ * is on screen. The capsule keeps its slot and says what the view reads; the
+ * selection itself survives in the provider and is waiting on the next view.
  */
 export function TimeWindowBar({ disabled = false }: { disabled?: boolean }) {
     const { settings } = useSettings();
     const { window: active, anchor, selectPreset, selectCustom, clearCustom } = useTimeWindow();
+
+    if (disabled) {
+        const kept =
+            active.kind === "custom"
+                ? rangeLabel(active.start, active.end)
+                : WINDOW_LABELS[active.id];
+        return (
+            <div
+                role="note"
+                aria-label="Periodo"
+                title={`Esta vista lee todo tu historial. El periodo que elegiste (${kept}) sigue puesto en Movimientos y Categorías.`}
+                className={cn(
+                    "inline-flex h-[42px] items-center gap-1.5 rounded-control px-3.5",
+                    "border border-dashed border-mist bg-fog/60 text-body-sm text-graphite"
+                )}
+            >
+                <History size={14} aria-hidden className="text-ash" />
+                Historial completo
+            </div>
+        );
+    }
 
     const shown = WINDOW_VOCABULARY.filter((w) => settings.windows.includes(w));
     const isCustom = active.kind === "custom";
@@ -249,7 +272,7 @@ const CustomSegment = forwardRef<HTMLSpanElement, {
                         <p className="text-label text-graphite">Rango de fechas</p>
                         <div className="mt-3 grid grid-cols-2 gap-3">
                             <label className="flex flex-col gap-1">
-                                <span className="text-caption uppercase tracking-wide text-ash">Desde</span>
+                                <span className="eyebrow">Desde</span>
                                 <input
                                     type="date"
                                     autoFocus
@@ -260,7 +283,7 @@ const CustomSegment = forwardRef<HTMLSpanElement, {
                                 />
                             </label>
                             <label className="flex flex-col gap-1">
-                                <span className="text-caption uppercase tracking-wide text-ash">Hasta</span>
+                                <span className="eyebrow">Hasta</span>
                                 <input
                                     type="date"
                                     value={end}

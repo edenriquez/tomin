@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 import { API_URL } from "@/lib/api";
 import type { Period } from "@/lib/metrics";
 import { conversationsApi, type Conversation } from "@/lib/workstations";
-import { Select } from "@/components/ui";
+import { ChatOffNotice, Select } from "@/components/ui";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { useWorkspace } from "./WorkspaceProvider";
 
@@ -244,13 +244,7 @@ export function WorkstationChat({
             </div>
 
             {!status.available ? (
-                <p className="mt-1.5 text-body-sm text-graphite">
-                    No hay un modelo configurado. Define{" "}
-                    <code className="text-ink">LLM_BASE_URL</code>,{" "}
-                    <code className="text-ink">LLM_API_KEY</code> y{" "}
-                    <code className="text-ink">LLM_MODEL</code> en el backend para activarlo.
-                    El resto de esta lectura funciona sin eso.
-                </p>
+                <ChatOffNotice className="mt-1.5"> El resto de esta lectura funciona sin él.</ChatOffNotice>
             ) : (
                 <>
                     {/* The disclosure. Shown before the first question, not after

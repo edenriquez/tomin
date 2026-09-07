@@ -92,7 +92,7 @@ function Figure({
             <div className="text-label text-graphite">{label}</div>
             <div
                 className={cn(
-                    "tabular mt-1 truncate font-display text-metric-sm font-normal",
+                    "tabular mt-1 truncate text-metric-sm font-normal",
                     value === null ? "text-ash" : "text-ink"
                 )}
             >

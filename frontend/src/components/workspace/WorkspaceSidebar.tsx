@@ -70,7 +70,7 @@ export function WorkspaceSidebar({
 
             {items?.length === 0 && !error && (
                 <p className="px-3 py-2 text-body-sm text-graphite">
-                    Todavía no tienes ninguno.
+                    Todavía no tienes ninguna.
                 </p>
             )}
 
@@ -154,7 +154,7 @@ function ConversationRail({ workstationId }: { workstationId: string }) {
                 onClick={() => setOpen((v) => !v)}
                 className={cn(
                     "flex w-full items-center gap-1.5 rounded-control px-2 py-1.5",
-                    "text-label font-medium uppercase tracking-wide text-ash",
+                    "eyebrow",
                     "transition-colors duration-100 hover:text-ink"
                 )}
             >

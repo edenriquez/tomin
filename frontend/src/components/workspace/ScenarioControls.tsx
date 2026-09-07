@@ -123,7 +123,7 @@ export function ScenarioControls({
                 <p className="mt-4 text-body">
                     <span className="text-graphite">Serían </span>
                     <span className="tabular text-ink">{mxn(proposed)}</span>
-                    <span className="text-graphite"> al mes — </span>
+                    <span className="text-graphite"> al mes: </span>
                     {/* The sign of a number is information in a ledger, not
                         decoration. This is the one place the single-accent rule
                         is deliberately broken. */}

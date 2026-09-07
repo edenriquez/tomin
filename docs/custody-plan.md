@@ -5,6 +5,16 @@
 > sin romper lo que ya funciona y sin prometer criptografía que el producto
 > no puede honrar.
 
+> **Registro de decisión (añadido 2026-09-05).** Este plan (2026-08-14)
+> **revierte** `docs/redesign-plan.md` §8.1 ("Scope: web only. The Expo app
+> is out of v1") y retoma el "v2 candidate: on-device PDF processing" de ese
+> mismo §8 como el eje del producto. La reversión no quedó escrita en su
+> momento; ahora está anotada en ambos documentos. Estado: F1 enviado
+> (192050a, 2026-08-14); Banco Azteca parser + hardening móvil (8b4247f,
+> 2026-08-19); tickets con OCR en el dispositivo (62a59e5, 2026-09-01).
+> El paso 3 del orden de ejecución (auth + magic link) **no ha empezado**, y
+> la app móvil no se distribuye (sin `eas.json`, sin mención en `landing/`).
+
 ## La promesa, en cuatro garantías
 
 La palabra "custodia" se vuelve verificable cuando se descompone:

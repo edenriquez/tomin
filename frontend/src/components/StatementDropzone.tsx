@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { FileUp, Loader2 } from "lucide-react";
 import { api, UploadError, type UploadResult } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -41,7 +41,7 @@ export function useStatementUpload(
         async (file: File, password?: string) => {
             const name = file.name.toLowerCase();
             if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) {
-                toast("Solo aceptamos PDF de tu banco o XML del SAT.", "negative");
+                toast("Solo entran PDF de tu banco o XML del SAT.", "negative");
                 return;
             }
 
@@ -60,8 +60,11 @@ export function useStatementUpload(
             try {
                 const result = await api.uploadStatement(file, password);
                 setPasswordFor(null);
+                // The template id is a backend name, not something to read.
                 toast(
-                    `Listo: ${result.transactions_created} movimientos (${result.template})`,
+                    result.transactions_created === 1
+                        ? "Listo: 1 movimiento leído"
+                        : `Listo: ${result.transactions_created} movimientos leídos`,
                     "positive"
                 );
                 onUploaded?.();
@@ -74,7 +77,7 @@ export function useStatementUpload(
                     setPasswordFor({ file, wrong: code === "pdf_password_incorrect" });
                 } else {
                     setPasswordFor(null);
-                    toast(`No se pudo procesar el archivo: ${(e as Error).message}`, "negative");
+                    toast(`No se pudo leer el archivo: ${(e as Error).message}`, "negative");
                 }
             } finally {
                 setUploading(false);
@@ -123,15 +126,30 @@ export function StatementDropzone({
     onUploaded,
     onResult,
     className,
+    autoFocus = false,
 }: {
     /** Fires after a statement parses. The caller re-probes and swaps state. */
     onUploaded?: () => void;
     /** Receives the parse outcome — bank, period, template — for review UIs. */
     onResult?: (result: UploadResult) => void;
     className?: string;
+    /** Put the "Elegir archivo" button in focus on mount: for arrivals whose
+     *  previous click was already "Comenzar". Browsers refuse to open the file
+     *  picker without a gesture, so focus (and Enter/Space) is as close as the
+     *  web allows to "the picker is ready". */
+    autoFocus?: boolean;
 }) {
     const { upload, pick, uploading, input } = useStatementUpload(onUploaded, onResult);
     const [dragging, setDragging] = useState(false);
+    const pickRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (!autoFocus) return;
+        const el = pickRef.current;
+        if (!el) return;
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ block: "center" });
+    }, [autoFocus]);
 
     function onDrop(e: DragEvent<HTMLDivElement>) {
         e.preventDefault();
@@ -168,17 +186,23 @@ export function StatementDropzone({
                 )}
             </div>
 
-            <p className="font-display text-title-sm font-normal text-ink">
+            <p className="font-display text-title-md font-normal text-ink">
                 {uploading ? "Leyendo tu estado de cuenta…" : "Sube tu estado de cuenta"}
             </p>
             <p className="mx-auto mt-2 max-w-sm text-body text-graphite">
                 {uploading
-                    ? "Extraemos los movimientos y desechamos el archivo. Toma unos segundos."
-                    : "PDF de tu banco o XML del SAT. Lo procesamos y lo desechamos: solo guardamos los movimientos."}
+                    ? "Tomin saca los movimientos y desecha el archivo. Toma unos segundos."
+                    : "PDF de tu banco o XML del SAT. Tomin lo lee y lo desecha: solo guarda los movimientos."}
             </p>
 
             <div className="mt-6">
-                <Button loading={uploading} onClick={pick} icon={<FileUp size={16} />} className="text-ink">
+                <Button
+                    ref={pickRef}
+                    loading={uploading}
+                    onClick={pick}
+                    icon={<FileUp size={16} />}
+                    className="text-ink"
+                >
                     Elegir archivo
                 </Button>
             </div>

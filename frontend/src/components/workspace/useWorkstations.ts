@@ -8,6 +8,7 @@ import {
     type WorkstationPatch,
 } from "@/lib/workstations";
 import { useToast } from "@/components/ui";
+import { track } from "@/lib/telemetry";
 
 /**
  * The user's lenses, loaded once per mount and mutated optimistically.
@@ -44,6 +45,10 @@ export function useWorkstations() {
         async (draft: WorkstationDraft): Promise<Workstation | null> => {
             try {
                 const created = await workstationsApi.create(draft);
+                track("workspace.create", {
+                    clauses: draft.rule.any_of?.length ?? 1,
+                    excluded: draft.excluded_tx_ids?.length ?? 0,
+                });
                 // Prepended, matching the server's newest-first order, so the
                 // one you just made is where you are already looking.
                 setItems((cur) => [created, ...(cur ?? [])]);
@@ -92,7 +97,7 @@ export function useWorkstations() {
                     restored.splice(removed.index, 0, removed.item);
                     return restored;
                 });
-                toast(`No se pudo borrar: ${(e as Error).message}`, "negative");
+                toast(`No se pudo eliminar: ${(e as Error).message}`, "negative");
                 return false;
             }
         },

@@ -150,7 +150,7 @@ export function AddFijoSheet({
             title={intent === "resto" ? "Sumar al resto" : "Añadir un cargo"}
             description={
                 intent === "resto"
-                    ? "Un gasto que haces seguido, sin día fijo. Agrupamos el comercio y su mes típico entra en la línea — no inventamos una fecha."
+                    ? "Un gasto que haces seguido, sin día fijo. Tomin agrupa el comercio y su mes típico entra en la línea; no inventa una fecha."
                     : "Uno detectado se fija solo. Un comercio sin ritmo (Walmart) se fija por su mes típico, no por un día."
             }
             footer={
@@ -161,7 +161,7 @@ export function AddFijoSheet({
                     {intent === "resto"
                         ? "Sumar al resto"
                         : existing
-                          ? "Fijar esta serie"
+                          ? "Fijar este cobro"
                           : irregular
                             ? "Fijar (mes típico)"
                             : "Añadir como fijo"}
@@ -183,7 +183,7 @@ export function AddFijoSheet({
                     {intent === "resto" ? (
                         existing ? (
                             <p className="mt-2 text-body-sm text-graphite">
-                                Ya es la serie «{existing.label}». Quítala de fijos
+                                Ya es el cobro fijo «{existing.label}». Quítalo de fijos
                                 si quieres que viva en el resto.
                             </p>
                         ) : restPreview ? (
@@ -195,13 +195,13 @@ export function AddFijoSheet({
                         ) : null
                     ) : existing ? (
                         <p className="mt-2 text-body-sm text-graphite">
-                            Ya es la serie «{existing.label}». Se fija, no se duplica.
+                            Ya es el cobro «{existing.label}». Se fija, no se duplica.
                         </p>
                     ) : irregular && restPreview ? (
                         <p className="mt-2 text-body-sm text-graphite">
                             {restMark?.label}: {restCluster.length} visita
                             {restCluster.length === 1 ? "" : "s"} · ~
-                            {mxn(restPreview.monthly)}/mes — se fija el mes típico, no
+                            {mxn(restPreview.monthly)}/mes: se fija el mes típico, no
                             un día en el calendario.
                         </p>
                     ) : (

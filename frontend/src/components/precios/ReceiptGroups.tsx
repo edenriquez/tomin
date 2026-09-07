@@ -13,6 +13,7 @@ import {
 } from "@/lib/prices";
 import { BackendNotice, Button, EmptyState, Skeleton } from "@/components/ui";
 import { useAppData } from "@/components/AppChrome";
+import { track } from "@/lib/telemetry";
 import { PriceChat, type Attachment, type Turn } from "./PriceChat";
 
 /** What a ticket's own chat offers before anyone has asked it anything. */
@@ -88,6 +89,7 @@ export function ReceiptGroups({ query }: { query: string }) {
     }, [dataVersion]);
 
     async function associate(productKey: string, term: string) {
+        track("precios.term_set");
         const saved = await termsApi.set(productKey, term);
         setTerms((current) => ({ ...current, [productKey]: saved }));
     }
@@ -107,6 +109,7 @@ export function ReceiptGroups({ query }: { query: string }) {
     }, [receipts, query]);
 
     function toggle(id: string) {
+        if (!open.has(id)) track("precios.ticket_open", { open_before: open.size });
         setOpen((current) => {
             const next = new Set(current);
             if (next.has(id)) next.delete(id);
@@ -116,6 +119,7 @@ export function ReceiptGroups({ query }: { query: string }) {
     }
 
     async function remove(id: string) {
+        track("precios.ticket_delete");
         await receiptsApi.remove(id);
         // Dropped from the list here rather than by refetching: the answer is
         // already known, and a refetch would blink the whole list to remove one
@@ -172,7 +176,7 @@ export function ReceiptGroups({ query }: { query: string }) {
             >
                 {query
                     ? "Busca por tienda o por algo que hayas comprado."
-                    : "Toma la foto de un ticket desde la app de tu teléfono: la foto se queda ahí y solo viaja el texto."}
+                    : "Los tickets llegan desde la app de Tomin en tu celular (aún no está en tiendas). La foto se queda ahí y solo viaja el texto; aquí verás el precio de cada producto."}
             </EmptyState>
         );
     }

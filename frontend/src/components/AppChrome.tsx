@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
+import { track } from "@/lib/telemetry";
 import { AppShell } from "@/components/AppShell";
 import { LecturaHost } from "@/components/lectura/LecturaHost";
 import { useTimeWindow } from "@/components/TimeWindowProvider";
@@ -44,13 +46,27 @@ export function AppChrome({
 }: {
     children: ReactNode;
     /** Whether this view reads through the time filter. Off for views that
-     *  read the whole history (Fijos, Precios) or manage the archive
+     *  read the whole history (Plan, Precios) or manage the archive
      *  (Documentos); the bar still shows, and says it does not apply. */
     withWindow?: boolean;
     onDataChanged?: () => void;
 }) {
     const [dataVersion, setDataVersion] = useState(0);
     const tw = useTimeWindow();
+    const pathname = usePathname();
+
+    // Every view, on arrival, with the context it is read under. `nav.view`
+    // records the click; this records the landing — direct loads, redirects
+    // from retired paths, deep links — so the per-view counts are complete.
+    useEffect(() => {
+        track("view.open", {
+            path: pathname,
+            time_scoped: withWindow,
+            window: tw.window.kind === "preset" ? tw.window.id : "custom",
+        });
+        // Only the path: a window change is `window.select`, not a new view.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pathname]);
 
     // The newest transaction on record is where the rolling presets end. Read
     // after every upload, because that is when it moves; a failed read leaves

@@ -33,7 +33,7 @@ export function PreciosView() {
         <div className="space-y-4 sm:space-y-6">
             <div className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="font-display text-title-sm font-normal text-ink">
+                    <h2 className="text-title-sm font-normal text-ink">
                         Precios de tus tickets
                     </h2>
                     <SearchInput

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Plus, Scale, X } from "lucide-react";
 import { api, type RecurringItem, type Transaction } from "@/lib/api";
 import { useBankScope } from "@/lib/banks";
@@ -21,6 +21,7 @@ import {
     type IncomeKind,
 } from "@/lib/ingresos";
 import { parsePeriodKey } from "@/lib/metrics";
+import { track } from "@/lib/telemetry";
 import { useAppData } from "@/components/AppChrome";
 import { ChartCard } from "@/components/ChartCard";
 import {
@@ -57,7 +58,7 @@ const FREQUENCY_LABELS: Record<RecurringItem["frequency"], string> = {
  * Labeled income against the fijos need, on the same 6/12 horizon.
  * Nothing is guessed: a deposit counts only after you name it.
  */
-export function PronosticoView() {
+export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {}) {
     const { dataVersion } = useAppData();
     const [items, setItems] = useState<RecurringItem[] | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -68,6 +69,29 @@ export function PronosticoView() {
 
     const fijos = useFijos();
     const ingresos = useIngresos();
+    // Labelling a deposit is the one act this face asks for; how often it
+    // happens, and how often it is undone, is the measure of the face.
+    const labelIncome = useCallback(
+        (key: string, kind: IncomeKind) => {
+            track("plan.ingreso_label", { kind });
+            ingresos.label(key, kind);
+        },
+        [ingresos]
+    );
+    const unlabelIncome = useCallback(
+        (key: string) => {
+            track("plan.ingreso_unlabel");
+            ingresos.unlabel(key);
+        },
+        [ingresos]
+    );
+    const setHorizon = useCallback(
+        (h: Horizon) => {
+            track("plan.horizon", { horizon: h, face: "ingresos" });
+            fijos.setHorizon(h);
+        },
+        [fijos]
+    );
     const [chartCfg, setChartCfg] = usePanelSettings("pronostico.contrast", {
         encoding: "barras" as string,
     });
@@ -205,6 +229,17 @@ export function PronosticoView() {
 
     const emptyLedger = !loading && clusters.length === 0 && fijosPinned.length === 0;
 
+    // The deposit most likely to be the salary, offered by name. "Hay 10 sin
+    // etiquetar" is honest; "¿VECH SOLUCIONES es tu nómina?" is actionable.
+    const candidate = useMemo(() => {
+        let best: { cluster: IncomeCluster; monthly: number; count: number } | null = null;
+        for (const c of unlabeled) {
+            const monthly = restMonthlyFromTransactions(c.txs).monthly;
+            if (!best || monthly > best.monthly) best = { cluster: c, monthly, count: c.txs.length };
+        }
+        return best;
+    }, [unlabeled]);
+
     function toggleIncome(key: string, on: boolean) {
         setSelectedKeys((cur) => {
             const next = new Set(cur);
@@ -218,12 +253,22 @@ export function PronosticoView() {
 
     return (
         <div className="space-y-4 sm:space-y-6">
-            {error && <BackendNotice what="tus cargos recurrentes" detail={error} />}
+            {error && <BackendNotice what="tus ingresos" detail={error} />}
 
             {emptyLedger ? (
-                <EmptyState icon={Scale} title="Aún no hay depósitos que etiquetar">
-                    Sube un estado de cuenta con ingresos, o fija cargos en Fijos
-                    para contrastarlos.
+                <EmptyState
+                    icon={Scale}
+                    title="Aún no hay abonos que etiquetar"
+                    action={
+                        onGoToFijos && (
+                            <Button variant="ghost" size="sm" onClick={onGoToFijos}>
+                                Ir a lo que se va
+                            </Button>
+                        )
+                    }
+                >
+                    Sube un estado de cuenta con abonos, o fija cargos en «Lo que se
+                    va» para contrastarlos.
                 </EmptyState>
             ) : (
                 <>
@@ -234,7 +279,13 @@ export function PronosticoView() {
                         need={need}
                         horizon={horizon}
                         loading={loading}
-                        onHorizon={fijos.setHorizon}
+                        onHorizon={setHorizon}
+                        labeledCount={nominaClusters.length + extraClusters.length}
+                        unlabeledCount={unlabeled.length}
+                        candidate={candidate}
+                        onLabelCandidate={(key) => labelIncome(key, "nomina")}
+                        pinnedCount={fijosPinned.length}
+                        onGoToFijos={onGoToFijos}
                     />
 
                     <ChartCard
@@ -254,7 +305,7 @@ export function PronosticoView() {
                                 firstFutureIndex={contrast.firstFutureIndex}
                                 series={contrastBands}
                                 empty="Etiqueta un ingreso o fija un cargo para contrastarlos."
-                                caption="Signal es lo que entra, piedra lo que ya está comprometido. La banda de ingresos es el extra; la de fijos, lo que se ha movido en el monto."
+                                caption="La banda azul es lo que entra; la gris, lo que ya está comprometido. El grosor de ingresos es el extra; el de fijos, lo que se ha movido el monto."
                             />
                         ) : (
                             <ContrastChart data={contrast} />
@@ -267,9 +318,9 @@ export function PronosticoView() {
                         clusters={nominaClusters}
                         itemsByKey={byClusterKey(nominaItems)}
                         loading={loading}
-                        empty="Etiqueta un depósito como nómina para que entre al número."
-                        onRelabel={ingresos.label}
-                        onUnlabel={ingresos.unlabel}
+                        empty="Etiqueta un abono como nómina para que entre al número."
+                        onRelabel={labelIncome}
+                        onUnlabel={unlabelIncome}
                         kind="nomina"
                         selectedKeys={selectedKeys}
                         onSelect={toggleIncome}
@@ -287,13 +338,13 @@ export function PronosticoView() {
 
                     <IncomeSection
                         title="Extra"
-                        hint="Ingresos sin promesa de fecha. Entra el mes típico de esa serie."
+                        hint="Ingresos sin promesa de fecha. Entra el mes típico de cada uno."
                         clusters={extraClusters}
                         itemsByKey={byClusterKey(extraItems)}
                         loading={loading}
-                        empty="Un freelance o un extra etiquetado aparece aquí."
-                        onRelabel={ingresos.label}
-                        onUnlabel={ingresos.unlabel}
+                        empty="Un extra etiquetado aparece aquí."
+                        onRelabel={labelIncome}
+                        onUnlabel={unlabelIncome}
                         kind="extra"
                         selectedKeys={selectedKeys}
                         onSelect={toggleIncome}
@@ -301,12 +352,12 @@ export function PronosticoView() {
 
                     <IncomeSection
                         title="Sin etiquetar"
-                        hint="Están en el ledger. Hasta que los nombras, no cuentan."
+                        hint="Están en tus movimientos. Hasta que los nombras, no cuentan."
                         clusters={unlabeled}
                         itemsByKey={new Map()}
                         loading={loading}
                         empty="Todo lo que entra ya tiene nombre."
-                        onRelabel={ingresos.label}
+                        onRelabel={labelIncome}
                         kind="unlabeled"
                     />
                 </>
@@ -340,7 +391,7 @@ export function PronosticoView() {
                 onClose={() => setAdding(false)}
                 ledger={txs}
                 labeledKeys={labeledKeys}
-                onLabel={ingresos.label}
+                onLabel={labelIncome}
             />
         </div>
     );
@@ -354,6 +405,12 @@ function Headline({
     horizon,
     loading,
     onHorizon,
+    labeledCount,
+    unlabeledCount,
+    pinnedCount,
+    onGoToFijos,
+    candidate,
+    onLabelCandidate,
 }: {
     income: number;
     nomina: number;
@@ -362,64 +419,137 @@ function Headline({
     horizon: Horizon;
     loading: boolean;
     onHorizon: (h: Horizon) => void;
+    /** Deposit clusters the user has named nómina or extra. */
+    labeledCount: number;
+    /** Deposit clusters still waiting for a name. */
+    unlabeledCount: number;
+    /** Fijos pinned on the other face — the thing income is measured against. */
+    pinnedCount: number;
+    onGoToFijos?: () => void;
+    /** The largest unlabeled deposit series, to be offered as the salary. */
+    candidate?: { cluster: IncomeCluster; monthly: number; count: number } | null;
+    onLabelCandidate?: (key: string) => void;
 }) {
     const gap = income - need;
     const gapWord = gap > 0.5 ? "Sobra" : gap < -0.5 ? "Faltan" : "Tablas";
+    // Nothing labelled is an absence, not an income of zero pesos. The
+    // headline says what is missing and how much of it there is to do.
+    const unknown = !loading && labeledCount === 0;
+    // The gap is a comparison, so it needs both sides to exist.
+    const comparable = !loading && labeledCount > 0 && pinnedCount > 0;
 
     return (
         <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                    <p className="text-caption uppercase text-ash">Te entran</p>
+                    <p className="eyebrow">Lo que entra</p>
                     {loading ? (
                         <Skeleton className="mt-1 h-9 w-48" />
+                    ) : unknown ? (
+                        <p className="mt-0.5 font-display text-title-md font-normal text-ink">
+                            Tomin no adivina
+                        </p>
                     ) : (
-                        <p className="tabular mt-0.5 font-display text-metric font-normal text-ink">
+                        <p className="tabular mt-0.5 text-metric font-normal text-ink">
                             {mxn(income)}
                         </p>
                     )}
                     <p className="mt-1 text-body text-graphite">
-                        en los próximos {horizon} meses
+                        {unknown
+                            ? unlabeledCount > 0
+                                ? `Sin una nómina etiquetada no hay número. Hay ${unlabeledCount} abono${unlabeledCount === 1 ? "" : "s"} sin etiquetar.`
+                                : "Sin una nómina etiquetada no hay número. Sube un estado de cuenta con abonos y etiqueta tu nómina."
+                            : `en los próximos ${horizon} meses`}
                     </p>
-                    {!loading && (
+                    {!loading && !unknown && (
                         <p className="mt-2 text-body-sm text-graphite">
-                            Nómina {mxn(nomina)}
+                            {nomina > 0 && <>Nómina {mxn(nomina)}</>}
+                            {nomina > 0 && extra > 0 && <span className="text-ash"> · </span>}
+                            {extra > 0 && <>Extra {mxn(extra)}</>}
                             <span className="text-ash"> · </span>
-                            Extra {mxn(extra)}
-                            <span className="text-ash"> · </span>
-                            Fijos {mxn(need)}
-                            <span className="text-ash"> · </span>
-                            {gapWord} {mxn(Math.abs(gap))}
+                            {pinnedCount > 0 ? (
+                                <>Fijos {mxn(need)}</>
+                            ) : onGoToFijos ? (
+                                <button
+                                    type="button"
+                                    onClick={onGoToFijos}
+                                    className="underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+                                >
+                                    Fija tus cargos para saber si alcanza
+                                </button>
+                            ) : (
+                                <>Sin fijos fijados</>
+                            )}
+                            {comparable && (
+                                <>
+                                    <span className="text-ash"> · </span>
+                                    <span className={gap < -0.5 ? "text-negative" : gap > 0.5 ? "text-positive" : undefined}>
+                                        {gapWord} {mxn(Math.abs(gap))}
+                                    </span>
+                                </>
+                            )}
+                        </p>
+                    )}
+                    {unknown && candidate && onLabelCandidate && (
+                        <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-body-sm text-graphite">
+                            <span>
+                                El mayor: <span className="text-ink">{candidate.cluster.label}</span>,{" "}
+                                ~{mxn(candidate.monthly)}/mes en {candidate.count} abono
+                                {candidate.count === 1 ? "" : "s"}. ¿Es tu nómina?
+                            </span>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => onLabelCandidate(candidate.cluster.key)}
+                            >
+                                Sí, es mi nómina
+                            </Button>
+                        </p>
+                    )}
+                    {unknown && pinnedCount > 0 && (
+                        <p className="mt-2 text-body-sm text-graphite">
+                            Fijos comprometidos: {mxn(need)} en los próximos {horizon} meses.
                         </p>
                     )}
                 </div>
 
-                <div
-                    role="radiogroup"
-                    aria-label="Horizonte"
-                    className="inline-flex rounded-control border border-mist bg-paper p-0.5"
-                >
-                    {HORIZONS.map((h) => {
-                        const selected = horizon === h;
-                        return (
-                            <button
-                                key={h}
-                                type="button"
-                                role="radio"
-                                aria-checked={selected}
-                                onClick={() => onHorizon(h)}
-                                className={cn(
-                                    "rounded-control px-3 py-1 text-body-sm",
-                                    "transition-colors duration-100",
-                                    selected
-                                        ? "bg-fog font-medium text-ink"
-                                        : "text-graphite hover:text-ink"
-                                )}
-                            >
-                                {h} meses
-                            </button>
-                        );
-                    })}
+                <div className="flex flex-col items-end gap-3">
+                    {onGoToFijos && !loading && (
+                        <button
+                            type="button"
+                            onClick={onGoToFijos}
+                            className="text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+                        >
+                            ← ¿Y cuánto se va?
+                        </button>
+                    )}
+                    <div
+                        role="radiogroup"
+                        aria-label="Horizonte"
+                        className="inline-flex rounded-control border border-mist bg-paper p-0.5"
+                    >
+                        {HORIZONS.map((h) => {
+                            const selected = horizon === h;
+                            return (
+                                <button
+                                    key={h}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    onClick={() => onHorizon(h)}
+                                    className={cn(
+                                        "rounded-control px-3 py-1 text-body-sm",
+                                        "transition-colors duration-100",
+                                        selected
+                                            ? "bg-fog font-medium text-ink"
+                                            : "text-graphite hover:text-ink"
+                                    )}
+                                >
+                                    {h} meses
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
         </section>
@@ -456,7 +586,7 @@ function IncomeSection({
     return (
         <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-display text-title-sm font-normal text-ink">
+                <h2 className="text-title-sm font-normal text-ink">
                     {title}
                     {clusters.length > 0 && (
                         <span className="ml-2 font-sans text-body-sm text-graphite">
@@ -562,7 +692,7 @@ function IncomeRow({
                             ? smear
                                 ? `Sin fecha fija · ${mxn(item.monthly_equivalent)}/mes`
                                 : `${FREQUENCY_LABELS[item.frequency]} · ${mxn(item.monthly_equivalent)}/mes`
-                            : `${cluster.txs.length} depósito${cluster.txs.length === 1 ? "" : "s"} · ~${mxn(preview.monthly)}/mes`}
+                            : `${cluster.txs.length} abono${cluster.txs.length === 1 ? "" : "s"} · ~${mxn(preview.monthly)}/mes`}
                     </div>
                 </button>
                 {kind === "unlabeled" ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatOffNotice } from "@/components/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Info, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -255,13 +256,7 @@ export function LecturaChat({
             )}
 
             {!status.available ? (
-                <p className="mt-3 text-body-sm text-graphite">
-                    No hay un modelo configurado. Define{" "}
-                    <code className="text-ink">LLM_BASE_URL</code>,{" "}
-                    <code className="text-ink">LLM_API_KEY</code> y{" "}
-                    <code className="text-ink">LLM_MODEL</code> en el backend para
-                    activarlo.
-                </p>
+                <ChatOffNotice className="mt-3" />
             ) : (
                 <>
                     {!acknowledged && turns.length === 0 && threads.length === 0 && (

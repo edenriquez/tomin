@@ -3,7 +3,7 @@ export { Checkbox } from "./Checkbox";
 export { NumberField } from "./NumberField";
 export { EmptyState } from "./EmptyState";
 export { Highlight } from "./Highlight";
-export { BackendNotice, Notice } from "./Notice";
+export { BackendNotice, ChatOffNotice, Notice } from "./Notice";
 export { ChartSkeleton, Skeleton } from "./Skeleton";
 export { SearchInput, type SearchInputProps } from "./SearchInput";
 export { Select, type SelectOption } from "./Select";

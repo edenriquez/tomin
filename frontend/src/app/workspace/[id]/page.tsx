@@ -33,7 +33,7 @@ export default function WorkstationPage() {
         // that says so beats a spinner that never resolves.
         return (
             <EmptyState icon={FlaskConical} title="Esta lectura ya no existe">
-                Puede que lo hayas borrado. Elige otro de la lista o crea uno nuevo.
+                Puede que la hayas eliminado. Elige otra de la lista o crea una nueva.
             </EmptyState>
         );
     }

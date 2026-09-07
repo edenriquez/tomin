@@ -28,19 +28,23 @@
         @apply bg-canvas text-body text-graphite;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        /* Tabular numerals matter in a finance app; proportional digits make
-           columns of pesos wobble. Ligatures off keeps figures literal. */
-        font-feature-settings: "calt" 0, "liga" 0, "tnum" 1;
+        /* Tabular, lining numerals matter in a finance app; proportional
+           digits make columns of pesos wobble. Ligatures off keeps figures
+           literal. */
+        font-feature-settings: "calt" 0, "liga" 0, "tnum" 1, "lnum" 1;
     }
 
-    /* Weight 400 at large sizes is the signature: authority through restraint,
+    /* Weight 400 at every size is the signature: authority through restraint,
        not through bold. Emphasis comes from size and from the highlight span,
-       never from bumping a heading to 600. */
+       never from bumping a heading to 600. A heading defaults to Inter — most
+       are container titles; the ones that carry voice (>=24px) say
+       `font-display` explicitly. */
     h1,
     h2,
     h3,
     h4 {
-        @apply font-display font-normal text-ink;
+        @apply font-normal text-ink;
+        text-wrap: balance;
     }
 
     /* Focus is a single, consistent ring in the one accent colour. */
@@ -58,6 +62,12 @@
 @layer components {
     .card {
         @apply rounded-card border border-mist bg-paper p-6 shadow-card;
+    }
+
+    /* Eyebrow: the all-caps caption above a title. Tracking comes from the
+       `caption` token, so this class adds nothing a hand-rolled one could drop. */
+    .eyebrow {
+        @apply text-caption font-medium uppercase text-ash;
     }
 
     /* Numeric columns: fixed-width figures so decimal points line up. */

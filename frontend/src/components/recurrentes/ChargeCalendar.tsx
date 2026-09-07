@@ -378,7 +378,7 @@ function DayTooltip({
                 </div>
             ) : (
                 <>
-                    <div className="tabular mt-0.5 font-display text-metric-sm font-normal text-ink">
+                    <div className="tabular mt-0.5 text-metric-sm font-normal text-ink">
                         {mxn2(cell.amount)}
                     </div>
                     {sources.length > 0 && (

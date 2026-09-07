@@ -4,18 +4,18 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isMetricError, queryMetrics } from "@/lib/metrics";
 import { windowToPeriod } from "@/lib/window";
+import { track } from "@/lib/telemetry";
 import { Skeleton } from "@/components/ui";
 import { AppChrome } from "@/components/AppChrome";
 import { MovimientosView } from "@/components/movimientos/MovimientosView";
-import { Landing } from "@/components/Landing";
 import { Onboarding } from "@/components/Onboarding";
 
 /**
- * The switch at the root. Three states, one URL:
- * - no data, hasn't started → the marketing Landing (its one job: "Comenzar");
- * - no data, clicked Comenzar → the Onboarding (the dropzone + OCR review);
- * - has data → the app shell. The Comenzar click is remembered per session,
- *   so a reload mid-onboarding doesn't demote the user back to the pitch.
+ * The switch at the root. Two states, one URL:
+ * - no data → the Onboarding (the dropzone + OCR review). The pitch lives on
+ *   the standalone landing (`landing/`), which is where visitors arrive from;
+ *   repeating it here made a convinced visitor read it twice;
+ * - has data → the app shell.
  *
  * Which state shows is a claim about the user's data, so it is only ever made
  * from a successful probe:
@@ -25,7 +25,6 @@ import { Onboarding } from "@/components/Onboarding";
  *   unreachable" per view. Telling a user with three years of statements to
  *   upload their first one is the worse failure.
  */
-const STARTED_KEY = "tomin.started";
 
 /**
  * The root is also the address the phone hands out. After a device upload the
@@ -42,22 +41,41 @@ export default function Home() {
     );
 }
 
+/** Once per session: where this visit came from. */
+const ARRIVED_KEY = "tomin.arrived";
+
 function Root() {
     const [hasData, setHasData] = useState<boolean | null>(null);
-    const [started, setStarted] = useState(false);
     const router = useRouter();
-    const arrival = useSearchParams().get("statement");
+    const params = useSearchParams();
+    const arrival = params.get("statement");
+    // The landing's CTAs arrive as `?utm_source=landing&utm_medium=cta&utm_content=<hero|nav|…>`
+    // (or the shorter `?from=landing`). That visitor already clicked "Comenzar".
+    const fromLanding =
+        params.get("utm_source") === "landing" || params.get("from") === "landing";
 
+    // The landing's CTAs carry `?from=landing` (or UTMs). Recording the origin
+    // once per session is what lets "how many visitors actually upload" be a
+    // number rather than a feeling. Direct visits are recorded too, as the
+    // denominator.
     useEffect(() => {
-        // Session, not settings: "convinced" is a per-visit fact, and reading
-        // it in an effect keeps server and client HTML identical.
-        setStarted(sessionStorage.getItem(STARTED_KEY) === "1");
+        try {
+            if (sessionStorage.getItem(ARRIVED_KEY) === "1") return;
+            sessionStorage.setItem(ARRIVED_KEY, "1");
+        } catch {
+            // Storage blocked: the event still goes out, possibly twice.
+        }
+        track("app.arrive", {
+            from: params.get("from") ?? params.get("utm_source") ?? "direct",
+            utm_medium: params.get("utm_medium") ?? undefined,
+            utm_campaign: params.get("utm_campaign") ?? undefined,
+            utm_content: params.get("utm_content") ?? undefined,
+            referrer: document.referrer ? new URL(document.referrer).host : undefined,
+        });
+        // Read once on mount, on purpose: later param changes are navigation,
+        // not arrivals.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    function start() {
-        sessionStorage.setItem(STARTED_KEY, "1");
-        setStarted(true);
-    }
 
     const probe = useCallback(async () => {
         try {
@@ -84,7 +102,7 @@ function Root() {
      * point at one document — Movimientos is a ledger, not an archive. So the
      * param is forwarded to Documentos, which owns the per-statement row, and
      * only once the probe says there is data: a link that lands on an empty
-     * account still deserves the pitch, not an empty archive.
+     * account still deserves the onboarding, not an empty archive.
      *
      * `replace`, not `push`: Back should return to wherever the phone's browser
      * came from, not to a URL that immediately redirects again.
@@ -108,7 +126,7 @@ function Root() {
     if (!hasData) {
         // `onComplete` fires after the review step (or its skip), not after
         // the raw upload — the user confirms what the OCR understood first.
-        return started ? <Onboarding onComplete={probe} /> : <Landing onStart={start} />;
+        return <Onboarding onComplete={probe} fromLanding={fromLanding} />;
     }
 
     return (
@@ -118,18 +136,49 @@ function Root() {
     );
 }
 
-/** The waiting shape of the app: chrome, a title, three tiles, a chart. */
+/**
+ * The waiting shape of the app, at the app's real geometry: the header row
+ * (wordmark, three view pills, the archive and upload buttons), the filter
+ * rail (banks, period, lecturas), the chart card, the list card. It used to
+ * draw a title and three tiles the real view never had, so the swap to real
+ * content was a layout jump instead of a fill-in.
+ */
 function RootSkeleton() {
     return (
-        <main className="mx-auto min-h-dvh w-full max-w-page px-5 py-6 sm:px-8 sm:py-8">
-            <Skeleton className="h-8 w-28" />
-            <Skeleton className="mt-12 h-9 w-64" />
-            <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-                {[0, 1, 2].map((i) => (
-                    <Skeleton key={i} className="h-28" />
-                ))}
+        <main className="mx-auto min-h-dvh w-full max-w-page px-5 pb-16 sm:px-8" aria-busy>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3 py-6 sm:py-8">
+                <Skeleton className="h-6 w-20 rounded-control" />
+                <div className="order-last flex w-full gap-1 sm:order-none sm:w-auto">
+                    <Skeleton className="h-9 w-32 rounded-control" />
+                    <Skeleton className="h-9 w-28 rounded-control" />
+                    <Skeleton className="h-9 w-20 rounded-control" />
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                    <Skeleton className="h-9 w-9 rounded-control sm:w-32" />
+                    <Skeleton className="h-9 w-20 rounded-control sm:w-40" />
+                </div>
             </div>
-            <Skeleton className="mt-6 h-80" />
+            <div className="-mt-2 flex flex-wrap items-center gap-2 pb-6">
+                <Skeleton className="h-[42px] w-48 rounded-control" />
+                <Skeleton className="h-[42px] w-full max-w-[400px] rounded-control" />
+                <Skeleton className="h-9 w-28 rounded-control" />
+            </div>
+            <div className="space-y-4 sm:space-y-6">
+                <div className="rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
+                    <Skeleton className="h-6 w-44" />
+                    <Skeleton className="mt-2 h-4 w-72" />
+                    <Skeleton className="mt-4 h-[320px]" />
+                </div>
+                <div className="rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
+                    <Skeleton className="h-6 w-40" />
+                    <Skeleton className="mt-4 h-11 rounded-control" />
+                    <div className="mt-4 space-y-3">
+                        {[0, 1, 2, 3].map((i) => (
+                            <Skeleton key={i} className="h-12" />
+                        ))}
+                    </div>
+                </div>
+            </div>
         </main>
     );
 }

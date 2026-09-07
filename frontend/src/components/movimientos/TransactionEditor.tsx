@@ -114,7 +114,7 @@ export function useInlineEdit(
                       : "actualizados";
             toast(
                 res.updated > 0
-                    ? `${res.updated} movimiento(s) ${verb}. «${res.label}» quedó aprendido.`
+                    ? `${res.updated} movimiento${res.updated === 1 ? "" : "s"} ${verb}. «${res.label}» quedó aprendido.`
                     : `«${res.label}» quedó aprendido para futuros documentos.`,
                 "positive"
             );
@@ -213,7 +213,7 @@ export function InlineCategory({
             {t.category_source === "auto" && (
                 <span
                     title="Categoría asignada automáticamente"
-                    className="text-caption font-medium uppercase text-ash"
+                    className="eyebrow"
                 >
                     auto
                 </span>
@@ -341,7 +341,7 @@ export function EditorStrip({
                         />
                         <span className="whitespace-nowrap">
                             en {suggestion.matched} movimiento{suggestion.matched === 1 ? "" : "s"}{" "}
-                            más —{" "}
+                            más:{" "}
                             {suggestion.teach.kind === "alias"
                                 ? `renombrar como «${suggestion.teach.alias}»`
                                 : suggestion.teach.kind === "transfer"

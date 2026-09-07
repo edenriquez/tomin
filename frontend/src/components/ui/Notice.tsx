@@ -21,6 +21,20 @@ export function Notice({ children, className }: { children: ReactNode; className
 }
 
 /**
+ * The chat's off state, said once and without environment variables: which
+ * ones to set is a deployment detail for `docs/`, not something a person
+ * reading their expenses should meet in the UI. `children` is the optional
+ * reassurance ("todo lo demás funciona") a surface may add.
+ */
+export function ChatOffNotice({ className, children }: { className?: string; children?: ReactNode }) {
+    return (
+        <p className={cn("text-body-sm text-graphite", className)}>
+            El chat no está activado en este servidor.{children}
+        </p>
+    );
+}
+
+/**
  * The standard "backend unreachable" copy, parameterized by what failed.
  *
  * The address comes from `API_URL`, never from a literal. It used to say "el

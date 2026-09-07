@@ -35,7 +35,7 @@ export function PanelControls({
                 className
             )}
         >
-            <span className="inline-flex items-center gap-1.5 text-caption font-medium uppercase text-ash">
+            <span className="eyebrow inline-flex items-center gap-1.5">
                 <SlidersHorizontal size={12} aria-hidden />
                 Ajustes
             </span>

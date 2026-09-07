@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { FileText, Smartphone, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeftRight, FileText, ReceiptText, Server, Smartphone, Trash2, Upload, X } from "lucide-react";
 import {
     ACCOUNT_KINDS,
     KIND_LABELS,
@@ -29,6 +30,8 @@ import { PanelChoice, PanelControls } from "@/components/settings/PanelControls"
 import { PanelSettingsToggle } from "@/components/settings/PanelSettingsToggle";
 import { usePanelSettings } from "@/components/settings/usePanelSettings";
 import { useStatementUpload } from "@/components/StatementDropzone";
+import { useReceiptCount } from "@/components/precios/useReceiptCount";
+import { track } from "@/lib/telemetry";
 
 /**
  * Documentos: every statement the account has ingested, with the two things a
@@ -213,6 +216,7 @@ export function DocumentosView() {
     async function setKind(s: Statement, kind: AccountKind | null) {
         // Optimistic: the select already shows the choice; a failure reverts.
         const before = items;
+        track("documentos.label_kind", { kind: kind ?? "none", bank: s.bank ?? "unknown" });
         setItems((cur) =>
             cur ? cur.map((x) => (x.id === s.id ? { ...x, account_kind: kind } : x)) : cur
         );
@@ -225,9 +229,15 @@ export function DocumentosView() {
     }
 
     async function remove(s: Statement) {
+        track("documentos.delete", { source: s.source ?? "unknown" });
         try {
             const res = await api.deleteStatement(s.id);
-            toast(`Se eliminaron ${res.transactions_deleted} movimiento(s).`, "positive");
+            toast(
+                res.transactions_deleted === 1
+                    ? "Se eliminó 1 movimiento."
+                    : `Se eliminaron ${res.transactions_deleted} movimientos.`,
+                "positive"
+            );
             await load();
         } catch (e) {
             toast(`No se pudo eliminar: ${(e as Error).message}`, "negative");
@@ -242,14 +252,14 @@ export function DocumentosView() {
                         Documentos
                     </h1>
                     <p className="mt-1.5 text-body text-graphite">
-                        Todo lo que Tomin ha leído. Etiqueta de qué cuenta viene cada
-                        documento; al eliminarlo se borran también sus movimientos.
+                        Cada PDF y XML que Tomin leyó y desechó. Aquí dices de qué cuenta
+                        viene cada uno; si eliminas un documento, sus movimientos se van con él.
                     </p>
                 </div>
                 {summary && <Summary {...summary} />}
             </div>
 
-            {error && <BackendNotice what="la información" detail={error} />}
+            {error && <BackendNotice what="tus documentos" detail={error} />}
 
             {/* Custody as news, not as status: the chip on the row states the
                 permanent fact, this line only marks the arrival, and only when
@@ -257,7 +267,7 @@ export function DocumentosView() {
                 reason — news should be closable. */}
             {arrived?.source === "device" && !noticeDismissed && (
                 <Notice className="flex items-center justify-between gap-3">
-                    Documento recibido desde tu teléfono.
+                    Documento recibido desde tu celular.
                     <button
                         type="button"
                         aria-label="Ocultar aviso"
@@ -274,7 +284,7 @@ export function DocumentosView() {
 
             {bankScope.selected.length > 0 && (
                 <p className="text-body-sm text-graphite">
-                    El filtro de bancos no aplica aquí — el archivo siempre muestra todos
+                    El filtro de bancos no aplica aquí: esta lista siempre muestra todos
                     tus documentos.
                 </p>
             )}
@@ -282,8 +292,8 @@ export function DocumentosView() {
             <section className="min-w-0 overflow-hidden rounded-card border border-mist bg-paper shadow-card">
                 <div className="border-b border-mist px-5 py-4 sm:px-6">
                     <div className="flex items-center gap-2">
-                        <h2 className="font-display text-title-sm font-normal text-ink">
-                            Archivo
+                        <h2 className="text-title-sm font-normal text-ink">
+                            Todo lo leído
                         </h2>
                         {sorted && (
                             <span className="text-body-sm text-graphite">{sorted.length}</span>
@@ -310,7 +320,7 @@ export function DocumentosView() {
                     <div className="px-5 py-4 sm:px-6">
                         <EmptyState
                             icon={FileText}
-                            title="Aún no hay documentos"
+                            title="Tomin no ha leído nada todavía"
                             action={
                                 <>
                                     <Button
@@ -343,7 +353,99 @@ export function DocumentosView() {
                     </ul>
                 )}
             </section>
+
+            {summary && summary.banks >= 2 && <TransfersNote banks={summary.banks} />}
+            <TicketsNote />
         </div>
+    );
+}
+
+/**
+ * With two or more banks, money moves between the user's own accounts and
+ * would count twice — once out, once in. The pairing runs at every ingest,
+ * but the concept only lived inside the row editor ("Es entre mis cuentas"),
+ * so nobody knew it existed or that they could help. Counted from the ledger
+ * itself, never estimated.
+ */
+function TransfersNote({ banks }: { banks: number }) {
+    const { dataVersion } = useAppData();
+    const [counts, setCounts] = useState<{ auto: number; user: number } | null>(null);
+
+    useEffect(() => {
+        let stale = false;
+        api.transactions("?limit=10000")
+            .then((page) => {
+                if (stale) return;
+                let auto = 0;
+                let user = 0;
+                for (const t of page.items) {
+                    if (!t.is_transfer) continue;
+                    if (t.transfer_source === "user") user += 1;
+                    else auto += 1;
+                }
+                setCounts({ auto, user });
+            })
+            .catch(() => !stale && setCounts(null));
+        return () => {
+            stale = true;
+        };
+    }, [dataVersion]);
+
+    if (!counts) return null;
+    const total = counts.auto + counts.user;
+    return (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-body-sm text-graphite">
+            <ArrowLeftRight size={14} aria-hidden className="text-ash" />
+            <span>
+                Tienes {banks} bancos.{" "}
+                {total === 0
+                    ? "Tomin no ha reconocido todavía pagos entre tus cuentas."
+                    : `${total} movimiento${total === 1 ? "" : "s"} ya cuenta${total === 1 ? "" : "n"} como pago entre tus cuentas y no se duplica${total === 1 ? "" : "n"}${counts.user > 0 ? ` (${counts.user} los marcaste tú)` : ""}.`}{" "}
+                Si falta uno, ábrelo en Movimientos y marca «Es entre mis cuentas».
+            </span>
+            <Link
+                href="/?buscar=transferencia"
+                onClick={() => track("nav.view", { to: "/", source: "documentos_transfers" })}
+                className="underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+            >
+                Revisar en Movimientos
+            </Link>
+        </p>
+    );
+}
+
+/**
+ * Where tickets come from, said in the one place that lists what Tomin has
+ * read. The Precios tab appears only once there is a ticket; without this
+ * line a web-only user would never learn that the phone app is the way in.
+ */
+function TicketsNote() {
+    const { dataVersion } = useAppData();
+    const count = useReceiptCount(dataVersion);
+    if (count === null) return null;
+    return (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-body-sm text-graphite">
+            <ReceiptText size={14} aria-hidden className="text-ash" />
+            {count === 0 ? (
+                <>
+                    Los tickets del súper entran desde la app de Tomin en el celular
+                    (la foto se queda ahí; solo viaja el texto). Aquí todavía no hay
+                    ninguno.
+                </>
+            ) : (
+                <>
+                    {count} ticket{count === 1 ? "" : "s"} leído{count === 1 ? "" : "s"} desde
+                    tu celular.
+                    <Link
+                        href="/precios"
+                        onClick={() => track("nav.view", { to: "/precios", source: "documentos" })}
+                        className="underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+                    >
+                        Ver precios
+                    </Link>
+                </>
+            )}
+        </p>
     );
 }
 
@@ -370,8 +472,8 @@ function Summary({
 function Stat({ label, value }: { label: string; value: string }) {
     return (
         <div className="px-4 py-3 sm:px-5">
-            <dt className="text-caption uppercase text-ash">{label}</dt>
-            <dd className="mt-0.5 font-display text-metric-sm font-normal tabular-nums text-ink">
+            <dt className="eyebrow">{label}</dt>
+            <dd className="tabular mt-0.5 text-metric-sm font-normal text-ink">
                 {value}
             </dd>
         </div>
@@ -443,16 +545,28 @@ function StatementRow({
                         number — and it is absent, never negated, for the web
                         route and for everything ingested before the field
                         existed. */}
+                    {s.source === "web" && (
+                        <span
+                            title="El PDF viajó al servidor, se leyó en memoria y se descartó. Solo se guardaron los movimientos."
+                            className={cn(
+                                "inline-flex shrink-0 items-center gap-1 rounded-tag bg-fog px-2 py-0.5",
+                                "text-label font-medium text-graphite ring-1 ring-inset ring-mist"
+                            )}
+                        >
+                            <Server size={11} aria-hidden className="text-ash" />
+                            Leído en el servidor y desechado
+                        </span>
+                    )}
                     {s.source === "device" && (
                         <span
-                            title="El archivo original vive en tu teléfono; aquí solo llegaron los datos."
+                            title="El archivo original vive en tu celular; aquí solo llegaron los datos."
                             className={cn(
                                 "inline-flex shrink-0 items-center gap-1 rounded-tag bg-fog px-2 py-0.5",
                                 "text-label font-medium text-graphite ring-1 ring-inset ring-mist"
                             )}
                         >
                             <Smartphone size={11} aria-hidden className="text-ash" />
-                            Custodiado en tu teléfono
+                            Custodiado en tu celular
                         </span>
                     )}
                     <span className="inline-flex items-center gap-1.5 text-label text-graphite">

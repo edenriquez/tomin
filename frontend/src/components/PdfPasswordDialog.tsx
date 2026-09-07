@@ -74,7 +74,7 @@ export function PdfPasswordDialog({
                         <Lock size={16} />
                     </div>
                     <div className="min-w-0">
-                        <h2 className="text-title-sm font-semibold text-ink">
+                        <h2 className="text-title-sm font-normal text-ink">
                             Este PDF tiene contraseña
                         </h2>
                         <p className="mt-1 text-body-sm text-graphite">

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, SearchX, Inbox, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAppData } from "@/components/AppChrome";
+import { useSearchParams } from "next/navigation";
 import { useTimeWindow } from "@/components/TimeWindowProvider";
 import { msToIso } from "@/lib/window";
 import { track } from "@/lib/telemetry";
@@ -32,7 +33,7 @@ import {
 } from "@/components/charts/TransactionsChart";
 import { useCategories } from "@/lib/categories";
 import { useBankScope } from "@/lib/banks";
-import { dayLabel, mxn2 } from "@/lib/format";
+import { dayLabel, mxn, mxn2 } from "@/lib/format";
 import {
     ChartLens,
     LensChips,
@@ -101,7 +102,10 @@ export function MovimientosView() {
         ? Math.min(MAX_PAGE, Math.max(MIN_PAGE, Math.round(listCfg.pageSize)))
         : DEFAULT_PAGE;
 
-    const [search, setSearch] = useState("");
+    // `?buscar=` seeds the search once, so another view can hand over a
+    // filtered ledger ("revisa las transferencias") as a link.
+    const seeded = useSearchParams().get("buscar") ?? "";
+    const [search, setSearch] = useState(seeded);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(page);
     const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
@@ -190,6 +194,25 @@ export function MovimientosView() {
     // A refetch with data already on screen: keep it, dim it, let the chart
     // tween into the new series when it arrives. Only the first load blanks.
     const refreshing = fetching && !loading;
+
+    // One sentence before the dots: what left, in how many charges, over which
+    // days. Built from the rows on screen so it cannot disagree with the chart
+    // or the list, and absent while there are no rows — a total of $0 over an
+    // empty window would be a claim, not a fact.
+    const orientation = useMemo(() => {
+        if (!filtered || filtered.length === 0) return null;
+        const expenses = filtered.filter((t) => t.type === "expense");
+        const spent = expenses.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        const span =
+            bounds.start && bounds.end
+                ? `del ${dayLabel(fromIso(bounds.start))} al ${dayLabel(fromIso(bounds.end))}`
+                : "en todo tu historial";
+        const needle = search.trim() ? ` que contienen «${search.trim()}»` : "";
+        if (expenses.length === 0) {
+            return `Sin cargos ${span}${needle}; ${filtered.length.toLocaleString("es-MX")} abono${filtered.length === 1 ? "" : "s"}.`;
+        }
+        return `Salieron ${mxn(spent)} en ${expenses.length.toLocaleString("es-MX")} cargo${expenses.length === 1 ? "" : "s"} ${span}${needle}.`;
+    }, [filtered, bounds.start, bounds.end, search]);
     const filtering = Boolean(search.trim()) && Boolean(listed && listed.length > 0);
 
     return (
@@ -198,6 +221,7 @@ export function MovimientosView() {
 
             <ChartCard
                 title="Cada movimiento"
+                subtitle={orientation}
                 action={<PanelSettingsToggle />}
                 controls={
                     <>
@@ -301,7 +325,7 @@ export function MovimientosView() {
             </ChartCard>
 
             <div className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
-                <h2 className="flex items-baseline gap-2 font-display text-title-sm font-normal text-ink">
+                <h2 className="flex items-baseline gap-2 text-title-sm font-normal text-ink">
                     Movimientos
                     {listed && (
                         <span className="tabular font-sans text-body-sm text-graphite">
@@ -503,6 +527,12 @@ function EmptyNote({
                 : "Prueba con un periodo más amplio, o sube un estado de cuenta que lo cubra."}
         </EmptyState>
     );
+}
+
+/** Local midnight, so the label is the day in the window and not the one before. */
+function fromIso(day: string): Date {
+    const [y, m, d] = day.split("-").map(Number);
+    return new Date(y, m - 1, d);
 }
 
 /** "Cargo inusual" → "Cargos inusuales"; the other labels pluralise by a plain s. */

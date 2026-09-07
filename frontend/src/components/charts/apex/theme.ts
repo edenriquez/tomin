@@ -1,5 +1,5 @@
 import type { ApexOptions } from "apexcharts";
-import { chart, colors } from "@/design/tokens";
+import { chart, colors, fontSize, fontWeight } from "@/design/tokens";
 
 /**
  * Every chart in the app deep-merges these. Anything set here is a rule, not
@@ -46,14 +46,14 @@ export const baseOptions: ApexOptions = {
         crosshairs: { stroke: { color: chart.grid, dashArray: 0, width: 1 } },
         tooltip: { enabled: false },
         labels: {
-            style: { colors: chart.axisLabel, fontSize: "12px", fontWeight: 400 },
+            style: { colors: chart.axisLabel, fontSize: fontSize.label[0], fontWeight: Number(fontWeight.normal) },
         },
     },
     yaxis: {
         axisBorder: { show: false },
         axisTicks: { show: false },
         labels: {
-            style: { colors: chart.axisLabel, fontSize: "12px", fontWeight: 400 },
+            style: { colors: chart.axisLabel, fontSize: fontSize.label[0], fontWeight: Number(fontWeight.normal) },
         },
     },
     stroke: {
@@ -67,7 +67,7 @@ export const baseOptions: ApexOptions = {
     legend: { show: false },
     tooltip: {
         theme: "light",
-        style: { fontSize: "13px" },
+        style: { fontSize: fontSize["body-sm"][0] },
         marker: { show: true },
     },
     states: {

@@ -5,6 +5,7 @@ import { PanelControls } from "@/components/settings/PanelControls";
 /** The one card charts live in: Paper, hairline, the 16px-blur whisper. */
 export function ChartCard({
     title,
+    subtitle,
     badge,
     controls,
     action,
@@ -12,6 +13,10 @@ export function ChartCard({
     children,
 }: {
     title: string;
+    /** One line under the title that orients the reader before the chart
+     *  does: the span, the total, the count. Never a `$0` for missing data —
+     *  callers pass nothing when there is nothing to say. */
+    subtitle?: ReactNode;
     /** Quality qualifier from the metric catalog, e.g. "Estimado" for a
      *  heuristic the backend itself doesn't fully trust. */
     badge?: string;
@@ -32,7 +37,7 @@ export function ChartCard({
             )}
         >
             <div className="flex items-center gap-2">
-                <h2 className="font-display text-title-sm font-normal text-ink">{title}</h2>
+                <h2 className="text-title-sm font-normal text-ink">{title}</h2>
                 {badge && (
                     <span className="rounded-tag bg-fog px-2 py-0.5 text-label font-medium text-graphite ring-1 ring-inset ring-mist">
                         {badge}
@@ -40,6 +45,7 @@ export function ChartCard({
                 )}
                 {action && <span className="ml-auto">{action}</span>}
             </div>
+            {subtitle && <p className="mt-1 text-body-sm text-graphite">{subtitle}</p>}
             {controls && <PanelControls>{controls}</PanelControls>}
             <div className="mt-4">{children}</div>
         </section>

@@ -52,7 +52,7 @@ export function Sheet({
             >
                 <div className="flex items-start justify-between gap-4 border-b border-mist px-6 py-4">
                     <div className="min-w-0">
-                        <h2 className="text-title-sm font-semibold text-ink">{title}</h2>
+                        <h2 className="text-title-sm font-normal text-ink">{title}</h2>
                         {description && (
                             <p className="mt-0.5 text-body-sm text-graphite">{description}</p>
                         )}

@@ -1,7 +1,38 @@
 # Tomin Redesign — Architecture & UX Plan
 
-> Status: proposal for review. Nothing in here is implemented yet.
-> Companion: `docs/tomin-pipeline.excalidraw` (how the current system works).
+> **Estado al 2026-09-05** (auditoría de producto; sustituye al header
+> "proposal for review / nothing implemented" que quedó obsoleto).
+>
+> **Enviado**, según el propio §10 y el git log (`git log --oneline`):
+> - Backend B0–B7: correctness foundation (9e798ac, 2026-07-27), metric
+>   engine + dashboards B3–B4 (35b4735), PATCH transacciones B5 (0aef628),
+>   tags + bridge B6 y flags de transferencia / retiro B7 (b626fd9,
+>   2026-07-28). B8 (accounts/balances), B9–B10 (CFDI v2 + reconciliación)
+>   y B11–B12 (recurrencia v2, anomalías) **no** se enviaron como se
+>   describen aquí; la recurrencia sigue en `/api/analytics/recurring`
+>   (legacy) y las "lecturas" de atención (`GET /api/transactions/attention`,
+>   a9ba1a9, 2026-09-01) son un servicio aparte, no el ensamble de B12.
+> - Frontend F0–F7: design foundation F0–F2 (057f959), shell F3 (6741c79),
+>   command center F4 + retiro de páginas F5 (5630d8f), filtros F6
+>   (8039217), widgets F7 (c48f681, 2026-07-28). Después, el restyle
+>   "Seline" de §10 (2026-08-12) y la **reconstrucción onboarding-first**
+>   (ce66e17, 2026-08-14) que retiró el command center.
+>
+> **No enviado / retirado**: `/inicio` (command center de widgets),
+> `/inicio/catalogo`, `/w/[widgetId]` y `/ajustes` existieron entre F4 y
+> ce66e17 y hoy son redirects a `/` (`frontend/next.config.mjs`). La IA que
+> se envió **difiere de §4**: no hay grid de widgets ni picker; hay seis vistas
+> fijas — Movimientos (`/`), Categorías, Fijos, Pronóstico, Precios,
+> Documentos — más el menú "Lecturas" → `/workspace` (`components/AppShell.tsx`).
+> Fijos e ingresos etiquetados persisten en `localStorage`, no en el backend.
+>
+> **Decisión revertida**: §8.1 "web only, Expo out of v1" se revirtió el
+> 2026-08-14 con `docs/custody-plan.md` (el teléfono es el custodio; F1
+> enviado en 192050a). Ver la nota en §8.
+>
+> Lo que sigue se conserva como registro histórico de la propuesta original.
+> Companion: `docs/tomin-pipeline.excalidraw` (cómo funcionaba el sistema
+> cuando se escribió).
 
 ## Context
 
@@ -481,11 +512,25 @@ each phase, don't trust the build.
 1. **Scope: web only.** The Expo app is out of v1. ApexCharts is DOM/SVG and
    cannot run in React Native, so mobile would need a different chart library
    behind the shared tokens whenever it happens.
+
+   > **Revertido el 2026-08-14.** `docs/custody-plan.md` hace del teléfono el
+   > custodio del archivo (extracción en el dispositivo, envío sellado a
+   > `POST /api/ingest/extracted`, `statements.source = "device"`); F1 se envió
+   > en 192050a y el parser de Banco Azteca + hardening en 8b4247f
+   > (2026-08-19). La app móvil sigue sin distribuirse y la web sigue
+   > aceptando el PDF (ruta transitoria), así que hoy conviven ambas rutas.
+   > La reversión no se había registrado aquí hasta la auditoría del
+   > 2026-09-05.
 2. **Ink text on the Ember button.** White measures 3.14:1 and fails AA at
    button sizes; Ink is 6.68:1. Deliberate deviation from the style guide.
 3. **No auth in v1.** Validating the product hypothesis comes first. Widget
    layouts live in `localStorage` behind a `useLayout()` hook so the move to
    `profiles.ui_preferences` is one file. Supabase auth is v2.
+
+   > **Vigente al 2026-09-05**, y ya es el bloqueo #1 para cualquier URL
+   > pública: `AUTH_DISABLED=true` en `backend/.env.example`, el frontend no
+   > envía `Authorization` y `landing/` manda a la app desde "Comenzar".
+   > Ver `docs/audit/2026-09-05/historia.md`.
 4. **All backend correctness work is in v1** — B0 through B12.
 
 ### Sequencing note given (3) + (4)
