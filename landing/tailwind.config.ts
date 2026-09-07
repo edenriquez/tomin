@@ -5,6 +5,7 @@ import {
     colors,
     fontFamily,
     fontSize,
+    fontWeight,
     maxWidth,
     zIndex,
 } from "./src/design/tokens";
@@ -29,6 +30,8 @@ const config: Config = {
                 Object.entries(zIndex).map(([k, v]) => [k, String(v)])
             ),
         },
+        /* Theme-level, not extend: the whole weight scale is these two. */
+        fontWeight: { ...fontWeight },
         boxShadow: { ...boxShadow, ...dark.boxShadow },
     },
     plugins: [],

@@ -8,10 +8,35 @@ export const SITE_URL =
 /** Where every "Comenzar" sends people: the deployed Tomin app. */
 export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
+/** Which button on the landing sent the visitor. Read by the app as `utm_content`. */
+export type CtaPlacement = "nav" | "hero" | "band" | "footer" | "faq";
+
+/**
+ * The app URL stamped with where the click came from, so the dashboard can
+ * tell a landing visitor from a returning user and which CTA converts.
+ * Standard UTM names: `utm_source=landing`, `utm_medium=cta`,
+ * `utm_content=<placement>`.
+ */
+export function appUrl(placement: CtaPlacement): string {
+    const url = new URL(APP_URL);
+    url.searchParams.set("utm_source", "landing");
+    url.searchParams.set("utm_medium", "cta");
+    url.searchParams.set("utm_content", placement);
+    return url.toString();
+}
+
+/**
+ * One promise, everywhere: the H1, the <title>, the share card, the meta
+ * description and the dashboard's <title> (frontend/src/app/layout.tsx,
+ * mirrored verbatim) all say the same thing. The headline is the product's
+ * one opinion — statements are written not to be read — and its answer. No
+ * "Tomin — " prefix on the title: the headline already names the brand.
+ * See docs/voice-and-type.md.
+ */
 export const SITE = {
     name: "Tomin",
-    title: "Tomin — Tu dinero, claro en minutos",
+    headline: "Tu estado de cuenta no lo lee nadie. Tomin sí.",
+    title: "Tu estado de cuenta no lo lee nadie. Tomin sí.",
     description:
-        "Sube el PDF de tu banco. Tomin lo lee, lo desecha y te devuelve tus números: cada movimiento, cada categoría, cada cobro recurrente.",
-    tagline: "Toma el control de tu peso.",
+        "Sube el PDF de tu banco. Tomin saca cada movimiento, señala los cobros que se repiten y los que no cuadran, y desecha el archivo. Sin conectar cuentas, sin tu contraseña, sin capturar a mano.",
 } as const;

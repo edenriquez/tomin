@@ -1,31 +1,38 @@
 /**
- * The one set of fake-but-plausible numbers both POCs quote, so the comparison
- * between /b and /d is about design, not about which one got the better copy.
- * Everything is in pesos and deliberately unglamorous — the product's voice.
+ * The one set of fake-but-plausible numbers the landing quotes. They belong to
+ * an example user, not to anyone real, and the page says so ("cifras de
+ * ejemplo"). Everything is in pesos and plain: the opinion lives in the
+ * headlines, never in a figure (docs/voice-and-type.md).
  */
 export const FIGURES = {
-    /** The hero number on /b: a year of coffees. */
-    heroAmount: "$4,812.00",
-    heroCaption: "lo que se fue en cafés este año",
+    /**
+     * The hero number: what the sub-headline promises ("señala los cobros que
+     * se repiten") shown as a figure: the recurring charges one statement
+     * surfaced. The same figure the Plan card details below.
+     */
+    heroAmount: "$487.00",
+    heroAmountUnit: "/mes",
+    heroCaption: "en 3 cobros que se repiten y no recordabas, encontrados en un solo estado de cuenta",
 
     movements: 214,
-    movementsCaption: "movimientos en un estado de cuenta de Nu",
+    /** Attention readings on that statement: unusual charges, duplicates, new merchants. */
+    attentionCount: 3,
 
     categoriesTop: "Súper",
     categoriesTopShare: "31%",
 
     fixedCount: 3,
     fixedMonthly: "$487.00",
-    fixedCaption: "suscripciones que no recordabas",
+    fixedCaption: "que no recordabas",
 
     forecastNeed: "$9,140",
-    forecastCaption: "fijos antes de la próxima quincena",
 
     ticketStore: "SORIANA",
     ticketTotal: "$1,412.60",
     ticketItem: "Leche 1L",
     ticketDelta: "+19%",
-    ticketLine: "La leche te subió 19%.",
+    /** A card title, so no full stop. */
+    ticketLine: "La leche te subió 19%",
 } as const;
 
 /** Scatter dots for the story and the Movimientos mock, in a 0–100 × 0–80 box. */
@@ -45,3 +52,17 @@ export const STACKS: ReadonlyArray<readonly [number, number, number]> = [
 
 /** Calendar cells with a charge (0–41, 14 columns × 3 rows). */
 export const CHARGED = new Set([2, 9, 16, 23, 30, 37]);
+
+/**
+ * What the backend can read today, by how well it reads it. Mirrors
+ * `backend/src/tomin/adapters/outbound/extraction/classifier.py` and
+ * `parsing/factory.py`: two banks have a parser written for their layout;
+ * the rest are recognised by name and read with the generic parser; the SAT
+ * XML has its own reader. Keep this list honest — it is the one place the
+ * landing makes a checkable claim.
+ */
+export const BANKS = {
+    dedicated: ["Banamex", "Banco Azteca"],
+    generic: ["Nu", "BBVA", "Santander", "Banorte", "HSBC"],
+    sat: "XML del SAT (CFDI)",
+} as const;

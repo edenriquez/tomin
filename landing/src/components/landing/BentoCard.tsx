@@ -25,10 +25,11 @@ export function BentoCard({
                 className
             )}
         >
-            <div className="flex items-baseline justify-between gap-4">
-                <p className="eyebrow">{eyebrow}</p>
+            {/* The eyebrow never breaks mid-phrase; on a narrow card the metric drops to its own line, still right-aligned. */}
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <p className="eyebrow whitespace-nowrap">{eyebrow}</p>
                 {metric && (
-                    <p className="tabular font-display text-metric-sm text-bone sm:text-metric">{metric}</p>
+                    <p className="ml-auto tabular text-metric-sm text-bone sm:text-metric">{metric}</p>
                 )}
             </div>
             <div

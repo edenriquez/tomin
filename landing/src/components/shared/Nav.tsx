@@ -1,4 +1,4 @@
-import { APP_URL } from "@/lib/site";
+import { appUrl } from "@/lib/site";
 import { cn } from "@/lib/cn";
 import { Button } from "./Button";
 import { Wordmark, type Tone } from "./Wordmark";
@@ -6,9 +6,11 @@ import { Wordmark, type Tone } from "./Wordmark";
 /**
  * Sticky nav. The one element on either page allowed `backdrop-blur` — a
  * blurred strip the height of a button costs nothing; a blurred hero does.
+ * Anchors are absolute (`/#…`) so the nav also works from `/privacidad`.
  */
 export function Nav({ tone = "light" }: { tone?: Tone }) {
     const dark = tone === "dark";
+    const link = cn("hidden text-body sm:inline", dark ? "text-dust hover:text-bone" : "text-graphite hover:text-ink");
     return (
         <header
             className={cn(
@@ -19,16 +21,13 @@ export function Nav({ tone = "light" }: { tone?: Tone }) {
             <div className="mx-auto flex w-full max-w-page items-center justify-between px-5 py-4 sm:px-8">
                 <Wordmark tone={tone} />
                 <nav className="flex items-center gap-2 sm:gap-4">
-                    <a
-                        href="#como-funciona"
-                        className={cn(
-                            "hidden text-body sm:inline",
-                            dark ? "text-dust hover:text-bone" : "text-graphite hover:text-ink"
-                        )}
-                    >
+                    <a href="/#como-funciona" className={link}>
                         Cómo funciona
                     </a>
-                    <Button href={APP_URL} tone={tone} size="sm">
+                    <a href="/#preguntas" className={link}>
+                        Preguntas
+                    </a>
+                    <Button href={appUrl("nav")} tone={tone} size="sm">
                         Comenzar
                     </Button>
                 </nav>

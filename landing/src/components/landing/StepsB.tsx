@@ -1,15 +1,28 @@
 const STEPS = [
-    { title: "Subes el archivo", body: "El PDF de tu banco o el XML del SAT, arrastrado a la pantalla. Nada de credenciales." },
-    { title: "Tomin lo lee y lo desecha", body: "Extrae los movimientos, detecta el banco, categoriza y descarta el archivo original." },
-    { title: "Ves tu dinero", body: "Gráficas, categorías y cobros recurrentes desde el primer documento — y mejores con cada corrección tuya." },
+    {
+        title: "Subes el archivo",
+        body: "El PDF de tu banco o el XML del SAT, arrastrado a la pantalla. Si el PDF trae contraseña, Tomin te la pide una vez para abrirlo y no la guarda. La de tu banca en línea no se pide nunca.",
+    },
+    {
+        title: "Tomin lo lee y lo desecha",
+        body: "Saca los movimientos, reconoce el banco, categoriza y desecha el archivo original. Solo quedan tus números.",
+    },
+    {
+        title: "Ves tu dinero",
+        body: "Gráficas, categorías y cobros que se repiten desde el primer documento, y mejores con cada corrección tuya. Con dos cuentas, Tomin empareja los pagos que coinciden entre ellas; los que no, los marcas tú para que no cuenten dos veces.",
+    },
 ];
 
-/** Three steps on one rule: a timeline read left to right. */
+/**
+ * Three steps on one rule: a timeline read left to right. Sits right under the
+ * hero so "Cómo funciona" is the second thing anyone reads: a bold headline
+ * provokes "how?", and this is the answer, in the product's mechanics.
+ */
 export function StepsB() {
     return (
         <section id="como-funciona" className="mx-auto w-full max-w-page scroll-mt-20 px-5 py-14 sm:px-8 sm:py-20">
             <p className="eyebrow">Cómo funciona</p>
-            <h2 className="mt-3 text-title-md sm:text-title-lg">Tres pasos. Ninguno pide tu contraseña.</h2>
+            <h2 className="mt-3 max-w-[24ch] text-title-md sm:text-title-lg">Tres pasos. Ninguno es conectar tu banco.</h2>
             <ol className="relative mt-10 grid gap-8 sm:grid-cols-3 sm:gap-6">
                 <span aria-hidden className="absolute left-0 right-0 top-[7px] hidden h-px bg-lineStrong sm:block" />
                 {STEPS.map((s, i) => (

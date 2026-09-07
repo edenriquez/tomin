@@ -10,10 +10,12 @@ const LOGOS = [
 
 /**
  * "Reconoce a quien te cobra": the merchants Tomin already names from a raw
- * statement line. Pure CSS loop over a duplicated track; pauses on hover and
- * under reduced motion. Plain <img>: 16 tiny PNGs don't need the optimizer.
+ * statement line (every slug here is in frontend/src/lib/merchants.ts). Pure
+ * CSS loop over a duplicated track; pauses on hover and under reduced motion.
+ * Plain <img>: 16 tiny PNGs don't need the optimizer. `note` scopes the
+ * promise: these are named; the rest you name once.
  */
-export function LogoMarquee({ tone = "light", label }: { tone?: Tone; label: string }) {
+export function LogoMarquee({ tone = "light", label, note }: { tone?: Tone; label: string; note?: string }) {
     const dark = tone === "dark";
     return (
         <section aria-label={label} className="mx-auto w-full max-w-page px-5 py-10 sm:px-8 sm:py-14">
@@ -37,6 +39,11 @@ export function LogoMarquee({ tone = "light", label }: { tone?: Tone; label: str
                     ))}
                 </div>
             </div>
+            {note && (
+                <p className={cn("mx-auto mt-6 max-w-prose text-center text-body-sm", dark ? "text-dust" : "text-ash")}>
+                    {note}
+                </p>
+            )}
         </section>
     );
 }

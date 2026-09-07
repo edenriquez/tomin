@@ -7,10 +7,33 @@ export const alt = SITE.title;
 
 /**
  * The share card. Soot ground, the wordmark, one headline with the highlight
- * pill — the same typographic move as the pages, in the system font Satori
- * ships with (no font fetch at build).
+ * pill — the same typographic move as the pages, in the same display face.
+ * Instrument Serif is fetched at build from the Google Fonts CSS API,
+ * subset to the characters the card uses; if that fetch fails the card
+ * falls back to Satori's system sans rather than failing the build.
  */
-export default function OpenGraphImage() {
+/** SITE.headline split around the highlight. Word groups wrap as units in Satori, so the first half is two. */
+const HEADLINE = { before: ["Tu estado de cuenta", "no lo lee nadie."], highlight: "Tomin sí", after: "." };
+
+async function loadDisplayFont(text: string): Promise<ArrayBuffer | null> {
+    try {
+        const css = await fetch(
+            `https://fonts.googleapis.com/css2?family=Instrument+Serif&text=${encodeURIComponent(text)}`,
+            // An unrecognised UA gets TTF, which Satori can read; a browser UA gets woff2, which it cannot.
+            { headers: { "User-Agent": "curl/8" } }
+        ).then((r) => r.text());
+        const url = css.match(/src:\s*url\(([^)]+)\)/)?.[1];
+        if (!url) return null;
+        return await fetch(url).then((r) => r.arrayBuffer());
+    } catch {
+        return null;
+    }
+}
+
+export default async function OpenGraphImage() {
+    const text = `${SITE.name} ${HEADLINE.before.join(" ")} ${HEADLINE.highlight} ${HEADLINE.after} ${SITE.description}`;
+    const data = await loadDisplayFont(text);
+    const fontFamily = data ? "Instrument Serif" : "sans-serif";
     return new ImageResponse(
         (
             <div
@@ -23,7 +46,8 @@ export default function OpenGraphImage() {
                     padding: 72,
                     background: "#1c1917",
                     color: "#e7e5e4",
-                    fontFamily: "sans-serif",
+                    fontFamily,
+                    letterSpacing: 0,
                 }}
             >
                 <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 30 }}>
@@ -33,11 +57,16 @@ export default function OpenGraphImage() {
                             fill="#3ba6f1"
                         />
                     </svg>
-                    Tomin
+                    {SITE.name}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", fontSize: 88, lineHeight: 1.05, letterSpacing: -3 }}>
-                        <span>Tu dinero,&nbsp;</span>
+                    <div style={{ display: "flex", flexWrap: "wrap", fontSize: 76, lineHeight: 1.08 }}>
+                        {/* Word spacing as margin: Satori drops a trailing &nbsp; inside a span. */}
+                        {HEADLINE.before.map((chunk) => (
+                            <span key={chunk} style={{ marginRight: "0.24em" }}>
+                                {chunk}
+                            </span>
+                        ))}
                         <span
                             style={{
                                 background: "rgba(51,152,225,0.22)",
@@ -46,16 +75,20 @@ export default function OpenGraphImage() {
                                 padding: "0 18px",
                             }}
                         >
-                            claro en minutos
+                            {HEADLINE.highlight}
                         </span>
-                        <span>.</span>
+                        {/* Tuck the period against the pill, as the page's .highlight does with its negative inline margin. */}
+                        <span style={{ marginLeft: -10 }}>{HEADLINE.after}</span>
                     </div>
-                    <div style={{ fontSize: 30, color: "#a8a29e", maxWidth: 900 }}>
-                        Sube el PDF de tu banco. Lo leemos, lo desechamos y te devolvemos tus números.
+                    <div style={{ fontSize: 30, lineHeight: 1.3, color: "#a8a29e", maxWidth: 900 }}>
+                        {SITE.description}
                     </div>
                 </div>
             </div>
         ),
-        size
+        {
+            ...size,
+            fonts: data ? [{ name: "Instrument Serif", data, weight: 400, style: "normal" }] : undefined,
+        }
     );
 }

@@ -4,9 +4,11 @@ import { LogoMarquee } from "@/components/shared/LogoMarquee";
 import { CtaBand } from "@/components/shared/CtaBand";
 import { Footer } from "@/components/shared/Footer";
 import { HeroB } from "@/components/landing/HeroB";
+import { StepsB } from "@/components/landing/StepsB";
 import { BentoB } from "@/components/landing/BentoB";
 import { CustodyB } from "@/components/landing/CustodyB";
-import { StepsB } from "@/components/landing/StepsB";
+import { BanksB } from "@/components/landing/BanksB";
+import { FaqB } from "@/components/landing/FaqB";
 import "./landing.css";
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#141211" };
@@ -15,16 +17,28 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
  * The landing — "Señal oscura". One dark root via data-theme (see
  * globals.css): Night ground, a drifting cyan mesh in the hero, the product
  * as six drawn readings in a bento grid.
+ *
+ * The order is the argument: the opinion and its answer (hero) → how it
+ * works (three steps, `#como-funciona`) → proof (the six readings, the
+ * merchants it names) → the second opinion (custody) → honesty as proof
+ * (which banks, how well) → objections (FAQ) → the close as an echo.
+ * Voice and glossary: docs/voice-and-type.md.
  */
 export default function Landing() {
     return (
         <main data-theme="dark" className="min-h-dvh bg-night text-dust">
             <Nav tone="dark" />
             <HeroB />
-            <LogoMarquee tone="dark" label="Reconoce a quien te cobra" />
-            <BentoB />
-            <CustodyB />
             <StepsB />
+            <BentoB />
+            <LogoMarquee
+                tone="dark"
+                label="Reconoce a quien te cobra"
+                note="A estos Tomin ya los nombra desde el renglón crudo del banco. Los que no conoce llegan como vienen en el estado de cuenta: los nombras una vez y Tomin los aprende."
+            />
+            <CustodyB />
+            <BanksB />
+            <FaqB />
             <CtaBand tone="dark" />
             <Footer tone="dark" />
         </main>

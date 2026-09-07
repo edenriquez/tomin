@@ -96,41 +96,52 @@ export const chart = {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Two rules are baked into the scale so they are mechanical rather than
- * remembered:
+ * Tres reglas van cosidas a la escala para que sean mecánicas y no memoria:
  *
- * 1. Display sizes carry tight negative tracking (-0.021em at 52, -0.025em at
- *    32) and are set at weight 400. The whisper-weight headline is the brand
- *    voice — never bump a heading to 600 for emphasis, use size or a highlight
- *    span instead.
- * 2. Body is 14px at 1.64 line-height with slight positive tracking. This is
- *    the dominant UI rhythm; do not break it.
+ * 1. Display es una serif de texto (Instrument Serif), siempre 400 y nunca
+ *    bajo 24 px. La opinión sale de las palabras, del contraste y del tamaño,
+ *    nunca del peso. Tracking 0: el tracking negativo es hábito de grotesca y
+ *    en una serif condensada choca las letras.
+ * 2. Los números no tienen opinión. Toda cifra, label, celda y título de
+ *    contenedor va en Inter (`tabular`); los tokens `metric-*` son de Inter y
+ *    los números nunca toman tokens de palabras.
+ * 3. El cuerpo 14/1.64 es el ritmo dominante; no romperlo.
  */
 export const fontSize = {
-    "display-lg": ["72px", { lineHeight: "1.0", letterSpacing: "-0.03em" }],
-    display: ["52px", { lineHeight: "1.12", letterSpacing: "-0.021em" }],
-    "title-lg": ["32px", { lineHeight: "1.25", letterSpacing: "-0.025em" }],
-    "title-md": ["24px", { lineHeight: "1.25", letterSpacing: "-0.02em" }],
-    "title-sm": ["20px", { lineHeight: "1.2", letterSpacing: "-0.005em" }],
+    /** Words in the display face. >=24px is the floor for the serif. */
+    "display-lg": ["72px", { lineHeight: "1.04", letterSpacing: "0" }],
+    display: ["52px", { lineHeight: "1.08", letterSpacing: "0" }],
+    "title-lg": ["32px", { lineHeight: "1.15", letterSpacing: "0" }],
+    "title-md": ["24px", { lineHeight: "1.2", letterSpacing: "0" }],
+    /** Below the serif floor: Inter 500. Card titles, container titles, sheet titles. */
+    "title-sm": ["20px", { lineHeight: "1.2", letterSpacing: "-0.012em" }],
     "body-lg": ["16px", { lineHeight: "1.69", letterSpacing: "0.003em" }],
     body: ["14px", { lineHeight: "1.64", letterSpacing: "0.004em" }],
     "body-sm": ["13px", { lineHeight: "1.53", letterSpacing: "0.004em" }],
     label: ["12px", { lineHeight: "1.33", letterSpacing: "0.004em" }],
-    /** All-caps eyebrows. The wide tracking is the point. */
-    caption: ["10px", { lineHeight: "1.6", letterSpacing: "0.025em" }],
-    /** Numbers that are the point of the card. Always tabular, always weight 400. */
+    /** All-caps eyebrows. The wide tracking is the point — it lives here, not in `.eyebrow`. */
+    caption: ["10px", { lineHeight: "1.6", letterSpacing: "0.08em" }],
+    /** Numbers that are the point of the card. Always Inter, always tabular, always weight 400. */
     metric: ["32px", { lineHeight: "1.15", letterSpacing: "-0.025em" }],
     "metric-sm": ["20px", { lineHeight: "1.2", letterSpacing: "-0.015em" }],
+    /** La cifra del hero; los números nunca toman tokens de palabras. */
+    "metric-lg": ["56px", { lineHeight: "1", letterSpacing: "-0.03em" }],
+    "metric-xl": ["96px", { lineHeight: "1", letterSpacing: "-0.035em" }],
 } as const;
+
+/** Los únicos dos pesos del sistema. Set at `theme.fontWeight` (not `extend`) so `font-semibold` does not exist. */
+export const fontWeight = { normal: "400", medium: "500" } as const;
 
 export const fontFamily: Record<string, string[]> = {
     sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
     /**
-     * Roobert is a commercial licence; Inter Tight is the guide's own named
-     * substitute. Display sizes (>=20px), metrics, and hero copy only — a
-     * display face inside a 13px table row reads as a mistake.
+     * Instrument Serif, 400 only, from next/font/google. Words at >=24px: the
+     * hero, section H2s, onboarding, Plan headlines, empty-state titles, FAQ
+     * questions. Never a number, a label or a container title — those are
+     * Inter. Inter is deliberately absent from this chain: a serif that fell
+     * back to a grotesque would hide a failed font load.
      */
-    display: ["var(--font-display)", "var(--font-inter)", "ui-sans-serif", "sans-serif"],
+    display: ["var(--font-display)", "Georgia", "Times New Roman", "serif"],
 };
 
 /* -------------------------------------------------------------------------- */

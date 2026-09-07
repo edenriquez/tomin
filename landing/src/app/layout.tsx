@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Inter_Tight } from "next/font/google";
+import { Inter, Instrument_Serif } from "next/font/google";
 import { SITE, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -9,9 +9,10 @@ const inter = Inter({
     display: "swap",
 });
 
-/** Roobert is a commercial licence; Inter Tight is the named substitute. */
-const interTight = Inter_Tight({
-    weight: ["400", "500"],
+/** The display face: a text serif, 400 only, words at >=24px. Numbers and
+ *  card titles stay in Inter (see design/tokens.ts). */
+const instrumentSerif = Instrument_Serif({
+    weight: "400",
     subsets: ["latin"],
     variable: "--font-display",
     display: "swap",
@@ -39,7 +40,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="es-MX" className={`${inter.variable} ${interTight.variable}`}>
+        <html lang="es-MX" className={`${inter.variable} ${instrumentSerif.variable}`}>
             <body className="font-sans">{children}</body>
         </html>
     );

@@ -30,18 +30,24 @@
         @apply bg-canvas text-body text-graphite;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        font-feature-settings: "calt" 0, "liga" 0, "tnum" 1;
+        font-feature-settings: "calt" 0, "liga" 0, "tnum" 1, "lnum" 1;
     }
 
     html:has([data-theme="dark"]) body {
         @apply bg-night text-dust;
     }
 
+    /* h1/h2 carry the voice and sit at >=24px: the serif. h3/h4 are card and
+       cell titles at 20px, under the serif's floor: Inter 500. */
     h1,
-    h2,
+    h2 {
+        @apply font-display font-normal text-ink;
+        text-wrap: balance;
+    }
+
     h3,
     h4 {
-        @apply font-display font-normal text-ink;
+        @apply font-sans font-medium text-ink;
     }
 
     [data-theme="dark"] h1,
@@ -82,7 +88,7 @@
 
     /* Eyebrow: the all-caps caption above a section title. */
     .eyebrow {
-        @apply text-caption font-medium uppercase tracking-[0.08em] text-ash;
+        @apply text-caption font-medium uppercase text-ash;
     }
 
     [data-theme="dark"] .eyebrow {
