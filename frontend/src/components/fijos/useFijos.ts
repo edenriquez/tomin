@@ -35,13 +35,32 @@ export function useFijos(store: FijosStore = localFijosStore) {
         };
     }, [store]);
 
+    // Debounced save, but never a lost one: the pending write is flushed when
+    // the view unmounts (switching Plan faces remounts this hook) and when the
+    // tab hides. A pin made 200ms before a face switch used to vanish.
+    const pendingSave = useRef<(() => void) | null>(null);
+
     useEffect(() => {
         if (!dirty.current) return;
-        const id = setTimeout(() => {
-            store.save(state);
-        }, SAVE_DELAY_MS);
+        const flush = () => {
+            pendingSave.current = null;
+            void store.save(state);
+        };
+        pendingSave.current = flush;
+        const id = setTimeout(flush, SAVE_DELAY_MS);
+        // Cleanup only cancels the timer: on a state change the next run
+        // replaces `pendingSave`; on unmount the effect below drains it.
         return () => clearTimeout(id);
     }, [state, store]);
+
+    useEffect(() => {
+        const flushNow = () => pendingSave.current?.();
+        window.addEventListener("pagehide", flushNow);
+        return () => {
+            window.removeEventListener("pagehide", flushNow);
+            flushNow();
+        };
+    }, []);
 
     const replace = useCallback((next: FijosState | ((prev: FijosState) => FijosState)) => {
         dirty.current = true;

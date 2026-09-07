@@ -121,10 +121,12 @@ export function parseFijos(raw: unknown): FijosState {
     const restMarks = Array.isArray(raw.restMarks)
         ? raw.restMarks.map(parseRestMark).filter((m): m is RestMark => m !== null)
         : [];
-    const restKeys = new Set(restMarks.map((m) => m.key));
+    // A rest mark can be pinned (`pinRest`, or "Fijar" on a loose one), so
+    // its key stays in `pinnedKeys`. Stripping rest keys here is what made
+    // a pinned "resto" un-pin itself on every reload and face switch.
     return {
         version: FIJOS_VERSION,
-        pinnedKeys: unique.filter((k) => !restKeys.has(k)),
+        pinnedKeys: unique,
         noiseOn: raw.noiseOn === true,
         horizon: isHorizon(raw.horizon) ? raw.horizon : DEFAULT_FIJOS.horizon,
         manuals,

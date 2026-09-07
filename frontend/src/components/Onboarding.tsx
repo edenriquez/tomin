@@ -31,7 +31,7 @@ const STEPS = [
     },
     {
         title: "Ves tu dinero",
-        body: "Cada movimiento en una gráfica, tus categorías mes a mes y un plan: lo que se va contra lo que entra.",
+        body: "Cada movimiento en una gráfica, tus categorías mes a mes y un plan: gastos fijos contra ingresos.",
     },
 ];
 

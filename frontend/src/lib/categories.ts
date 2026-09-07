@@ -81,3 +81,40 @@ export function categoryColor(
     if (!categoryId) return UNCATEGORIZED_COLOR;
     return map?.get(categoryId)?.color ?? UNCATEGORIZED_COLOR;
 }
+
+/** One key per category: its first letter, accent- and case-folded. Two
+ *  categories that share an initial share the key — pressing it again
+ *  moves to the next one, in taxonomy order. */
+export type CategoryHotkey = { id: string; name: string; key: string };
+
+export function hotkeyOf(text: string): string {
+    const first = text
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .match(/[a-z0-9]/);
+    return first ? first[0] : "";
+}
+
+export function categoryHotkeys(map: Map<string, CategoryInfo> | null): CategoryHotkey[] {
+    if (!map) return [];
+    const out: CategoryHotkey[] = [];
+    for (const [id, c] of map) {
+        const key = hotkeyOf(c.name);
+        if (key) out.push({ id, name: c.name, key });
+    }
+    return out;
+}
+
+/** The category a key press selects: the first with that initial, or the
+ *  one after the current when the current already carries it. */
+export function nextCategoryForKey(
+    hotkeys: CategoryHotkey[],
+    key: string,
+    currentId: string | null
+): CategoryHotkey | null {
+    const candidates = hotkeys.filter((h) => h.key === key);
+    if (candidates.length === 0) return null;
+    const at = candidates.findIndex((h) => h.id === currentId);
+    return candidates[(at + 1) % candidates.length] ?? null;
+}

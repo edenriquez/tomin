@@ -68,6 +68,25 @@ def test_payroll_wording_files_under_ingresos(app):
     assert svc.classify("PAGO RECIBIDO DE AZTECA POR ORDEN DE ALGUIEN").category_id == cats["Sin Categoria"]
 
 
+def test_outflow_wording_files_under_gasto(app):
+    container = app.extensions["container"]
+    cats = {c.name: c.id for c in container.categories.get_all()}
+    assert "Gasto" in cats
+    from tomin.domain.services.categorization import CategorizationService
+
+    svc = CategorizationService(container.categories.get_all(), container.merchants.get_all())
+    # A send to a person: the longer label beats Transferencias' "transferencia".
+    assert (
+        svc.classify("TRANSFERENCIA SPEI PAGO A TERCEROS GASPAR LOPEZ").category_id
+        == cats["Gasto"]
+    )
+    assert svc.classify("COMISION ANUALIDAD TARJETA").category_id == cats["Gasto"]
+    assert svc.classify("INTERESES ORDINARIOS").category_id == cats["Gasto"]
+    # A plain purchase line is not an egreso by wording alone.
+    assert svc.classify("PAGO OXXO CENTRO").category_id == cats["Comida & Supermercados"]
+    assert svc.classify("CARGO TIENDA DESCONOCIDA").category_id == cats["Sin Categoria"]
+
+
 def test_a_default_added_later_reaches_an_existing_database(app):
     """The seed is per-name: a populated database gains "Ingresos" without
     losing anything the user changed in the categories it already had."""

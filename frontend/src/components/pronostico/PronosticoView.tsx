@@ -262,7 +262,7 @@ export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {
                     action={
                         onGoToFijos && (
                             <Button variant="ghost" size="sm" onClick={onGoToFijos}>
-                                Ir a lo que se va
+                                Ir a gastos fijos
                             </Button>
                         )
                     }
@@ -305,7 +305,7 @@ export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {
                                 firstFutureIndex={contrast.firstFutureIndex}
                                 series={contrastBands}
                                 empty="Etiqueta un ingreso o fija un cargo para contrastarlos."
-                                caption="La banda azul es lo que entra; la gris, lo que ya está comprometido. El grosor de ingresos es el extra; el de fijos, lo que se ha movido el monto."
+                                caption="La banda azul son los ingresos; la gris, los gastos fijos ya comprometidos. El grosor de ingresos es el extra; el de fijos, lo que se ha movido el monto."
                             />
                         ) : (
                             <ContrastChart data={contrast} />
@@ -314,7 +314,7 @@ export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {
 
                     <IncomeSection
                         title="Nómina"
-                        hint="Lo que entra con ritmo. Si hay quincena o mes, cargo a cargo."
+                        hint="Ingresos con ritmo. Si hay quincena o mes, abono a abono."
                         clusters={nominaClusters}
                         itemsByKey={byClusterKey(nominaItems)}
                         loading={loading}
@@ -356,7 +356,7 @@ export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {
                         clusters={unlabeled}
                         itemsByKey={new Map()}
                         loading={loading}
-                        empty="Todo lo que entra ya tiene nombre."
+                        empty="Todos tus ingresos ya tienen nombre."
                         onRelabel={labelIncome}
                         kind="unlabeled"
                     />
@@ -442,7 +442,7 @@ function Headline({
         <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                    <p className="eyebrow">Lo que entra</p>
+                    <p className="eyebrow">Ingresos</p>
                     {loading ? (
                         <Skeleton className="mt-1 h-9 w-48" />
                     ) : unknown ? (
@@ -520,7 +520,7 @@ function Headline({
                             onClick={onGoToFijos}
                             className="text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
                         >
-                            ← ¿Y cuánto se va?
+                            ← Ver gastos fijos
                         </button>
                     )}
                     <div

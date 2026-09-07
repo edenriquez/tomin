@@ -607,7 +607,7 @@ function Headline({
                             onClick={onGoToIngresos}
                             className="text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
                         >
-                            ¿Y cuánto te entra? →
+                            Ver ingresos →
                         </button>
                     )}
                     <div

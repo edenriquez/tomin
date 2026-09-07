@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, EyeOff, RotateCcw, Sparkles, StickyNote, X } from "lucide-react";
 import { api, type Transaction, type TransactionPatch } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { useCategories } from "@/lib/categories";
+import { categoryHotkeys, nextCategoryForKey, useCategories } from "@/lib/categories";
+import { track } from "@/lib/telemetry";
 import { Button, Select, useToast } from "@/components/ui";
 import { ReceiptStrip } from "./ReceiptStrip";
 
@@ -30,6 +31,9 @@ type Teach =
 
 type Suggestion = { teach: Teach; label: string; matched: number };
 
+/** How long an armed category waits for another key before it is written. */
+const CATEGORY_COMMIT_MS = 800;
+
 function probeRequest(teach: Teach, label: string, dryRun: boolean) {
     if (teach.kind === "category")
         return api.recategorize({ category_id: teach.categoryId, label, dry_run: dryRun });
@@ -53,6 +57,31 @@ export function useInlineEdit(
     const [labelDraft, setLabelDraft] = useState("");
     const [applying, setApplying] = useState(false);
     const probeSeq = useRef(0);
+
+    // A category chosen by key is *armed* first and committed after a pause:
+    // the row shows where it will go, and a second T can walk on to
+    // Transferencias before Transporte was ever written. Refs mirror the
+    // state so the unmount flush and the timer see the latest values.
+    const [pendingCategory, setPendingCategory] = useState<string | null>(null);
+    const pendingRef = useRef<string | null>(null);
+    const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const currentCategory = useRef(t.category_id);
+    currentCategory.current = t.category_id;
+    const patchRef = useRef(onPatch);
+    patchRef.current = onPatch;
+
+    useEffect(() => {
+        // Leaving the row (another row clicked, list re-rendered) must not
+        // drop an armed choice: it is written, without the teach prompt.
+        return () => {
+            if (pendingTimer.current) clearTimeout(pendingTimer.current);
+            const id = pendingRef.current;
+            pendingRef.current = null;
+            if (id !== null && id !== currentCategory.current) {
+                patchRef.current({ category_id: id });
+            }
+        };
+    }, []);
 
     async function probeSimilar(teach: Teach, label: string) {
         const seq = ++probeSeq.current;
@@ -83,9 +112,32 @@ export function useInlineEdit(
     }
 
     function changeCategory(categoryId: string | null) {
+        cancelPendingCategory();
         onPatch({ category_id: categoryId });
         setSuggestion(null);
         if (categoryId) probeSimilar({ kind: "category", categoryId }, suggestLabel(t));
+    }
+
+    function cancelPendingCategory() {
+        if (pendingTimer.current) clearTimeout(pendingTimer.current);
+        pendingTimer.current = null;
+        pendingRef.current = null;
+        setPendingCategory(null);
+    }
+
+    function commitPendingCategory() {
+        const id = pendingRef.current;
+        cancelPendingCategory();
+        if (id !== null && id !== t.category_id) changeCategory(id);
+    }
+
+    /** Mark a category as the one this row is about to get; it is written
+     *  after `CATEGORY_COMMIT_MS` without another key. */
+    function armCategory(categoryId: string) {
+        if (pendingTimer.current) clearTimeout(pendingTimer.current);
+        pendingRef.current = categoryId;
+        setPendingCategory(categoryId);
+        pendingTimer.current = setTimeout(commitPendingCategory, CATEGORY_COMMIT_MS);
     }
 
     function toggleTransfer(next: boolean) {
@@ -130,6 +182,10 @@ export function useInlineEdit(
     return {
         commitName,
         changeCategory,
+        pendingCategory,
+        armCategory,
+        commitPendingCategory,
+        cancelPendingCategory,
         toggleTransfer,
         suggestion,
         labelDraft,
@@ -221,12 +277,131 @@ export function InlineCategory({
             <Select<string>
                 variant="quiet"
                 aria-label="Categoría"
-                value={t.category_id}
+                value={edit.pendingCategory ?? t.category_id}
                 placeholder="Sin categoría"
                 options={options}
                 onChange={edit.changeCategory}
             />
         </span>
+    );
+}
+
+/** A key press meant for the page, not for a field the user is typing in. */
+function isTypingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
+/**
+ * Categorize by initial. While a row is selected, pressing the first letter
+ * of a category files the row there — V for Vivienda, C for Comida — and
+ * pressing it again walks to the next category with that initial
+ * (Transporte, then Transferencias). The chips make the keys visible and
+ * are clickable too; the pressed one is the row's current category.
+ */
+export function CategoryKeys({
+    transaction: t,
+    edit,
+}: {
+    transaction: Transaction;
+    edit: InlineEdit;
+}) {
+    const categories = useCategories();
+    const hotkeys = categoryHotkeys(categories);
+    const { changeCategory, armCategory, commitPendingCategory, cancelPendingCategory } = edit;
+    const currentId = t.category_id;
+    const pendingId = edit.pendingCategory;
+
+    useEffect(() => {
+        if (hotkeys.length === 0) return;
+        function onKey(e: KeyboardEvent) {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            if (isTypingTarget(e.target)) return;
+            if (pendingId !== null) {
+                // An armed choice: Enter writes it now, Escape lets it go,
+                // and moving to another row writes it on the way out (the
+                // list's own handler moves the selection after this).
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitPendingCategory();
+                    return;
+                }
+                if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelPendingCategory();
+                    return;
+                }
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    commitPendingCategory();
+                    return;
+                }
+            }
+            if (e.key.length !== 1) return;
+            const key = e.key.toLowerCase();
+            if (!/^[a-z0-9]$/.test(key)) return;
+            const from = pendingId ?? currentId;
+            const next = nextCategoryForKey(hotkeys, key, from);
+            if (!next) return;
+            e.preventDefault();
+            track("movimientos.category_hotkey", { key });
+            if (next.id === currentId) cancelPendingCategory();
+            else armCategory(next.id);
+        }
+        // Capture phase: this runs before the list's own keydown handler no
+        // matter which registered first, so an armed Escape is ours and an
+        // ArrowDown commits before the selection moves.
+        window.addEventListener("keydown", onKey, true);
+        return () => window.removeEventListener("keydown", onKey, true);
+        // `hotkeys` is rebuilt each render; the taxonomy behind it is stable.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [categories, currentId, pendingId, armCategory, commitPendingCategory, cancelPendingCategory]);
+
+    if (hotkeys.length === 0) return null;
+
+    return (
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Categoría por tecla">
+            {hotkeys.map((h) => {
+                const pressed = h.id === currentId && pendingId === null;
+                const armed = h.id === pendingId;
+                return (
+                    <button
+                        key={h.id}
+                        type="button"
+                        aria-pressed={pressed}
+                        data-armed={armed || undefined}
+                        title={armed ? "Se aplica en un momento · Enter aplica ya · Esc cancela" : `Tecla ${h.key.toUpperCase()}`}
+                        onClick={() => {
+                            if (h.id === currentId) {
+                                cancelPendingCategory();
+                                return;
+                            }
+                            track("movimientos.category_chip");
+                            changeCategory(h.id);
+                        }}
+                        className={cn(
+                            "inline-flex items-center rounded-control border px-2.5 py-1 text-body-sm",
+                            "transition-colors duration-100",
+                            pressed
+                                ? "border-soot bg-soot font-medium text-paper"
+                                : armed
+                                  ? "border-signal bg-paper font-medium text-ink"
+                                  : "border-transparent text-graphite hover:bg-fog hover:text-ink"
+                        )}
+                    >
+                        <span className="underline decoration-signal decoration-2 underline-offset-2">
+                            {h.name.slice(0, 1)}
+                        </span>
+                        {h.name.slice(1)}
+                    </button>
+                );
+            })}
+            {pendingId !== null && (
+                <span className="animate-reveal text-label text-graphite" aria-live="polite">
+                    Enter aplica · Esc cancela
+                </span>
+            )}
+        </div>
     );
 }
 
@@ -256,6 +431,8 @@ export function EditorStrip({
             {/* Read-only here on purpose: a ticket is photographed on the phone,
                 where the paper is. This side only shows what came of it. */}
             <ReceiptStrip transactionId={t.id} />
+
+            <CategoryKeys transaction={t} edit={edit} />
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                 <InlineNote transaction={t} onPatch={onPatch} />

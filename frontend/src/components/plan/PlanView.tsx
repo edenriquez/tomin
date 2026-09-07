@@ -18,15 +18,15 @@ import { PronosticoView } from "@/components/pronostico/PronosticoView";
  * what comes in against it. The horizon you pick on one face is the horizon
  * of the other, because it always was.
  *
- * The face lives in the URL so a link to "lo que entra" is a link, and the
+ * The face lives in the URL so a link to "ingresos" is a link, and the
  * retired `/pronostico` can land on it.
  */
 export const FACES = ["fijos", "ingresos"] as const;
 export type Face = (typeof FACES)[number];
 
 const FACE_LABELS: Record<Face, { label: string; hint: string }> = {
-    fijos: { label: "Lo que se va", hint: "Tus fijos y lo que viene" },
-    ingresos: { label: "Lo que entra", hint: "Nómina y extra, contra tus fijos" },
+    fijos: { label: "Gastos fijos", hint: "Lo que pagas sí o sí, y lo que viene" },
+    ingresos: { label: "Ingresos", hint: "Nómina y extra, contra tus gastos fijos" },
 };
 
 export function faceFromParam(value: string | null): Face {

@@ -46,6 +46,20 @@ DEFAULT_CATEGORIES: list[dict] = [
                    "dispersion de nomina", "pago de nomina"],
     },
     {
+        # Money going out to *people and the bank*, not to a merchant: sends
+        # to third parties, fees, interest, the card's annual charge. The
+        # mirror of "Ingresos". Conservative on purpose: "pago" and "cargo"
+        # are not here, because every purchase line carries them and would
+        # steal rows from the merchant categories. "pago a terceros" is
+        # longer than Transferencias' "transferencia", so a send to a person
+        # files here rather than among the internal moves.
+        "name": "Gasto",
+        "color": "#dc2626",
+        "icon": "outbound",
+        "labels": ["pago a terceros", "envio a terceros", "envio de dinero",
+                   "comision", "iva comision", "intereses", "anualidad"],
+    },
+    {
         "name": "Transferencias & Ajustes",
         "color": "#64748b",
         "icon": "payments",

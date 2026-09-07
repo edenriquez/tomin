@@ -86,6 +86,40 @@ export function TransactionsList({
 
     const visible = items.slice(0, visibleCount);
 
+    // Keyboard ledger: with a row selected, ↓/↑ move to the next or previous
+    // row (extending the page through onSelect when needed) and Escape
+    // closes it. Paired with the category keys in the editor, a batch of
+    // uncategorized rows is one hand on the keyboard: letter, ↓, letter, ↓.
+    useEffect(() => {
+        if (!selectedId) return;
+        function onKey(e: KeyboardEvent) {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            const target = e.target;
+            if (
+                target instanceof HTMLElement &&
+                (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+            ) {
+                return;
+            }
+            if (e.key === "Escape") {
+                // The editor claims Escape first when a category is armed.
+                if (e.defaultPrevented) return;
+                e.preventDefault();
+                onSelect(null);
+                return;
+            }
+            if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+            const at = items.findIndex((t) => t.id === selectedId);
+            if (at < 0) return;
+            const next = items[at + (e.key === "ArrowDown" ? 1 : -1)];
+            if (!next) return;
+            e.preventDefault();
+            onSelect(next.id);
+        }
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [selectedId, items, onSelect]);
+
     const setRef = (id: string) => (el: HTMLElement | null) => {
         if (el) rowRefs.current.set(id, el);
         else rowRefs.current.delete(id);
