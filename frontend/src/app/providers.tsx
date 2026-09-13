@@ -5,6 +5,7 @@ import { SettingsProvider } from "@/components/settings/SettingsProvider";
 import { TimeWindowProvider } from "@/components/TimeWindowProvider";
 import { WorkspaceProvider } from "@/components/workspace/WorkspaceProvider";
 import { LecturaProvider } from "@/components/lectura/LecturaProvider";
+import { MovimientosSearchProvider } from "@/components/movimientos/MovimientosSearchProvider";
 
 /**
  * App-wide state, mounted once above every route.
@@ -19,7 +20,9 @@ export function Providers({ children }: { children: ReactNode }) {
         <SettingsProvider>
             <TimeWindowProvider>
                 <WorkspaceProvider>
-                    <LecturaProvider>{children}</LecturaProvider>
+                    <LecturaProvider>
+                        <MovimientosSearchProvider>{children}</MovimientosSearchProvider>
+                    </LecturaProvider>
                 </WorkspaceProvider>
             </TimeWindowProvider>
         </SettingsProvider>

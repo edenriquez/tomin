@@ -1,4 +1,5 @@
 from .dashboards import GetHomeDashboardUseCase, SaveHomeDashboardUseCase
+from .categories import CreateCategoryUseCase
 from .attention import ListAttentionUseCase
 from .detect_recurring import DetectRecurringUseCase
 from .forecast import GetForecastUseCase, SimulateForecastUseCase
@@ -52,6 +53,7 @@ from .update_transaction import (
 
 __all__ = [
     "UNSET",
+    "CreateCategoryUseCase",
     "DeleteStatementResult",
     "DetectRecurringUseCase",
     "ListAttentionUseCase",

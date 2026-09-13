@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ChevronRight, Pin, Plus, X } from "lucide-react";
 import { api, type RecurringItem, type Transaction } from "@/lib/api";
 import { useBankScope } from "@/lib/banks";
@@ -19,18 +20,7 @@ import { parsePeriodKey } from "@/lib/metrics";
 import { track } from "@/lib/telemetry";
 import { useAppData } from "@/components/AppChrome";
 import { ChartCard } from "@/components/ChartCard";
-import {
-    ChartEncodingToggle,
-    RangeBandChart,
-} from "@/components/charts/RangeBandChart";
-import {
-    CHART_ENCODINGS,
-    timelineEnvelope,
-    type ChartEncoding,
-} from "@/components/charts/rangeBand";
-import { chart } from "@/design/tokens";
 import { LoadTimelineChart } from "@/components/recurrentes/LoadTimelineChart";
-import { usePanelSettings } from "@/components/settings/usePanelSettings";
 import {
     buildTimeline,
     isStale,
@@ -40,10 +30,7 @@ import {
 } from "@/components/recurrentes/projection";
 import { rhythmCopy } from "@/components/recurrentes/rhythm";
 import { buildSeriesColors } from "@/components/recurrentes/seriesColors";
-import { BackendNotice, Button, Checkbox, EmptyState, Skeleton } from "@/components/ui";
-import { LecturaDock } from "@/components/lectura/LecturaDock";
-import { useLectura } from "@/components/lectura/LecturaProvider";
-import { draftFromClauses, MAX_LECTURA_CLAUSES } from "@/lib/lectura";
+import { BackendNotice, Button, EmptyState, Skeleton } from "@/components/ui";
 import { AddFijoSheet } from "./AddFijoSheet";
 import { useFijos } from "./useFijos";
 
@@ -71,7 +58,7 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
     const [error, setError] = useState<string | null>(null);
     const categories = useCategories();
     const fijos = useFijos();
-    const { state, hydrated, replace, removeRest } = fijos;
+    const { state, hydrated, replace } = fijos;
     // Every decision the user makes here is recorded: which suggestions get
     // pinned, how often pins are undone, which horizon people plan on. The
     // store stays dumb; the view is where a click has a meaning.
@@ -117,18 +104,8 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
         },
         [fijos]
     );
-    const [chartCfg, setChartCfg] = usePanelSettings("fijos.timeline", {
-        encoding: "barras" as string,
-    });
-    const encoding: ChartEncoding = (CHART_ENCODINGS as readonly string[]).includes(
-        chartCfg.encoding
-    )
-        ? (chartCfg.encoding as ChartEncoding)
-        : "barras";
     const [openKey, setOpenKey] = useState<string | null>(null);
-    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
-    const { openDraft, opening } = useLectura();
-    const [adding, setAdding] = useState<false | "fijo" | "resto">(false);
+    const [adding, setAdding] = useState(false);
     const [ledger, setLedger] = useState<Transaction[] | null>(null);
 
     const { statementIds } = useBankScope(dataVersion);
@@ -255,18 +232,6 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
         [pinned, horizon]
     );
 
-    const fijosBand = useMemo(() => {
-        const env = timelineEnvelope(timeline);
-        return [
-            {
-                name: "Fijos",
-                color: chart.neutral[1]!,
-                bandColor: chart.neutral[4]!,
-                ...env,
-            },
-        ];
-    }, [timeline]);
-
     const rest = useMemo(() => {
         if (noisePool.length === 0 && activeDetected.length === 0 && looseRest.length === 0) {
             return undefined;
@@ -312,25 +277,9 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
                         onGoToIngresos={onGoToIngresos}
                     />
 
-                    <ChartCard
-                        title="Mes a mes, y lo que viene"
-                        action={
-                            <ChartEncodingToggle
-                                value={encoding}
-                                onChange={(enc) => setChartCfg({ encoding: enc })}
-                            />
-                        }
-                    >
+                    <ChartCard title="Mes a mes, y lo que viene">
                         {loading ? (
                             <Skeleton className="h-[300px]" />
-                        ) : encoding === "rango" ? (
-                            <RangeBandChart
-                                months={timeline.months}
-                                firstFutureIndex={timeline.firstFutureIndex}
-                                series={fijosBand}
-                                empty="Elige lo que sí o sí se cobra para dibujarlo."
-                                caption="La línea es la carga del mes. La banda es lo que se ha movido el monto: una renta estable casi no abre, un cargo que varía sí."
-                            />
                         ) : (
                             <LoadTimelineChart
                                 timeline={timeline}
@@ -353,7 +302,7 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
                                 variant="ghost"
                                 size="sm"
                                 icon={<Plus size={14} />}
-                                onClick={() => setAdding("fijo")}
+                                onClick={() => setAdding(true)}
                             >
                                 Añadir un cargo
                             </Button>
@@ -371,21 +320,12 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
                                 </div>
                             ) : pinned.length === 0 ? (
                                 <p className="py-6 text-body text-graphite">
-                                    Elige lo que sí o sí se cobra: de los que están por confirmar, o añade uno.
+                                    Confírmalos en Cargos recurrentes, o añade uno a mano.
                                 </p>
                             ) : (
                                 <SeriesList
                                     items={pinned}
                                     openKey={openKey}
-                                    selectedKeys={selectedKeys}
-                                    onSelect={(key, on) => {
-                                        setSelectedKeys((cur) => {
-                                            const next = new Set(cur);
-                                            if (on) next.add(key);
-                                            else next.delete(key);
-                                            return next;
-                                        });
-                                    }}
                                     onToggle={(i) =>
                                         setOpenKey((cur) => (cur === i.key ? null : i.key))
                                     }
@@ -393,115 +333,16 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
                                     colorOf={colorOf}
                                     categories={categories}
                                     asOf={ledgerAsOf}
-                                    action="unpin"
                                 />
-                            )}
-                        </div>
-                    </section>
-
-                    <section className="min-w-0 rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h2 className="text-title-sm font-normal text-ink">
-                                Por confirmar
-                                {suggested.length > 0 && (
-                                    <span className="ml-2 font-sans text-body-sm text-graphite">
-                                        {suggested.length}
-                                    </span>
-                                )}
-                            </h2>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                icon={<Plus size={14} />}
-                                onClick={() => setAdding("resto")}
-                            >
-                                Sumar al resto
-                            </Button>
-                        </div>
-                        <p className="mt-1 text-body-sm text-graphite">
-                            Cobros que se repiten y no has fijado, y gastos sin día fijo
-                            que tú marcas (Walmart, despensa). Los cargos atípicos no
-                            cuentan hasta que los fijes.
-                        </p>
-                        <div className="mt-4">
-                            {loading ? (
-                                <div className="space-y-2">
-                                    {[0, 1, 2].map((i) => (
-                                        <Skeleton key={i} className="h-12" />
-                                    ))}
-                                </div>
-                            ) : looseRest.length === 0 && suggested.length === 0 ? (
-                                <p className="py-6 text-body text-graphite">
-                                    {detected.length === 0
-                                        ? "Cuando Tomin encuentre cobros que se repiten, aparecen aquí. Un gasto sin ritmo se suma al resto a mano."
-                                        : "Todos los cobros que se repiten ya son fijos. Suma uno al resto si vas seguido sin fecha fija."}
-                                </p>
-                            ) : (
-                                <>
-                                    {looseRest.length > 0 && (
-                                        <SeriesList
-                                            items={looseRest}
-                                            openKey={openKey}
-                                            onToggle={(i) =>
-                                                setOpenKey((cur) => (cur === i.key ? null : i.key))
-                                            }
-                                            onPin={pin}
-                                            onUnpin={removeRest}
-                                            colorOf={colorOf}
-                                            categories={categories}
-                                            asOf={ledgerAsOf}
-                                            action="unrest"
-                                        />
-                                    )}
-                                    {suggested.length > 0 && (
-                                        <SeriesList
-                                            items={suggested}
-                                            openKey={openKey}
-                                            onToggle={(i) =>
-                                                setOpenKey((cur) => (cur === i.key ? null : i.key))
-                                            }
-                                            onPin={pin}
-                                            colorOf={colorOf}
-                                            categories={categories}
-                                            asOf={ledgerAsOf}
-                                            action="pin"
-                                        />
-                                    )}
-                                </>
                             )}
                         </div>
                     </section>
                 </>
             )}
 
-            {selectedKeys.size > 0 && (
-                <LecturaDock
-                    summary={
-                        selectedKeys.size === 1
-                            ? "1 fijo"
-                            : `${selectedKeys.size} fijos`
-                    }
-                    chips={pinned
-                        .filter((i) => selectedKeys.has(i.key))
-                        .slice(0, MAX_LECTURA_CLAUSES)
-                        .map((i) => i.label)}
-                    busy={opening}
-                    onRead={() => {
-                        const chosen = pinned.filter((i) => selectedKeys.has(i.key));
-                        const draft = draftFromClauses(
-                            chosen.map((i) => ({ description_contains: i.label })),
-                            [],
-                            chosen.map((i) => i.label).join(" + ")
-                        );
-                        if (draft) void openDraft(draft);
-                    }}
-                    onClear={() => setSelectedKeys(new Set())}
-                />
-            )}
-
             <AddFijoSheet
-                open={adding !== false}
-                intent={adding === "resto" ? "resto" : "fijo"}
+                open={adding}
+                intent="fijo"
                 onClose={() => setAdding(false)}
                 detected={detected}
                 dataVersion={dataVersion}
@@ -572,7 +413,7 @@ function Headline({
                     <p className="mt-1 text-body text-graphite">
                         {unstarted
                             ? suggestedCount > 0
-                                ? "Confirma abajo los que sí o sí se cobran; el total aparece con el primero."
+                                ? "Confírmalos en Cargos recurrentes; el total aparece con el primero."
                                 : "Elige lo que sí o sí se cobra, o añade un cargo a mano."
                             : `en los próximos ${horizon} meses`}
                     </p>
@@ -601,15 +442,25 @@ function Headline({
                 </div>
 
                 <div className="flex flex-col items-end gap-3">
-                    {onGoToIngresos && !loading && (
-                        <button
-                            type="button"
-                            onClick={onGoToIngresos}
-                            className="text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
-                        >
-                            Ver ingresos →
-                        </button>
-                    )}
+                    <div className="flex flex-wrap items-center justify-end gap-x-3">
+                        {suggestedCount > 0 && (
+                            <Link
+                                href="/?cara=recurrentes"
+                                className="text-body-sm text-graphite underline decoration-mist underline-offset-4 hover:text-ink"
+                            >
+                                Confirmar en Cargos recurrentes →
+                            </Link>
+                        )}
+                        {onGoToIngresos && !loading && (
+                            <button
+                                type="button"
+                                onClick={onGoToIngresos}
+                                className="text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+                            >
+                                Ver ingresos →
+                            </button>
+                        )}
+                    </div>
                     <div
                         role="radiogroup"
                         aria-label="Horizonte"
@@ -665,45 +516,27 @@ function SeriesList({
     items,
     openKey,
     onToggle,
-    selectedKeys,
-    onSelect,
-    onPin,
     onUnpin,
     colorOf,
     categories,
     asOf,
-    action,
 }: {
     items: RecurringItem[];
     openKey: string | null;
     onToggle: (i: RecurringItem) => void;
-    selectedKeys?: Set<string>;
-    onSelect?: (key: string, on: boolean) => void;
-    onPin?: (key: string) => void;
-    onUnpin?: (key: string) => void;
+    onUnpin: (key: string) => void;
     colorOf: (label: string) => string;
     categories: ReturnType<typeof useCategories>;
     asOf: Date;
-    action: "pin" | "unpin" | "unrest";
 }) {
     return (
         <ul className="divide-y divide-mist">
             {items.map((i) => {
                 const open = openKey === i.key;
-                const rest = isRestKey(i.key) || action === "unrest";
-                const loose = action === "unrest";
+                const rest = isRestKey(i.key);
                 return (
                     <li key={i.key}>
                         <div className="flex items-start gap-2 py-2.5">
-                            {onSelect && selectedKeys && (
-                                <span className="pt-1">
-                                    <Checkbox
-                                        checked={selectedKeys.has(i.key)}
-                                        onChange={(on) => onSelect(i.key, on)}
-                                        aria-label={`Incluir ${i.label} en la lectura`}
-                                    />
-                                </span>
-                            )}
                             <button
                                 type="button"
                                 onClick={() => onToggle(i)}
@@ -737,51 +570,22 @@ function SeriesList({
                                 <div className="mt-0.5 flex items-center justify-between gap-3 pl-6 text-body-sm text-graphite">
                                     <span>
                                         {rest
-                                            ? `Sin fecha fija · ${mxn(i.monthly_equivalent)}/mes${loose ? " · en el resto" : ""}`
+                                            ? `Sin fecha fija · ${mxn(i.monthly_equivalent)}/mes`
                                             : `${FREQUENCY_LABELS[i.frequency]} · ${mxn(i.monthly_equivalent)}/mes`}
                                         {!rest && !i.amount_stable && " · varía"}
                                     </span>
                                     {!rest && <NextExpected item={i} asOf={asOf} />}
                                 </div>
                             </button>
-                            {action === "pin" ? (
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => onPin?.(i.key)}
-                                >
-                                    Fijar
-                                </Button>
-                            ) : action === "unrest" ? (
-                                <span className="flex shrink-0 items-center gap-1">
-                                    <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={() => onPin?.(i.key)}
-                                    >
-                                        Fijar
-                                    </Button>
-                                    <button
-                                        type="button"
-                                        onClick={() => onUnpin?.(i.key)}
-                                        aria-label={`Quitar ${i.label} del resto`}
-                                        title="Quitar del resto"
-                                        className="rounded-control p-1.5 text-graphite hover:bg-fog hover:text-ink"
-                                    >
-                                        <X size={14} aria-hidden />
-                                    </button>
-                                </span>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => onUnpin?.(i.key)}
-                                    aria-label={`Quitar ${i.label}`}
-                                    title={rest ? "Quitar del resto" : "Quitar de fijos"}
-                                    className="shrink-0 rounded-control p-1.5 text-graphite hover:bg-fog hover:text-ink"
-                                >
-                                    <X size={14} aria-hidden />
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                onClick={() => onUnpin(i.key)}
+                                aria-label={`Quitar ${i.label}`}
+                                title="Quitar de fijos"
+                                className="shrink-0 rounded-control p-1.5 text-graphite hover:bg-fog hover:text-ink"
+                            >
+                                <X size={14} aria-hidden />
+                            </button>
                         </div>
                         {open && (
                             <div id={`fijo-${i.key}`} className="pb-3 pl-6">

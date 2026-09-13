@@ -195,9 +195,48 @@ def test_categories_catalog(client):
     assert "Sin Categoria" in names
     assert len(items) >= 5
     # Every category carries the fields the UI colors charts with.
-    assert all({"id", "name", "color", "icon"} <= set(c) for c in items)
+    assert all({"id", "name", "color", "icon", "parent_id"} <= set(c) for c in items)
+    gasolina = next(c for c in items if c["name"] == "Gasolina")
+    transporte = next(c for c in items if c["name"] == "Transporte")
+    assert gasolina["parent_id"] == transporte["id"]
+    assert transporte["parent_id"] is None
     # The matcher's internal vocabulary is not exposed.
     assert all("categorization_labels" not in c for c in items)
+
+
+def test_create_child_category_is_idempotent_under_the_same_parent(client):
+    parent = _category_id(client, "Vivienda & Servicios")
+    first = client.post(
+        "/api/categories", json={"name": "Saldo celular", "parent_id": parent}
+    )
+    assert first.status_code == 201
+    body = first.get_json()
+    assert body["name"] == "Saldo celular"
+    assert body["parent_id"] == parent
+    assert body["id"]
+    again = client.post(
+        "/api/categories", json={"name": "saldo celular", "parent_id": parent}
+    )
+    assert again.status_code == 201
+    assert again.get_json()["id"] == body["id"]
+    listed = client.get("/api/categories").get_json()["items"]
+    assert sum(1 for c in listed if c["name"].lower() == "saldo celular") == 1
+
+
+def test_create_child_rejects_a_leaf_parent(client):
+    leaf = _category_id(client, "Gasolina")
+    res = client.post(
+        "/api/categories", json={"name": "Premium", "parent_id": leaf}
+    )
+    assert res.status_code == 400
+
+
+def test_create_child_requires_name_and_parent(client):
+    parent = _category_id(client, "Vivienda & Servicios")
+    assert client.post("/api/categories", json={"name": "X"}).status_code == 400
+    assert (
+        client.post("/api/categories", json={"parent_id": parent}).status_code == 400
+    )
 
 
 def _category_id(client, name):

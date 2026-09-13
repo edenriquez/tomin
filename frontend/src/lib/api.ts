@@ -107,6 +107,8 @@ export type Category = {
     /** Hex, from the seed data. May be null; charts fall back to Ash. */
     color: string | null;
     icon: string | null;
+    /** Null = root. A transaction still points at one id — usually the leaf. */
+    parent_id?: string | null;
 };
 
 /** The user-editable surface of a statement. Omitted key = leave alone. */
@@ -247,6 +249,13 @@ export const api = {
     },
     /** The global category taxonomy: names and colors for charts and pickers. */
     categories: () => request<{ items: Category[] }>(`/api/categories`),
+    /** Mint a leaf under a root. The same name under the same parent
+     *  returns the sibling that already exists. */
+    createCategory: (body: { name: string; parent_id: string }) =>
+        request<Category>(`/api/categories`, {
+            method: "POST",
+            body: JSON.stringify(body),
+        }),
     /**
      * Apply a category to every similar machine-categorized movement.
      * `dry_run` reports the blast radius without writing; the real run also

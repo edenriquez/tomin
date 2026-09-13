@@ -41,7 +41,7 @@ export function TimeWindowBar({ disabled = false }: { disabled?: boolean }) {
             <div
                 role="note"
                 aria-label="Periodo"
-                title={`Esta vista lee todo tu historial. El periodo que elegiste (${kept}) sigue puesto en Movimientos y Categorías.`}
+                title={`Esta vista lee todo tu historial. El periodo que elegiste (${kept}) sigue puesto en Movimientos.`}
                 className={cn(
                     "inline-flex h-[42px] items-center gap-1.5 rounded-control px-3.5",
                     "border border-dashed border-mist bg-fog/60 text-body-sm text-graphite"

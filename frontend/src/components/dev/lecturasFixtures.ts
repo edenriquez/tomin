@@ -22,11 +22,11 @@ const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
 export const TODAY = new Date(2026, 7, 28); // 28 ago 2026
 
 export const CATEGORIES = new Map<string, CategoryInfo>([
-    ["super", { name: "Súper", color: chart.neutral[1]!, icon: null }],
-    ["comida", { name: "Comida fuera", color: chart.neutral[3]!, icon: null }],
-    ["transporte", { name: "Transporte", color: chart.neutral[4]!, icon: null }],
-    ["servicios", { name: "Servicios", color: chart.signalTint[1]!, icon: null }],
-    ["compras", { name: "Compras", color: chart.neutral[5]!, icon: null }],
+    ["super", { name: "Súper", color: chart.neutral[1]!, icon: null, parentId: null }],
+    ["comida", { name: "Comida fuera", color: chart.neutral[3]!, icon: null, parentId: null }],
+    ["transporte", { name: "Transporte", color: chart.neutral[4]!, icon: null, parentId: null }],
+    ["servicios", { name: "Servicios", color: chart.signalTint[1]!, icon: null, parentId: null }],
+    ["compras", { name: "Compras", color: chart.neutral[5]!, icon: null, parentId: null }],
 ]);
 
 type Merchant = { name: string; cat: string; lo: number; hi: number; perWeek: number };

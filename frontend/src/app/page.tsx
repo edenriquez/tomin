@@ -7,7 +7,7 @@ import { windowToPeriod } from "@/lib/window";
 import { track } from "@/lib/telemetry";
 import { Skeleton } from "@/components/ui";
 import { AppChrome } from "@/components/AppChrome";
-import { MovimientosView } from "@/components/movimientos/MovimientosView";
+import { MovimientosHome } from "@/components/movimientos/MovimientosHome";
 import { Onboarding } from "@/components/Onboarding";
 
 /**
@@ -131,7 +131,7 @@ function Root() {
 
     return (
         <AppChrome withWindow onDataChanged={probe}>
-            <MovimientosView />
+            <MovimientosHome />
         </AppChrome>
     );
 }
@@ -148,11 +148,7 @@ function RootSkeleton() {
         <main className="mx-auto min-h-dvh w-full max-w-page px-5 pb-16 sm:px-8" aria-busy>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-3 py-6 sm:py-8">
                 <Skeleton className="h-6 w-20 rounded-control" />
-                <div className="order-last flex w-full gap-1 sm:order-none sm:w-auto">
-                    <Skeleton className="h-9 w-32 rounded-control" />
-                    <Skeleton className="h-9 w-28 rounded-control" />
-                    <Skeleton className="h-9 w-20 rounded-control" />
-                </div>
+                <Skeleton className="h-10 w-48 rounded-control" />
                 <div className="ml-auto flex items-center gap-2">
                     <Skeleton className="h-9 w-9 rounded-control sm:w-32" />
                     <Skeleton className="h-9 w-20 rounded-control sm:w-40" />
@@ -160,8 +156,6 @@ function RootSkeleton() {
             </div>
             <div className="-mt-2 flex flex-wrap items-center gap-2 pb-6">
                 <Skeleton className="h-[42px] w-48 rounded-control" />
-                <Skeleton className="h-[42px] w-full max-w-[400px] rounded-control" />
-                <Skeleton className="h-9 w-28 rounded-control" />
             </div>
             <div className="space-y-4 sm:space-y-6">
                 <div className="rounded-card border border-mist bg-paper p-5 shadow-card sm:p-6">

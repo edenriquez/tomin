@@ -85,3 +85,16 @@ export function rhythmCopy(
     if (!parts.length) return null;
     return `${parts.join(", ")}.`;
 }
+
+/** Day of month the series usually lands, or null when the dates wander. */
+export function typicalDayOfMonth(charges: RecurringCharge[]): number | null {
+    const days = charges
+        .map((c) => parsePeriodKey(c.date))
+        .filter((d): d is Date => d !== null)
+        .map((d) => d.getDate());
+    if (days.length === 0) return null;
+    if (days.length === 1) return days[0]!;
+    const typical = median(days);
+    const near = days.filter((d) => Math.abs(d - typical) <= 3).length / days.length;
+    return near >= DOMINANT ? typical : null;
+}

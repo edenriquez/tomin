@@ -48,6 +48,8 @@ export function useOverlay(
 
         function onKeyDown(e: KeyboardEvent) {
             if (e.key === "Escape") {
+                // A nested picker (categoría, select) claims Escape first.
+                if (document.querySelector("[data-nested-overlay]")) return;
                 e.stopPropagation();
                 onClose();
                 return;

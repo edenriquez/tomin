@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowDownToLine, ArrowUpFromLine, HardDrive } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { track } from "@/lib/telemetry";
+import { useFace } from "@/lib/useFace";
 import { FijosView } from "@/components/fijos/FijosView";
 import { PronosticoView } from "@/components/pronostico/PronosticoView";
 
@@ -19,7 +19,9 @@ import { PronosticoView } from "@/components/pronostico/PronosticoView";
  * of the other, because it always was.
  *
  * The face lives in the URL so a link to "ingresos" is a link, and the
- * retired `/pronostico` can land on it.
+ * retired `/pronostico` can land on it — but it is state first (`useFace`):
+ * clicking a tab must not cost an RSC round trip and a remount of everything
+ * under it.
  */
 export const FACES = ["fijos", "ingresos"] as const;
 export type Face = (typeof FACES)[number];
@@ -38,9 +40,7 @@ export function planHref(face: Face): string {
 }
 
 export function PlanView() {
-    const params = useSearchParams();
-    const router = useRouter();
-    const face = faceFromParam(params.get("cara"));
+    const [face, setFace] = useFace(faceFromParam, planHref);
 
     useEffect(() => {
         track("plan.face", { face, source: "arrive" });
@@ -49,7 +49,7 @@ export function PlanView() {
     function pick(next: Face) {
         if (next === face) return;
         track("plan.face", { face: next, source: "switch" });
-        router.replace(planHref(next), { scroll: false });
+        setFace(next);
     }
 
     return (

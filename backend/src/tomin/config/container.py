@@ -54,6 +54,7 @@ from ..adapters.outbound.storage import TransientFileStorage
 from ..application.use_cases import (
     AnswerPriceQuestion,
     ComparePricesUseCase,
+    CreateCategoryUseCase,
     ResolveProductTerms,
     DetectRecurringUseCase,
     ListAttentionUseCase,
@@ -280,6 +281,10 @@ class Container:
             user_labels=self.user_labels,
             cube=self.cube,
         )
+
+    @cached_property
+    def create_category(self) -> CreateCategoryUseCase:
+        return CreateCategoryUseCase(categories=self.categories, cube=self.cube)
 
     @cached_property
     def mark_transfer(self) -> MarkTransferPartyUseCase:

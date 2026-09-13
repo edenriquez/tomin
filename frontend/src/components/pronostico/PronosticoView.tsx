@@ -5,7 +5,7 @@ import { Plus, Scale, X } from "lucide-react";
 import { api, type RecurringItem, type Transaction } from "@/lib/api";
 import { useBankScope } from "@/lib/banks";
 import { cn } from "@/lib/cn";
-import { chart, colors } from "@/design/tokens";
+import { colors } from "@/design/tokens";
 import {
     HORIZONS,
     pinnedItems,
@@ -24,18 +24,8 @@ import { parsePeriodKey } from "@/lib/metrics";
 import { track } from "@/lib/telemetry";
 import { useAppData } from "@/components/AppChrome";
 import { ChartCard } from "@/components/ChartCard";
-import {
-    ChartEncodingToggle,
-    RangeBandChart,
-} from "@/components/charts/RangeBandChart";
-import {
-    CHART_ENCODINGS,
-    timelineEnvelope,
-    type ChartEncoding,
-} from "@/components/charts/rangeBand";
 import { useFijos } from "@/components/fijos/useFijos";
 import { buildTimeline, type Timeline } from "@/components/recurrentes/projection";
-import { usePanelSettings } from "@/components/settings/usePanelSettings";
 import { BackendNotice, Button, Checkbox, EmptyState, Skeleton } from "@/components/ui";
 import { LecturaDock } from "@/components/lectura/LecturaDock";
 import { useLectura } from "@/components/lectura/LecturaProvider";
@@ -92,15 +82,6 @@ export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {
         },
         [fijos]
     );
-    const [chartCfg, setChartCfg] = usePanelSettings("pronostico.contrast", {
-        encoding: "barras" as string,
-    });
-    const encoding: ChartEncoding = (CHART_ENCODINGS as readonly string[]).includes(
-        chartCfg.encoding
-    )
-        ? (chartCfg.encoding as ChartEncoding)
-        : "barras";
-
     const { statementIds } = useBankScope(dataVersion);
     const scopeQuery = statementIds
         ? `?${statementIds.map((id) => `statement_id=${id}`).join("&")}`
@@ -197,27 +178,6 @@ export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {
         [fijosTl, nominaTl, extraTl]
     );
 
-    const contrastBands = useMemo(() => {
-        const ingresosMid = contrast.nomina.map((n, i) => n + (contrast.extra[i] ?? 0));
-        const fijosEnv = timelineEnvelope(fijosTl);
-        return [
-            {
-                name: "Ingresos",
-                color: CONTRAST_COLORS.nomina,
-                bandColor: CONTRAST_COLORS.extra,
-                low: contrast.nomina,
-                mid: ingresosMid,
-                high: ingresosMid,
-            },
-            {
-                name: "Fijos",
-                color: CONTRAST_COLORS.fijos,
-                bandColor: chart.neutral[4]!,
-                ...fijosEnv,
-            },
-        ];
-    }, [contrast, fijosTl]);
-
     const income = nominaTl.totals.projected + extraTl.totals.projected;
     const need = fijosTl.totals.projected;
     const nominaNeed = nominaTl.totals.projected;
@@ -288,25 +248,9 @@ export function PronosticoView({ onGoToFijos }: { onGoToFijos?: () => void } = {
                         onGoToFijos={onGoToFijos}
                     />
 
-                    <ChartCard
-                        title="Ingresos contra fijos"
-                        action={
-                            <ChartEncodingToggle
-                                value={encoding}
-                                onChange={(enc) => setChartCfg({ encoding: enc })}
-                            />
-                        }
-                    >
+                    <ChartCard title="Ingresos contra fijos">
                         {loading ? (
                             <Skeleton className="h-[300px]" />
-                        ) : encoding === "rango" ? (
-                            <RangeBandChart
-                                months={contrast.months}
-                                firstFutureIndex={contrast.firstFutureIndex}
-                                series={contrastBands}
-                                empty="Etiqueta un ingreso o fija un cargo para contrastarlos."
-                                caption="La banda azul son los ingresos; la gris, los gastos fijos ya comprometidos. El grosor de ingresos es el extra; el de fijos, lo que se ha movido el monto."
-                            />
                         ) : (
                             <ContrastChart data={contrast} />
                         )}

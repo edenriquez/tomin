@@ -267,8 +267,9 @@ def test_seed_no_longer_files_withdrawals_under_transfers(app):
     transfers = labels["Transferencias & Ajustes"]
     assert "retiro" not in transfers
     assert "cajero" not in transfers
-    # The wording that genuinely is an internal movement stays.
-    assert "pago tc" in transfers
+    # The wording that genuinely is an internal movement lives on the leaf.
+    assert "pago tc" in labels["Pago de tarjeta"]
+    assert "pago tc" not in transfers
 
 
 # --- the backfill ---------------------------------------------------------

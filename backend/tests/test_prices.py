@@ -598,7 +598,7 @@ def test_the_web_reference_reads_a_quote_out_of_search_plus_model(app):
         available = True
         model_label = "fake"
 
-        def stream(self, *, system, messages):
+        def stream(self, *, system, messages, options=None):
             yield ('[{"url": "https://despensa.bodegaaurrera.com.mx/ip/gv/1", "store": "Bodega Aurrera",'
                    ' "product": "Detergente Great Value 7 L", "size": 7, "unit": "l", "price": 169.9}]')
 
@@ -776,13 +776,13 @@ def test_a_rate_limited_reader_hands_the_pages_to_the_fallback(monkeypatch):
 
     class _Limited:
         available = True; model_label = "primary"; calls = 0
-        def stream(self, *, system, messages):
+        def stream(self, *, system, messages, options=None):
             _Limited.calls += 1
             raise ChatUnavailable("El proveedor respondió 429: Provider returned error")
 
     class _Fallback:
         available = True; model_label = "fallback"
-        def stream(self, *, system, messages):
+        def stream(self, *, system, messages, options=None):
             yield '[{"url": "https://www.soriana.com/x/1.html", "store": "Soriana", "product": "Quality Day 7 l", "size": 7, "unit": "l", "price": 169.9}]'
 
     (quote,) = wl.WebPriceReference(_Search(), _Limited(), engine="Firecrawl", fallback=_Fallback()).lookup(["detergente"])

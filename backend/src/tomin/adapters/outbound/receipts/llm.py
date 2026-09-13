@@ -24,7 +24,13 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from ....application.dtos.receipts import ParsedReceipt, ParsedReceiptItem
-from ....application.ports.outbound.chat import ChatMessage, ChatPort, ChatUnavailable
+from ....application.ports.outbound.chat import (
+    ChatMessage,
+    ChatOptions,
+    ChatPort,
+    ChatUnavailable,
+    json_schema_format,
+)
 from .heuristic import HeuristicReceiptReader
 
 logger = logging.getLogger(__name__)
@@ -35,6 +41,42 @@ logger = logging.getLogger(__name__)
 MAX_LINES = 400
 
 _FENCE = re.compile(r"^```(?:json)?|```$", re.MULTILINE)
+
+#: The answer's shape, sent as the request's ``response_format``. Providers that
+#: honour it cannot return prose or a stray key; the prompt below still spells
+#: the shape out for the ones that ignore the field, and ``_parse`` still checks
+#: every value, because a schema constrains syntax, not truth.
+RECEIPT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["store", "purchased_at", "total", "items"],
+    "properties": {
+        "store": {"type": ["string", "null"]},
+        "purchased_at": {"type": ["string", "null"]},
+        "total": {"type": ["string", "null"]},
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["line_no", "description", "amount", "quantity", "unit_price"],
+                "properties": {
+                    "line_no": {"type": "integer"},
+                    "description": {"type": "string"},
+                    "amount": {"type": "string"},
+                    "quantity": {"type": ["string", "null"]},
+                    "unit_price": {"type": ["string", "null"]},
+                },
+            },
+        },
+    },
+}
+
+#: Cold and pinned to the schema: reading a ticket is extraction, not prose.
+OPTIONS = ChatOptions(
+    temperature=0,
+    response_format=json_schema_format("ticket", RECEIPT_SCHEMA),
+)
 
 SYSTEM = """\
 Lees tickets de compra mexicanos que un teléfono ya convirtió en texto por OCR.
@@ -95,6 +137,7 @@ class LlmReceiptReader:
                 self._chat.stream(
                     system=SYSTEM,
                     messages=[ChatMessage(role="user", content=_numbered(lines))],
+                    options=OPTIONS,
                 )
             )
         except ChatUnavailable as exc:

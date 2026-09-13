@@ -933,6 +933,7 @@ class SqlCategoryRepository:
                     color=m.color,
                     icon=m.icon,
                     categorization_labels=list(m.categorization_labels or []),
+                    parent_id=UUID(m.parent_id) if m.parent_id else None,
                 )
                 for m in s.scalars(select(CategoryModel)).all()
             ]
@@ -947,8 +948,21 @@ class SqlCategoryRepository:
                         color=c.color,
                         icon=c.icon,
                         categorization_labels=list(c.categorization_labels),
+                        parent_id=_u(c.parent_id) if c.parent_id else None,
                     )
                 )
+
+    def save_many(self, categories: list[Category]) -> None:
+        with self._db.session() as s:
+            for c in categories:
+                model = s.get(CategoryModel, _u(c.id))
+                if model is None:
+                    continue
+                model.name = c.name
+                model.color = c.color
+                model.icon = c.icon
+                model.categorization_labels = list(c.categorization_labels)
+                model.parent_id = _u(c.parent_id) if c.parent_id else None
 
 
 class SqlUserAliasRepository:

@@ -13,7 +13,8 @@ const nextConfig = {
             { source: "/statements", destination: "/documentos", permanent: false },
             { source: "/fijos", destination: "/plan", permanent: false },
             { source: "/pronostico", destination: "/plan?cara=ingresos", permanent: false },
-            { source: "/recurrentes", destination: "/plan", permanent: false },
+            { source: "/recurrentes", destination: "/?cara=recurrentes", permanent: false },
+            { source: "/categorias", destination: "/", permanent: false },
             ...[
             "/dashboard",
             "/transactions",

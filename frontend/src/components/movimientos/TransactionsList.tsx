@@ -13,24 +13,23 @@ import {
 import type { AttentionKind, Transaction, TransactionPatch } from "@/lib/api";
 import { LENS_KIND_LABELS } from "@/components/charts/lens/types";
 import { cn } from "@/lib/cn";
-import { categoryColor, categoryName, useCategories, type CategoryInfo } from "@/lib/categories";
+import { categoryColor, useCategories, type CategoryInfo } from "@/lib/categories";
 import { matchMerchant, merchantLogoUrl } from "@/lib/merchants";
 import { dayLabel, mxn2 } from "@/lib/format";
 import { parsePeriodKey } from "@/lib/metrics";
 import { Button, Checkbox } from "@/components/ui";
-import { EditorStrip, InlineCategory, InlineName, useInlineEdit } from "./TransactionEditor";
+import { EditorStrip, InlineName, useInlineEdit } from "./TransactionEditor";
+import { CategoryChip } from "./CategoryChip";
 
 /**
  * The rows under the chart. Flat entries separated by hairlines — one card
  * (the parent's) holding a ledger, not a pile of outlined boxes:
  *
  *     [icon]  7-Eleven                                   −$9.99
- *             19 jul                       Comida y Supermercados
+ *             [Comida & Supermercados]                   19 jul
  *
- * The icon is the category's mark (tinted disc in its color) — the nearest
- * honest thing to the merchant logo statements don't carry. Date under the
- * description, category under the amount: each column reads "what · when"
- * and "how much · of what kind".
+ * The category is a chip on every row — reclasificar without opening the
+ * editor. Date sits under the amount. Uncategorized is a dashed invite.
  *
  * Layout contract: the list bleeds to the parent card's edges (-mx) so the
  * dividers run full width; rows re-apply the card's own padding (p-5/sm:p-6
@@ -50,6 +49,7 @@ export function TransactionsList({
     editing,
     membership,
     attention,
+    expandEditor = true,
 }: {
     /** Already window+search filtered, `tx_date DESC` from the API. */
     items: Transaction[];
@@ -72,6 +72,9 @@ export function TransactionsList({
         excluded: Set<string>;
         onToggle: (id: string, inSet: boolean) => void;
     };
+    /** When false, selection opens the reclasificación panel instead of the
+     *  strip under the row. */
+    expandEditor?: boolean;
 }) {
     const categories = useCategories();
     const rowRefs = useRef(new Map<string, HTMLElement>());
@@ -152,6 +155,8 @@ export function TransactionsList({
                         }
                         dateLabel={rowDate(t)}
                         onToggle={() => toggle(t)}
+                        onEnsureSelect={() => onSelect(t.id)}
+                        expandEditor={expandEditor}
                         editing={editing}
                         flag={attention?.get(t.id)}
                     />
@@ -173,10 +178,10 @@ export function TransactionsList({
 }
 
 /**
- * One entry. Unselected it is a static reading; selected (with editing
- * powers) the same pixels become the editor — the title is an input dressed
- * as itself, the category text is a quiet picker, and the strip below holds
- * the rest. No form appears; the row is the form.
+ * One entry. The category chip is always the recategorize control. Selected
+ * (with editing powers) the title becomes an input and the strip below holds
+ * nota, transferencia and the teach prompt. No form appears; the row is the
+ * form.
  */
 const Row = forwardRef<HTMLLIElement, {
     transaction: Transaction;
@@ -186,13 +191,15 @@ const Row = forwardRef<HTMLLIElement, {
     onMembership?: (inSet: boolean) => void;
     dateLabel: string;
     onToggle: () => void;
+    onEnsureSelect: () => void;
+    expandEditor: boolean;
     editing?: {
         onPatch: (t: Transaction, patch: TransactionPatch) => void;
         onBulkApplied: () => void;
     };
     /** Why the chart rings this row, if it does. */
     flag?: AttentionKind;
-}>(function Row({ transaction: t, categories, selected, inSet, onMembership, dateLabel, onToggle, editing, flag }, ref) {
+}>(function Row({ transaction: t, categories, selected, inSet, onMembership, dateLabel, onToggle, onEnsureSelect, expandEditor, editing, flag }, ref) {
     // Unconditional (hooks) and cheap: it holds no fetch until a commit.
     const edit = useInlineEdit(
         t,
@@ -200,6 +207,7 @@ const Row = forwardRef<HTMLLIElement, {
         () => editing?.onBulkApplied()
     );
     const editable = selected && !!editing;
+    const inline = editable && expandEditor;
 
     return (
         <li
@@ -251,34 +259,42 @@ const Row = forwardRef<HTMLLIElement, {
                 )}
 
                 <span className="min-w-0 flex-1">
-                    {editable ? (
+                    {inline ? (
                         <InlineName transaction={t} edit={edit} />
                     ) : (
                         <span className="block truncate text-body font-medium text-ink">
                             {t.description}
                         </span>
                     )}
-                    <span className="mt-0.5 block text-body-sm text-graphite">{dateLabel}</span>
+                    <span className="mt-1 flex min-w-0 items-center gap-1.5">
+                        <CategoryChip
+                            categoryId={t.category_id}
+                            source={t.category_source}
+                            onChange={
+                                editing
+                                    ? (id) => {
+                                          onEnsureSelect();
+                                          edit.changeCategory(id);
+                                      }
+                                    : undefined
+                            }
+                            editing={editable}
+                        />
+                        {editable && (
+                            <span className="shrink-0 text-label text-ash">En edición</span>
+                        )}
+                    </span>
                 </span>
 
-                <span className="min-w-0 max-w-[45%] shrink-0 text-right">
+                <span className="shrink-0 text-right">
                     <span className="flex items-center justify-end gap-2">
                         {flag && <FlagTag kind={flag} />}
                         <Amount t={t} />
                     </span>
-                    {editable ? (
-                        <InlineCategory transaction={t} edit={edit} />
-                    ) : (
-                        <span
-                            className="mt-0.5 block truncate text-body-sm text-graphite"
-                            title={categoryName(categories, t.category_id)}
-                        >
-                            {categoryName(categories, t.category_id)}
-                        </span>
-                    )}
+                    <span className="mt-0.5 block text-body-sm text-graphite">{dateLabel}</span>
                 </span>
             </div>
-            {editable && (
+            {inline && (
                 <div className="animate-reveal border-t border-mist px-5 sm:px-6">
                     <EditorStrip
                         transaction={t}

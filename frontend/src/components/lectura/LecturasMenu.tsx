@@ -57,8 +57,7 @@ export function LecturasMenu() {
                     >
                         {count === 0 && (
                             <li className="px-3 py-2 text-body-sm text-graphite">
-                                Todavía no tienes ninguna. Filtra un conjunto y elige Leer
-                                conjunto.
+                                Todavía no tienes ninguna.
                             </li>
                         )}
                         {items?.map((w) => {

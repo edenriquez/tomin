@@ -81,6 +81,13 @@ class CategorizationService:
     @staticmethod
     def _match(norm: str, index: list[tuple[str, UUID]]) -> UUID | None:
         for label, _id in index:
-            if label and label in norm:
+            if not label:
+                continue
+            # Short labels ("gas") are words, not substrings: otherwise
+            # "recargas" files under the gas bill.
+            if len(label) <= 3:
+                if re.search(rf"(^| ){re.escape(label)}( |$)", norm):
+                    return _id
+            elif label in norm:
                 return _id
         return None

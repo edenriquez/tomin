@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import type { ApexOptions } from "apexcharts";
 import { ChartSkeleton } from "@/components/ui";
 import { baseOptions } from "./theme";
@@ -9,12 +9,10 @@ import { baseOptions } from "./theme";
 /**
  * ApexCharts touches `window` at import time, so `ssr: false` is load-bearing,
  * not a nicety — a static import fails `next build` during prerender. One
- * wrapper means one shared chunk instead of one per chart.
+ * wrapper means one shared chunk instead of one per chart. The runtime behind
+ * it drives Apex directly; see `ApexRuntime` for why not react-apexcharts.
  */
-const ReactApexChart = dynamic(() => import("react-apexcharts"), {
-    ssr: false,
-    loading: () => <ChartSkeleton />,
-});
+const ApexRuntime = dynamic(() => import("./ApexRuntime"), { ssr: false });
 
 type Plain = Record<string, unknown>;
 
@@ -52,13 +50,11 @@ export type ApexChartProps = {
 };
 
 /**
- * Memoized on props identity, and that is load-bearing: react-apexcharts
- * calls updateOptions/updateSeries on effectively every re-render it
- * receives (its own deep compare is against the chart's already-merged
- * internal options, which never equal the incoming props). An update tears
- * down and redraws the chart's internals, so a parent re-render during a
- * drag-selection gesture — the selection handler setting state IS such a
- * re-render — would destroy the gridRect a pending debounce timer still
+ * Memoized on props identity, and that is load-bearing: the runtime pushes an
+ * update to Apex for every new `options`/`series` object it is handed, and an
+ * update tears down and redraws the chart's internals — so a parent re-render
+ * during a drag-selection gesture (the selection handler setting state IS such
+ * a re-render) would destroy the gridRect a pending debounce timer still
  * points at. Callers keep `options` and `series` referentially stable via
  * useMemo; this memo turns that stability into "Apex is not touched at all".
  */
@@ -72,6 +68,11 @@ function ApexChartInner({
     width = "100%",
     className,
 }: ApexChartProps) {
+    // The placeholder is this component's, not `next/dynamic`'s, because only
+    // here is the chart's height known: a 320px default standing in for a
+    // 280px chart is a 40px jump the moment the real one lands.
+    const [ready, setReady] = useState(false);
+
     const merged = useMemo(
         () =>
             deepMerge(baseOptions as Plain, {
@@ -81,16 +82,26 @@ function ApexChartInner({
         [options, type]
     );
 
+    const reserved = typeof height === "number" ? height : undefined;
+
     return (
-        // min-w-0 matters: a grid item defaults to min-width:auto and the SVG
-        // will not shrink below its first render width, overflowing the grid.
-        <div className={className} style={{ minWidth: 0 }}>
-            <ReactApexChart
+        // The placeholder overlays rather than stacks: for one frame after Apex
+        // draws, both are mounted, and a skeleton that took its own row would
+        // make the card twice as tall for exactly that frame.
+        <div style={{ position: "relative", minWidth: 0, minHeight: reserved }}>
+            {!ready && (
+                <div className="absolute inset-0" aria-hidden>
+                    <ChartSkeleton height={reserved ?? 320} />
+                </div>
+            )}
+            <ApexRuntime
                 type={type}
                 options={merged}
-                series={series as never}
+                series={series}
                 height={height}
                 width={width}
+                className={className}
+                onReady={() => setReady(true)}
             />
         </div>
     );

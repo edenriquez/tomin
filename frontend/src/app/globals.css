@@ -155,6 +155,19 @@
         .bottom-sheet-scrim.sheet-leave {
             animation: tomin-scrim-out 240ms linear both;
         }
+
+        .movimientos-modal-scrim.modal-enter {
+            animation: tomin-scrim-in 200ms linear both;
+        }
+        .movimientos-modal-scrim.modal-leave {
+            animation: tomin-scrim-out 180ms linear both;
+        }
+        .movimientos-modal-panel.modal-enter {
+            animation: movimientos-modal-in 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+        }
+        .movimientos-modal-panel.modal-leave {
+            animation: movimientos-modal-out 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
+        }
     }
 
     @keyframes reveal {
@@ -201,6 +214,110 @@
         }
         to {
             opacity: 0;
+        }
+    }
+
+    /* Movimientos modal: grows down from the header field, then collapses
+       back into it. Origin is the top centre — the search trigger's seat. */
+    .movimientos-modal-scrim {
+        opacity: 0;
+    }
+    .movimientos-modal-scrim.is-open {
+        opacity: 1;
+    }
+    .movimientos-modal-panel {
+        opacity: 0;
+        transform: translateY(-16px) scale(0.96);
+        transform-origin: top center;
+    }
+    .movimientos-modal-panel.is-open {
+        opacity: 1;
+        transform: none;
+    }
+
+    .reclasificacion-panel {
+        animation: reclasificacion-in 180ms ease-out;
+    }
+    @keyframes reclasificacion-in {
+        from {
+            opacity: 0;
+            transform: translateX(16px);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @keyframes movimientos-modal-in {
+        from {
+            opacity: 0;
+            transform: translateY(-16px) scale(0.96);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @keyframes movimientos-modal-out {
+        from {
+            opacity: 1;
+            transform: none;
+        }
+        to {
+            opacity: 0;
+            transform: translateY(-12px) scale(0.97);
+        }
+    }
+
+    /* Recurring dues: closer days pulse faster and redder. Off when the
+       OS asked for reduced motion — the fill still carries the urgency. */
+    @keyframes due-pulse {
+        0%,
+        100% {
+            box-shadow: 0 0 0 0 rgba(168, 50, 42, 0.55);
+        }
+        70% {
+            box-shadow: 0 0 0 7px rgba(168, 50, 42, 0);
+        }
+    }
+
+    @keyframes due-pulse-soft {
+        0%,
+        100% {
+            box-shadow: 0 0 0 0 rgba(168, 50, 42, 0.28);
+        }
+        70% {
+            box-shadow: 0 0 0 6px rgba(168, 50, 42, 0);
+        }
+    }
+
+    @keyframes due-pulse-later {
+        0%,
+        100% {
+            box-shadow: 0 0 0 0 rgba(59, 166, 241, 0.35);
+        }
+        70% {
+            box-shadow: 0 0 0 5px rgba(59, 166, 241, 0);
+        }
+    }
+
+    .due-pulse-urgent {
+        animation: due-pulse 1.05s ease-out infinite;
+    }
+    .due-pulse-soon {
+        animation: due-pulse-soft 1.85s ease-out infinite;
+    }
+    .due-pulse-later {
+        animation: due-pulse-later 2.6s ease-out infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .due-pulse-urgent,
+        .due-pulse-soon,
+        .due-pulse-later {
+            animation: none;
         }
     }
 }
@@ -345,6 +462,13 @@
     display: none !important;
 }
 
+/* Apex already sits the box a few px off the column center; this makes the
+   left edge 10px from that center on Recurrentes. */
+.apexcharts-tooltip.load-timeline-tooltip {
+    margin-left: 35px;
+}
+
+
 /* -------------------------------------------------------------------------
    Lecturas: the emphasis layer over a chart (components/charts/lens).
    The ring is an Apex point annotation carrying `.lens-pulse`; it pulses
@@ -410,4 +534,16 @@
 .lens-callout-below::after {
     top: -5px;
     transform: translateX(-50%) rotate(-135deg);
+}
+
+/* Pending recurrence stack: Signal hatch on Wash, never a second hue. */
+.hatch-pending {
+    background-color: theme("colors.wash");
+    background-image: repeating-linear-gradient(
+        -45deg,
+        color-mix(in srgb, theme("colors.signal") 22%, transparent),
+        color-mix(in srgb, theme("colors.signal") 22%, transparent) 4px,
+        transparent 4px,
+        transparent 8px
+    );
 }

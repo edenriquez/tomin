@@ -14,6 +14,7 @@ answers", which no test can assert:
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -24,6 +25,7 @@ from tomin.adapters.outbound.chat import NullChat
 from tomin.adapters.outbound.metrics import CohortProfileResolver
 from tomin.application.dtos.metrics import Period
 from tomin.application.ports.outbound.chat import ChatMessage, ChatUnavailable
+from tomin.application.use_cases import workstation_chat
 from tomin.application.use_cases.workstation_chat import (
     SYSTEM,
     AnswerWorkstationQuestion,
@@ -44,9 +46,10 @@ class RecordingChat:
         self.system: str | None = None
         self.messages: list[ChatMessage] = []
 
-    def stream(self, *, system, messages):
+    def stream(self, *, system, messages, options=None):
         self.system = system
         self.messages = list(messages)
+        self.options = options
         yield "ok"
 
 
@@ -112,7 +115,7 @@ def test_fallback_chat_uses_the_second_model_when_the_first_refuses():
         available = True
         model_label = "primary"
 
-        def stream(self, *, system, messages):
+        def stream(self, *, system, messages, options=None):
             raise ChatUnavailable("429")
             yield  # pragma: no cover — makes this a generator
 
@@ -120,7 +123,7 @@ def test_fallback_chat_uses_the_second_model_when_the_first_refuses():
         available = True
         model_label = "fallback"
 
-        def stream(self, *, system, messages):
+        def stream(self, *, system, messages, options=None):
             yield "hola"
 
     chat = FallbackChat(Dead(), Alive())
@@ -285,3 +288,46 @@ def test_history_is_passed_through_before_the_new_question(app, seeded, workstat
         )
     )
     assert [m.role for m in chat.messages] == ["user", "assistant", "user"]
+
+
+# --- the tools see every row; the brief prints up to its cap -----------------
+def test_the_model_is_handed_tools_over_the_same_rows(app, seeded, workstation):
+    chat = RecordingChat()
+    list(
+        _answerer(app, chat).stream(
+            user_id=DEV_USER, workstation=workstation, period=Period(), question="¿cuánto en enero?"
+        )
+    )
+    assert [t.name for t in chat.options.tools] == [
+        "buscar_movimientos",
+        "agrupar_movimientos",
+        "resumen_de_periodo",
+    ]
+    # The handler computes over the lens: twelve top-ups of 15, no Uber.
+    summary = json.loads(chat.options.tool_handler("resumen_de_periodo", {}))
+    assert (summary["movimientos"], summary["total"]) == (12, "180.00")
+    january = json.loads(
+        chat.options.tool_handler("agrupar_movimientos", {"por": "mes", "hasta": "2024-01-31"})
+    )
+    assert january["grupos"] == [
+        {"grupo": "2024-01", "movimientos": 5, "total": "75.00", "promedio": "15.00"}
+    ]
+
+
+def test_brief_truncates_at_the_cap_and_points_at_the_tools(
+    app, seeded, workstation, monkeypatch
+):
+    monkeypatch.setattr(workstation_chat, "MAX_ROWS", 5)
+    brief = _answerer(app, RecordingChat()).build_brief(
+        user_id=DEV_USER, workstation=workstation, period=Period()
+    )
+    header = next(line for line in brief.splitlines() if line.startswith("MOVIMIENTOS"))
+    assert header.startswith("MOVIMIENTOS (12 — se muestran 5; usa buscar_movimientos")
+    assert sum(1 for line in brief.splitlines() if "TELCEL RECARGA" in line) == 5
+
+
+def test_brief_under_the_cap_is_not_marked_truncated(app, seeded, workstation):
+    brief = _answerer(app, RecordingChat()).build_brief(
+        user_id=DEV_USER, workstation=workstation, period=Period()
+    )
+    assert "MOVIMIENTOS (12):" in brief

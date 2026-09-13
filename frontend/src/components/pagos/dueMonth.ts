@@ -1,0 +1,309 @@
+/**
+ * One month of recurring charges: what already landed, what still has to be
+ * paid, and what comes after. The grid and the list read from this so they
+ * cannot disagree.
+ */
+
+import type { RecurringItem } from "@/lib/api";
+import { parsePeriodKey } from "@/lib/metrics";
+import { futureCharges, isStale, ledgerEnd, monthKeyOf, today } from "@/components/recurrentes/projection";
+
+const DAY = 86_400_000;
+
+export type Urgency = "urgent" | "soon" | "later";
+
+export type DueLine = {
+    key: string;
+    label: string;
+    amount: number;
+    date: Date;
+    iso: string;
+    urgency: Urgency | null;
+    status: "registered" | "due";
+};
+
+export type DuePair = {
+    currentMonth: Date;
+    nextMonth: Date;
+    currentCells: DayCell[];
+    nextCells: DayCell[];
+    /** Landed or still due inside the current month. */
+    thisMonth: DueLine[];
+    /** Projected landings in the following month. */
+    upcoming: DueLine[];
+};
+
+export type DayCell = {
+    date: Date;
+    iso: string;
+    /** Outside the selected month — drawn, but mute. */
+    outside: boolean;
+    weekend: boolean;
+    today: boolean;
+    /** Measured charges that already landed. */
+    registered: number;
+    /** Simulated landings still ahead. */
+    due: number;
+    dueLabels: string[];
+    registeredLabels: string[];
+    urgency: Urgency | null;
+};
+
+export type DueMonth = {
+    month: Date;
+    cells: DayCell[][];
+    /** Remaining this month — the "tienes que pagar" list. */
+    dueThisMonth: DueLine[];
+    /** First landing after this month. */
+    upcoming: DueLine[];
+    /** Already landed in this month. */
+    registered: DueLine[];
+    dueTotal: number;
+    upcomingTotal: number;
+    canGoForward: boolean;
+    canGoBack: boolean;
+};
+
+export function isoOf(d: Date): string {
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${day}`;
+}
+
+export function startOfWeek(d: Date): Date {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return x;
+}
+
+export function startOfMonth(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+export function endOfMonth(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+}
+
+export function shiftMonth(d: Date, delta: number): Date {
+    return new Date(d.getFullYear(), d.getMonth() + delta, 1);
+}
+
+/** How soon a future day is. Today and tomorrow are urgent. */
+export function urgencyOf(date: Date, asOf: Date = today()): Urgency | null {
+    const a = new Date(asOf.getFullYear(), asOf.getMonth(), asOf.getDate());
+    const b = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const days = Math.round((b.getTime() - a.getTime()) / DAY);
+    if (days < 0) return null;
+    if (days <= 2) return "urgent";
+    if (days <= 7) return "soon";
+    return "later";
+}
+
+const BACK_MONTHS = 12;
+
+export function buildDueMonth(
+    items: RecurringItem[],
+    month: Date,
+    asOf: Date = today()
+): DueMonth {
+    const now = today();
+    const monthStart = startOfMonth(month);
+    const monthEnd = endOfMonth(month);
+    const current = startOfMonth(now);
+    const earliest = shiftMonth(current, -(BACK_MONTHS - 1));
+    const ledgerAsOf = items.length ? ledgerEnd(items) : asOf;
+
+    const active = items.filter((i) => !isStale(i, ledgerAsOf));
+
+    const registeredByIso = new Map<string, DueLine[]>();
+    const dueByIso = new Map<string, DueLine[]>();
+
+    for (const item of active) {
+        for (const c of item.charges ?? []) {
+            const d = parsePeriodKey(c.date);
+            if (!d) continue;
+            if (d < monthStart || d > monthEnd) continue;
+            const iso = isoOf(d);
+            const line: DueLine = {
+                key: `${item.key}:${iso}:r`,
+                label: item.label,
+                amount: Math.abs(c.amount),
+                date: d,
+                iso,
+                urgency: null,
+                status: "registered",
+            };
+            registeredByIso.set(iso, [...(registeredByIso.get(iso) ?? []), line]);
+        }
+
+        // Project from today through the end of next month so "próximos" has
+        // somewhere to land when this month is almost over.
+        const horizon = endOfMonth(shiftMonth(monthStart, 1));
+        for (const landing of futureCharges(item, horizon, now, ledgerAsOf)) {
+            const iso = isoOf(landing.date);
+            const line: DueLine = {
+                key: `${item.key}:${iso}:d`,
+                label: item.label,
+                amount: Math.abs(landing.amount),
+                date: landing.date,
+                iso,
+                urgency: urgencyOf(landing.date, now),
+                status: "due",
+            };
+            dueByIso.set(iso, [...(dueByIso.get(iso) ?? []), line]);
+        }
+    }
+
+    const dueThisMonth: DueLine[] = [];
+    const upcoming: DueLine[] = [];
+    const registered: DueLine[] = [];
+
+    for (const lines of registeredByIso.values()) registered.push(...lines);
+    for (const lines of dueByIso.values()) {
+        for (const line of lines) {
+            if (line.date >= monthStart && line.date <= monthEnd) dueThisMonth.push(line);
+            else if (line.date > monthEnd) upcoming.push(line);
+        }
+    }
+
+    dueThisMonth.sort((a, b) => a.date.getTime() - b.date.getTime());
+    upcoming.sort((a, b) => a.date.getTime() - b.date.getTime());
+    registered.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // One row per series in "próximos": the soonest landing after this month.
+    const soonestUpcoming = new Map<string, DueLine>();
+    for (const line of upcoming) {
+        const id = line.key.split(":")[0] ?? line.key;
+        if (!soonestUpcoming.has(id)) soonestUpcoming.set(id, line);
+    }
+    const upcomingUnique = Array.from(soonestUpcoming.values()).sort(
+        (a, b) => a.date.getTime() - b.date.getTime()
+    );
+
+    const gridStart = startOfWeek(monthStart);
+    const gridEnd = startOfWeek(monthEnd);
+    gridEnd.setDate(gridEnd.getDate() + 6);
+
+    const weeks: DayCell[][] = [];
+    const cursor = new Date(gridStart);
+    const todayIso = isoOf(now);
+    while (cursor <= gridEnd) {
+        const week: DayCell[] = [];
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
+            const iso = isoOf(date);
+            const regs = registeredByIso.get(iso) ?? [];
+            const dues = dueByIso.get(iso) ?? [];
+            const inMonth = date >= monthStart && date <= monthEnd;
+            week.push({
+                date,
+                iso,
+                outside: !inMonth,
+                weekend: i >= 5,
+                today: iso === todayIso,
+                registered: regs.reduce((s, l) => s + l.amount, 0),
+                due: dues.reduce((s, l) => s + l.amount, 0),
+                dueLabels: dues.map((l) => l.label),
+                registeredLabels: regs.map((l) => l.label),
+                urgency: dues[0]?.urgency ?? null,
+            });
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        weeks.push(week);
+    }
+
+    return {
+        month: monthStart,
+        cells: weeks,
+        dueThisMonth,
+        upcoming: upcomingUnique,
+        registered,
+        dueTotal: dueThisMonth.reduce((s, l) => s + l.amount, 0),
+        upcomingTotal: upcomingUnique.reduce((s, l) => s + l.amount, 0),
+        canGoForward: monthKeyOf(monthStart) < monthKeyOf(current),
+        canGoBack: monthKeyOf(monthStart) > monthKeyOf(earliest),
+    };
+}
+
+/**
+ * Current month + the next one. The calendar always shows this pair; the
+ * tables read the same lines so a selected day cannot disagree with a row.
+ */
+export function buildDuePair(items: RecurringItem[], asOf: Date = today()): DuePair {
+    const currentMonth = startOfMonth(asOf);
+    const nextMonth = shiftMonth(currentMonth, 1);
+    const current = buildDueMonth(items, currentMonth, asOf);
+    const next = buildDueMonth(items, nextMonth, asOf);
+
+    const registeredByIso = groupByIso([...current.registered, ...next.registered]);
+    const dueByIso = groupByIso([...current.dueThisMonth, ...next.dueThisMonth]);
+
+    const thisMonth = [...current.registered, ...current.dueThisMonth].sort(
+        (a, b) => a.date.getTime() - b.date.getTime() || a.label.localeCompare(b.label, "es-MX")
+    );
+    const upcoming = next.dueThisMonth.slice();
+
+    return {
+        currentMonth,
+        nextMonth,
+        currentCells: sundayGrid(currentMonth, registeredByIso, dueByIso, asOf),
+        nextCells: sundayGrid(nextMonth, registeredByIso, dueByIso, asOf),
+        thisMonth,
+        upcoming,
+    };
+}
+
+function groupByIso(lines: DueLine[]): Map<string, DueLine[]> {
+    const map = new Map<string, DueLine[]>();
+    for (const line of lines) {
+        map.set(line.iso, [...(map.get(line.iso) ?? []), line]);
+    }
+    return map;
+}
+
+/** Sunday-first month, same skeleton as FechaMiniCalendario. */
+export function sundayGrid(
+    month: Date,
+    registeredByIso: Map<string, DueLine[]>,
+    dueByIso: Map<string, DueLine[]>,
+    asOf: Date = today()
+): DayCell[] {
+    const year = month.getFullYear();
+    const mo = month.getMonth();
+    const startPad = new Date(year, mo, 1).getDay();
+    const days = new Date(year, mo + 1, 0).getDate();
+    const todayIso = isoOf(asOf);
+    const cells: DayCell[] = [];
+
+    const cellOf = (date: Date, outside: boolean): DayCell => {
+        const iso = isoOf(date);
+        const regs = registeredByIso.get(iso) ?? [];
+        const dues = dueByIso.get(iso) ?? [];
+        return {
+            date,
+            iso,
+            outside,
+            weekend: date.getDay() === 0 || date.getDay() === 6,
+            today: iso === todayIso && !outside,
+            registered: regs.reduce((s, l) => s + l.amount, 0),
+            due: dues.reduce((s, l) => s + l.amount, 0),
+            dueLabels: dues.map((l) => l.label),
+            registeredLabels: regs.map((l) => l.label),
+            urgency: dues[0]?.urgency ?? null,
+        };
+    };
+
+    for (let i = startPad - 1; i >= 0; i--) {
+        cells.push(cellOf(new Date(year, mo, -i), true));
+    }
+    for (let day = 1; day <= days; day++) {
+        cells.push(cellOf(new Date(year, mo, day), false));
+    }
+    while (cells.length % 7 !== 0) {
+        const last = cells[cells.length - 1]!;
+        const next = new Date(last.date);
+        next.setDate(next.getDate() + 1);
+        cells.push(cellOf(next, true));
+    }
+    return cells;
+}

@@ -1,16 +1,16 @@
 "use client";
 
-import { AppChrome } from "@/components/AppChrome";
-import { CategoriasView } from "@/components/categorias/CategoriasView";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 /**
- * The Categorías route — the period's spend, one group per category, with the
- * same window pills (shared `lastWindow`) as Movimientos.
+ * Retired: Categorías is a face of Movimientos. The next.config redirect
+ * handles bookmarks; this covers client navigations that still have the path.
  */
-export default function CategoriasPage() {
-    return (
-        <AppChrome withWindow>
-            <CategoriasView />
-        </AppChrome>
-    );
+export default function CategoriasRedirect() {
+    const router = useRouter();
+    useEffect(() => {
+        router.replace("/");
+    }, [router]);
+    return null;
 }

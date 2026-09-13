@@ -316,7 +316,7 @@ class ScriptedChat:
     def __init__(self, answer: str) -> None:
         self._answer = answer
 
-    def stream(self, *, system, messages):
+    def stream(self, *, system, messages, options=None):
         yield self._answer
 
 
@@ -380,7 +380,7 @@ def test_the_model_is_asked_with_numbered_lines():
     chat = ScriptedChat("{}")
     sent = []
 
-    def stream(*, system, messages):
+    def stream(*, system, messages, options=None):
         sent.extend(messages)
         yield "{}"
 

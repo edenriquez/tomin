@@ -28,12 +28,52 @@ from datetime import date
 from decimal import Decimal
 from statistics import median
 
-from ....application.ports.outbound.chat import ChatMessage, ChatPort
+from ....application.ports.outbound.chat import (
+    ChatMessage,
+    ChatOptions,
+    ChatPort,
+    json_schema_format,
+)
 from ....application.ports.outbound.references import PriceQuote, UnitQuote
 from .brave import SearchHit
 from .units import money, rank_per_unit, to_base
 
 logger = logging.getLogger(__name__)
+
+#: One listing, as the request's ``response_format`` pins it. ``size`` may come
+#: as a number or as text ("1.5 kg"); ``_to_units`` parses either.
+_LISTING_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["listings"],
+    "properties": {
+        "listings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "url", "store", "product", "size", "unit", "price",
+                    "promo", "membership", "online_only",
+                ],
+                "properties": {
+                    "url": {"type": "string"},
+                    "store": {"type": "string"},
+                    "product": {"type": "string"},
+                    "size": {"type": ["number", "string", "null"]},
+                    "unit": {"type": ["string", "null"]},
+                    "price": {"type": ["number", "null"]},
+                    "promo": {"type": "boolean"},
+                    "membership": {"type": "boolean"},
+                    "online_only": {"type": "boolean"},
+                },
+            },
+        }
+    },
+}
+
+OPTIONS = ChatOptions(temperature=0, response_format=json_schema_format("listings", _LISTING_SCHEMA))
+
 
 _TTL_SECONDS = 3600.0
 _MAX_HITS = 8
@@ -43,12 +83,13 @@ SYSTEM = """\
 Lees resultados de búsqueda de tiendas mexicanas y extraes precios de productos.
 
 Te dan una lista de resultados, cada uno con URL, título y texto. Responde SOLO
-con un arreglo JSON, sin texto alrededor, con un objeto por cada producto cuyo
-precio aparezca LITERALMENTE en el texto de ese resultado:
+con un objeto JSON, sin texto alrededor, cuya clave "listings" es un arreglo con
+un elemento por cada producto cuyo precio aparezca LITERALMENTE en el texto de
+ese resultado:
 
-[{"url": "...", "store": "nombre de la tienda", "product": "nombre tal como aparece",
-  "size": 7, "unit": "l", "price": 169.9,
-  "promo": false, "membership": false, "online_only": false}]
+{"listings": [{"url": "...", "store": "nombre de la tienda",
+  "product": "nombre tal como aparece", "size": 7, "unit": "l", "price": 169.9,
+  "promo": false, "membership": false, "online_only": false}]}
 
 Reglas:
 1. "url" debe ser exactamente una de las URLs que te dieron. Nunca inventes una.
@@ -57,7 +98,7 @@ Reglas:
    oferta y uno regular, reporta el de oferta con "promo": true. Ignora los
    precios de "otros vendedores" o de productos relacionados.
 2. Solo precios que estén escritos en el texto. Si un resultado no muestra
-   precio, no lo incluyas. Si ninguno lo muestra, responde [].
+   precio, no lo incluyas. Si ninguno lo muestra, responde {"listings": []}.
 3. "unit" es "l", "ml", "kg", "g" o "pz" (pieza). "size" es el número que
    acompaña a esa unidad en el nombre del producto. Si el tamaño no aparece,
    no incluyas el resultado.
@@ -150,7 +191,11 @@ class WebPriceReference:
                 time.sleep(3)
             try:
                 answer = "".join(
-                    reader.stream(system=SYSTEM, messages=[ChatMessage(role="user", content=prompt)])
+                    reader.stream(
+                        system=SYSTEM,
+                        messages=[ChatMessage(role="user", content=prompt)],
+                        options=OPTIONS,
+                    )
                 )
                 return parse_listings(answer)
             except Exception as exc:  # pragma: no cover - never load-bearing
@@ -162,13 +207,20 @@ class WebPriceReference:
 
 
 def parse_listings(answer: str) -> list[dict]:
-    """The model's JSON, or nothing. Tolerates a code fence, nothing else."""
+    """The model's JSON, or nothing.
+
+    Tolerates a code fence and either shape -- the bare array older prompts
+    asked for, or the ``{"listings": [...]}`` object the schema pins -- and
+    nothing else.
+    """
     text = answer.strip()
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.S).strip()
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
         return []
+    if isinstance(data, dict):
+        data = data.get("listings")
     return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
 
 

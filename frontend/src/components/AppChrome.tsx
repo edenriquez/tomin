@@ -1,11 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { track } from "@/lib/telemetry";
 import { AppShell } from "@/components/AppShell";
 import { LecturaHost } from "@/components/lectura/LecturaHost";
+import { MovimientosModal } from "@/components/movimientos/MovimientosModal";
+import {
+    MovimientosQueryChips,
+    MovimientosSearchTrigger,
+} from "@/components/movimientos/MovimientosSearchTrigger";
 import { useTimeWindow } from "@/components/TimeWindowProvider";
 import type { Period } from "@/lib/metrics";
 import type { TimeWindow, WindowBounds } from "@/lib/window";
@@ -22,6 +27,8 @@ import type { TimeWindow, WindowBounds } from "@/lib/window";
 type AppData = {
     /** Bumped after each upload; views key their fetches on it. */
     dataVersion: number;
+    /** Force every view to refetch — used after an edit inside the modal. */
+    refresh: () => void;
     /** The selected span, as a value and in the shapes each API wants. */
     window: TimeWindow;
     /** Changes exactly when the selection does — the dependency to key on. */
@@ -52,6 +59,7 @@ export function AppChrome({
     onDataChanged?: () => void;
 }) {
     const [dataVersion, setDataVersion] = useState(0);
+    const refresh = useCallback(() => setDataVersion((v) => v + 1), []);
     const tw = useTimeWindow();
     const pathname = usePathname();
 
@@ -85,25 +93,28 @@ export function AppChrome({
     const value = useMemo<AppData>(
         () => ({
             dataVersion,
+            refresh,
             window: tw.window,
             windowKey: tw.key,
             bounds: tw.bounds,
             period: tw.period,
             grain: tw.grain,
         }),
-        [dataVersion, tw]
+        [dataVersion, refresh, tw]
     );
 
     return (
         <AppShell
-            timeScoped={withWindow}
+            instrument={<MovimientosSearchTrigger />}
             onUploaded={() => {
                 setDataVersion((v) => v + 1);
                 onDataChanged?.();
             }}
         >
             <AppDataContext.Provider value={value}>
+                {pathname === "/" && <MovimientosQueryChips />}
                 {children}
+                <MovimientosModal dataVersion={dataVersion} refresh={refresh} />
                 <LecturaHost />
             </AppDataContext.Provider>
         </AppShell>

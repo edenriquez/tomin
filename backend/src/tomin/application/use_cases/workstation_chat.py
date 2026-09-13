@@ -23,13 +23,16 @@ from uuid import UUID
 from ...application.dtos.metrics import MetricQuery, Period, ResolverContext
 from ...domain.entities import Workstation, sanitize_inferred_title
 from ...domain.metrics.catalog import COHORT_ACTIVITY, COHORT_PROFILE
-from ..ports.outbound.chat import ChatMessage, ChatPort, ChatUnavailable
+from ..ports.outbound.chat import ChatMessage, ChatOptions, ChatPort, ChatUnavailable
+from .workstation_tools import LensTools, Row
 
 #: The ledger rows that travel with the brief. The cohort is user-chosen and
-#: small; without the rows, "which days do I top up most?" has no answer at all.
-#: The cap is what keeps a pathological rule from turning one question into a
-#: very large request.
-MAX_ROWS = 300
+#: usually small; without the rows, "which days do I top up most?" has no answer
+#: at all. Two thousand rows are ~30k tokens, comfortably inside the context of
+#: any model worth configuring; past the cap the model reaches the rest through
+#: the tools rather than the prompt, so a pathological rule cannot turn one
+#: question into a context-sized request.
+MAX_ROWS = 2000
 
 SYSTEM = """\
 Eres el analista de Tomin, una app de finanzas personales mexicana.
@@ -39,9 +42,9 @@ una regla. Todo lo que sabes está en el resumen que te dan abajo.
 
 Reglas, en orden de importancia:
 
-1. NUNCA inventes una cifra. Cada número que escribas debe estar en el resumen o
-   ser una operación aritmética simple sobre esos números, y si haces la
-   operación, dila.
+1. NUNCA inventes una cifra. Cada número que escribas debe estar en el resumen,
+   venir del resultado de una herramienta, o ser una operación aritmética
+   simple sobre esos números, y si haces la operación, dila.
 2. Si el resumen no alcanza para responder, dilo claramente: «con estos
    movimientos no puedo saberlo». Es una respuesta correcta y preferible a una
    estimación. Vale más ser preciso que completo.
@@ -59,6 +62,16 @@ Reglas, en orden de importancia:
    ni notación matemática (nada de \\[, \\frac, \\approx): la pantalla no lo
    dibuja. Una operación se escribe en línea y en texto plano, por ejemplo:
    11 476,56 ÷ 8,71 ≈ 1 317,60.
+
+Herramientas. Tienes tres funciones sobre el conjunto completo de movimientos:
+`buscar_movimientos` (filtrar por texto, fecha o monto y ver movimientos
+concretos), `agrupar_movimientos` (sumas, conteos y promedios por comercio,
+día, semana, mes o día de la semana) y `resumen_de_periodo` (perfil de un
+subconjunto). Úsalas cuando la lista del resumen esté truncada, cuando
+necesites una suma o comparación que el resumen no trae, o cuando la pregunta
+sea sobre un subperiodo o un comercio. Nunca sumes a mano más de unos pocos
+movimientos: pide la agrupación. Si una herramienta devuelve cero movimientos,
+dilo: no rellenes con una estimación.
 
 No repitas el resumen de vuelta. Responde la pregunta."""
 
@@ -101,7 +114,8 @@ class AnswerWorkstationQuestion:
         question: str,
         history: Sequence[ChatMessage] = (),
     ) -> Iterator[str]:
-        brief = self.build_brief(user_id=user_id, workstation=workstation, period=period)
+        rows = self._rows(user_id, workstation, period)
+        brief = self._compose(user_id, workstation, period, rows)
         # The brief rides on the user turn rather than in the system prompt, so
         # the system half stays byte-identical between questions and a gateway
         # that caches prefixes can.
@@ -109,7 +123,14 @@ class AnswerWorkstationQuestion:
             *history,
             ChatMessage(role="user", content=f"{brief}\n\nPregunta: {question.strip()}"),
         ]
-        return self._chat.stream(system=SYSTEM, messages=messages)
+        # The tools read the same rows the brief was built from: what the model
+        # can ask for and what it was shown cannot disagree.
+        tools = LensTools(rows)
+        return self._chat.stream(
+            system=SYSTEM,
+            messages=messages,
+            options=ChatOptions(tools=tools.specs, tool_handler=tools.call),
+        )
 
     def infer_title(self, *, question: str, answer: str) -> str:
         """A few words that name the thread, or empty to keep the placeholder.
@@ -146,6 +167,12 @@ class AnswerWorkstationQuestion:
         Public because it is the thing worth testing: a brief that omits a
         number the panel shows is how the chat and the screen start disagreeing.
         """
+        rows = self._rows(user_id, workstation, period)
+        return self._compose(user_id, workstation, period, rows)
+
+    def _compose(
+        self, user_id: UUID, workstation: Workstation, period: Period, rows: list[Row]
+    ) -> str:
         filters = workstation.to_filters()
 
         profile = self._one_row(
@@ -171,7 +198,12 @@ class AnswerWorkstationQuestion:
                 period=period,
             ),
         )
-        rows = self._rows(user_id, workstation, period)
+        shown = rows[:MAX_ROWS]
+        truncated = (
+            f" — se muestran {MAX_ROWS}; usa buscar_movimientos o agrupar_movimientos para el resto"
+            if len(rows) > MAX_ROWS
+            else ""
+        )
 
         return "\n".join(
             [
@@ -191,15 +223,18 @@ class AnswerWorkstationQuestion:
                 "POR DIA DE LA SEMANA (movimientos):",
                 *_weekday_lines(rows),
                 "",
-                f"MOVIMIENTOS ({len(rows)}{' — truncado' if len(rows) == MAX_ROWS else ''}):",
-                *[f"  {r[0]}  {r[1]}  {r[2]}" for r in rows],
+                f"MOVIMIENTOS ({len(rows)}{truncated}):",
+                *[f"  {r[0]}  {r[1]}  {r[2]}" for r in shown],
             ]
         )
 
     def _rows(
         self, user_id: UUID, workstation: Workstation, period: Period
-    ) -> list[tuple[str, str, str]]:
-        """The cohort's movements as (date, description, amount).
+    ) -> list[Row]:
+        """The cohort's movements as (date, description, amount), all of them.
+
+        Uncapped on purpose: the brief truncates what it prints, the tools do
+        not, and both must see the same set.
 
         Read through the transaction repository and filtered here rather than
         through the cube: the cube holds facts for aggregation, and this needs
@@ -217,7 +252,7 @@ class AnswerWorkstationQuestion:
         # filters over 10 000 movements is 50 000 comparisons otherwise.
         clauses = [(_fold(c.description_contains or ""), c) for c in workstation.rule.clauses]
 
-        out: list[tuple[str, str, str]] = []
+        out: list[Row] = []
         for t in page:
             if str(t.id) in excluded:
                 continue
@@ -232,8 +267,6 @@ class AnswerWorkstationQuestion:
             if not any(_clause_matches(clause, needle, t, label) for needle, clause in clauses):
                 continue
             out.append((t.tx_date.isoformat(), label, f"{t.amount}"))
-            if len(out) == MAX_ROWS:
-                break
         return out
 
     @staticmethod

@@ -1,19 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Search, SearchX, Inbox, X } from "lucide-react";
+import { SearchX, Inbox } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAppData } from "@/components/AppChrome";
 import { useSearchParams } from "next/navigation";
 import { useTimeWindow } from "@/components/TimeWindowProvider";
 import { msToIso } from "@/lib/window";
 import { track } from "@/lib/telemetry";
+import { draftFromClauses, draftFromNeedle } from "@/lib/lectura";
+import {
+    EMPTY_QUERY,
+    UNCATEGORIZED,
+    applyQuery,
+    queryIsActive,
+} from "@/lib/movimientosQuery";
+import { useMovimientosSearch } from "./MovimientosSearchProvider";
 import { PanelSettingsToggle } from "@/components/settings/PanelSettingsToggle";
 import { BackendNotice, Button, ChartSkeleton, EmptyState, Skeleton, Switch } from "@/components/ui";
 import { ChartCard } from "@/components/ChartCard";
 import { LecturaDock } from "@/components/lectura/LecturaDock";
 import { useLectura } from "@/components/lectura/LecturaProvider";
-import { draftFromNeedle } from "@/lib/lectura";
 import {
     PanelChoice,
     PanelControl,
@@ -31,7 +38,7 @@ import {
     type ChartMode,
     type ColorMode,
 } from "@/components/charts/TransactionsChart";
-import { useCategories } from "@/lib/categories";
+import { categoryFamily, categoryName, useCategories } from "@/lib/categories";
 import { useBankScope } from "@/lib/banks";
 import { dayLabel, mxn, mxn2 } from "@/lib/format";
 import {
@@ -102,10 +109,15 @@ export function MovimientosView() {
         ? Math.min(MAX_PAGE, Math.max(MIN_PAGE, Math.round(listCfg.pageSize)))
         : DEFAULT_PAGE;
 
-    // `?buscar=` seeds the search once, so another view can hand over a
+    // `?buscar=` seeds the needle once, so another view can hand over a
     // filtered ledger ("revisa las transferencias") as a link.
     const seeded = useSearchParams().get("buscar") ?? "";
-    const [search, setSearch] = useState(seeded);
+    const { query, setQuery } = useMovimientosSearch();
+    useEffect(() => {
+        if (seeded) setQuery({ ...EMPTY_QUERY, needle: seeded });
+        // Only the URL: a later edit of the needle must not be overwritten.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [seeded]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(page);
     const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
@@ -117,21 +129,12 @@ export function MovimientosView() {
         setVisibleCount(page);
         setExcluded(new Set());
         setLensFocus(null);
-    }, [windowKey, search, dataVersion, page, statementIds]);
+    }, [windowKey, query, dataVersion, page, statementIds]);
 
     const filtered = useMemo(() => {
         if (items === null) return null;
-        const q = search.trim().toLowerCase();
-        let out = items;
-        if (q) {
-            out = out.filter(
-                (t) =>
-                    t.description.toLowerCase().includes(q) ||
-                    (t.raw_description ?? "").toLowerCase().includes(q)
-            );
-        }
-        return out;
-    }, [items, search]);
+        return applyQuery(items, query, (id) => categoryFamily(categories, id));
+    }, [items, query, categories]);
 
     // Lecturas for the scatter: one chip per kind, each a tour of its
     // charges. Anchored on the rows actually drawn — a flagged charge the
@@ -207,13 +210,18 @@ export function MovimientosView() {
             bounds.start && bounds.end
                 ? `del ${dayLabel(fromIso(bounds.start))} al ${dayLabel(fromIso(bounds.end))}`
                 : "en todo tu historial";
-        const needle = search.trim() ? ` que contienen «${search.trim()}»` : "";
+        const extra = queryIsActive(query);
+        const needle = query.needle.trim()
+            ? ` que contienen «${query.needle.trim()}»`
+            : extra
+              ? " con estos criterios"
+              : "";
         if (expenses.length === 0) {
             return `Sin cargos ${span}${needle}; ${filtered.length.toLocaleString("es-MX")} abono${filtered.length === 1 ? "" : "s"}.`;
         }
         return `Salieron ${mxn(spent)} en ${expenses.length.toLocaleString("es-MX")} cargo${expenses.length === 1 ? "" : "s"} ${span}${needle}.`;
-    }, [filtered, bounds.start, bounds.end, search]);
-    const filtering = Boolean(search.trim()) && Boolean(listed && listed.length > 0);
+    }, [filtered, bounds.start, bounds.end, query]);
+    const filtering = queryIsActive(query) && Boolean(listed && listed.length > 0);
 
     return (
         <div className="space-y-4 sm:space-y-6">
@@ -260,10 +268,8 @@ export function MovimientosView() {
                     <ChartSkeleton height={320} />
                 ) : filtered.length === 0 ? (
                     <EmptyNote
-                        search={search}
-                        onClear={() => {
-                            setSearch("");
-                        }}
+                        narrowed={queryIsActive(query)}
+                        onClear={() => setQuery(EMPTY_QUERY)}
                     />
                 ) : (
                     <div className={cn("transition-opacity duration-300", refreshing && "opacity-50")}>
@@ -334,47 +340,10 @@ export function MovimientosView() {
                     )}
                 </h2>
 
-                <label
-                    className={cn(
-                        "mt-4 flex h-11 w-full items-center gap-2.5 rounded-control border border-muted bg-paper px-4",
-                        "transition-colors duration-100 focus-within:border-ink",
-                        search.trim() && "border-ink"
-                    )}
-                >
-                    <Search size={18} aria-hidden className="shrink-0 text-graphite" />
-                    <input
-                        type="search"
-                        value={search}
-                        onChange={(e) => {
-                            if (!search && e.target.value) track("movimientos.search");
-                            setSearch(e.target.value);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === "Escape") setSearch("");
-                        }}
-                        placeholder="Buscar movimiento"
-                        aria-label="Buscar movimiento"
-                        className={cn(
-                            "w-full bg-transparent text-body text-ink outline-none placeholder:text-ash",
-                            // The browser's own clear glyph doubles ours.
-                            "[&::-webkit-search-cancel-button]:hidden"
-                        )}
-                    />
-                    {search && (
-                        <button
-                            type="button"
-                            aria-label="Limpiar búsqueda"
-                            onClick={() => setSearch("")}
-                            className="-mr-1 rounded-full p-1 text-ash transition-colors duration-100 hover:text-ink"
-                        >
-                            <X size={16} aria-hidden />
-                        </button>
-                    )}
-                </label>
                 {filtering && (
                     <p className="mt-2 text-label text-graphite">
-                        El conjunto es la búsqueda, no solo las filas visibles. Destilda
-                        las excepciones.
+                        El conjunto son estos criterios, no solo las filas visibles.
+                        Destilda las excepciones.
                     </p>
                 )}
 
@@ -415,10 +384,10 @@ export function MovimientosView() {
                         </div>
                     ) : listed.length === 0 ? (
                         <EmptyNote
-                            search={search}
+                            narrowed={queryIsActive(query)}
                             ranged={timeWindow.kind === "custom"}
                             onClear={() => {
-                                setSearch("");
+                                setQuery(EMPTY_QUERY);
                                 clearCustom();
                             }}
                         />
@@ -462,9 +431,11 @@ export function MovimientosView() {
 
             {filtering && listed && (
                 <LecturaDock
-                    summary={`${(listed.length - excluded.size).toLocaleString("es-MX")} movimientos · contiene «${search.trim()}»`}
+                    summary={`${(listed.length - excluded.size).toLocaleString("es-MX")} movimientos${
+                        query.needle.trim() ? ` · contiene «${query.needle.trim()}»` : " · estos criterios"
+                    }`}
                     chips={[
-                        search.trim(),
+                        ...(query.needle.trim() ? [query.needle.trim()] : []),
                         ...(excluded.size
                             ? [
                                   excluded.size === 1
@@ -475,11 +446,25 @@ export function MovimientosView() {
                     ]}
                     busy={opening}
                     onRead={() => {
-                        const draft = draftFromNeedle(search, Array.from(excluded));
+                        const excludedIds = Array.from(excluded);
+                        if (query.needle.trim()) {
+                            const draft = draftFromNeedle(query.needle, excludedIds);
+                            if (draft) void openDraft(draft);
+                            return;
+                        }
+                        const ids = query.categoryIds.filter((id) => id !== UNCATEGORIZED);
+                        if (ids.length === 0) return;
+                        const draft = draftFromClauses(
+                            ids.map((category_id) => ({ category_id })),
+                            excludedIds,
+                            ids.length === 1
+                                ? categoryName(categories, ids[0]!)
+                                : "Categorías"
+                        );
                         if (draft) void openDraft(draft);
                     }}
                     onClear={() => {
-                        setSearch("");
+                        setQuery(EMPTY_QUERY);
                         setExcluded(new Set());
                     }}
                 />
@@ -490,28 +475,28 @@ export function MovimientosView() {
 
 
 function EmptyNote({
-    search,
+    narrowed = false,
     ranged = false,
     onClear,
 }: {
-    search: string;
+    narrowed?: boolean;
     /** A chart-dragged range is on — the emptiness may be its doing. */
     ranged?: boolean;
     onClear: () => void;
 }) {
-    const narrowed = Boolean(search.trim()) || ranged;
+    const empty = narrowed || ranged;
     return (
         <EmptyState
-            icon={narrowed ? SearchX : Inbox}
+            icon={empty ? SearchX : Inbox}
             title={
-                search.trim()
-                    ? `Nada coincide con «${search.trim()}»`
+                narrowed
+                    ? "Nada coincide con estos criterios"
                     : ranged
                       ? "Sin movimientos en ese rango"
                       : "Sin movimientos en este periodo"
             }
             action={
-                narrowed && (
+                empty && (
                     <button
                         type="button"
                         onClick={onClear}
@@ -522,7 +507,7 @@ function EmptyNote({
                 )
             }
         >
-            {narrowed
+            {empty
                 ? "Los filtros están reduciendo lo que se dibuja."
                 : "Prueba con un periodo más amplio, o sube un estado de cuenta que lo cubra."}
         </EmptyState>

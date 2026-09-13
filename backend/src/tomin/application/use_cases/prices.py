@@ -27,7 +27,7 @@ from ...domain.services.prices import (
     mentioned_in,
 )
 from ..ports.outbound import ReceiptRepository
-from ..ports.outbound.chat import ChatMessage, ChatPort
+from ..ports.outbound.chat import ChatMessage, ChatOptions, ChatPort
 from ..ports.outbound.references import (
     NullPriceReference,
     PriceQuote,
@@ -180,6 +180,8 @@ class ResolveProductTerms:
                 self._chat.stream(
                     system=TERM_SYSTEM,
                     messages=[ChatMessage(role="user", content=description)],
+                    # Cold: the same line should map to the same word every time.
+                    options=ChatOptions(temperature=0),
                 )
             )
         except Exception:  # pragma: no cover - a proposal is never load-bearing

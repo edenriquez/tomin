@@ -41,6 +41,9 @@ class CategoryModel(Base):
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     icon: Mapped[str | None] = mapped_column(String(60), nullable=True)
     categorization_labels: Mapped[list] = mapped_column(JSON, default=list)
+    parent_id: Mapped[str | None] = mapped_column(
+        UUIDStr, ForeignKey("categories.id"), nullable=True, index=True
+    )
 
 
 class MerchantModel(Base):

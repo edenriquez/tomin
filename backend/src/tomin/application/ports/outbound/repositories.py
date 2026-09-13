@@ -241,6 +241,8 @@ class CategoryRepository(Protocol):
 
     def add_many(self, categories: list[Category]) -> None: ...
 
+    def save_many(self, categories: list[Category]) -> None: ...
+
 
 @runtime_checkable
 class MerchantRepository(Protocol):

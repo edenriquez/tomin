@@ -62,7 +62,23 @@ injects a null object, the chat band renders disabled with its reason, and every
 other part of Workspace reads as normal. No test needs a key.
 
 The model only ever sees one lens: that lens's own aggregates plus its
-movements (date, description, amount), capped at 300 rows. `docs/custody-plan.md`
+movements (date, description, amount), up to 2 000 rows in the prompt. Past
+that, and for any sum or grouping the brief did not precompute, the model has
+three *tools* -- `buscar_movimientos`, `agrupar_movimientos`,
+`resumen_de_periodo` -- that this code runs over the same rows and answers in
+`Decimal`. The model asks for a total; it never produces one. Tool rounds happen
+inside the adapter, and the client sees one stream either way.
+
+Beyond the messages a request may carry `temperature`, `max_tokens`, a
+`response_format` and tools (`ChatOptions` on the port). Extraction -- the
+ticket reader, the price-listing reader, the reference-term lookup -- runs cold
+and pinned to a JSON Schema; the chat runs with the provider's defaults. Every
+request carries an output cap (4 096 tokens unless the caller sets one) because
+gateways reserve the model's whole output window against the balance first,
+and refuse a paragraph-long answer with a 402 on an account that cannot pay
+for 131k tokens.
+
+`docs/custody-plan.md`
 covers the statement PDF, not the extracted ledger — so this is not a
 contradiction, but it *is* a disclosure, and the UI makes it before the first
 question rather than after. Note that free tiers on some gateways train on

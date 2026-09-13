@@ -217,6 +217,7 @@ export function Select<V extends string>({
                 createPortal(
                 <ul
                     ref={listRef}
+                    data-nested-overlay
                     id={listId}
                     role="listbox"
                     aria-label={ariaLabel}

@@ -36,7 +36,7 @@ class RecordingChat:
         self.calls: list[list[ChatMessage]] = []
         self.systems: list[str] = []
 
-    def stream(self, *, system, messages):
+    def stream(self, *, system, messages, options=None):
         self.calls.append(list(messages))
         self.systems.append(system)
         if system == TITLE_SYSTEM:

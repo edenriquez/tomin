@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, EyeOff, RotateCcw, Sparkles, StickyNote, X } from "lucide-react";
 import { api, type Transaction, type TransactionPatch } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { categoryHotkeys, nextCategoryForKey, useCategories } from "@/lib/categories";
-import { track } from "@/lib/telemetry";
-import { Button, Select, useToast } from "@/components/ui";
+import { formatCategoryPath, useCategories } from "@/lib/categories";
+import { Button, useToast } from "@/components/ui";
+import { TaxonomyField } from "./TaxonomyField";
 import { ReceiptStrip } from "./ReceiptStrip";
 
 /**
@@ -20,6 +20,14 @@ import { ReceiptStrip } from "./ReceiptStrip";
  * change offers "«oxxo» aparece en N movimientos más", a rename offers to
  * rename the same N. The label is editable and the count is a dry run — the
  * user always sees the blast radius before committing.
+ *
+ * Which text is offered depends on the correction, because the server
+ * matches each on a different column. A rename and a transfer flag match the
+ * bank's RAW text, so they must be taught with a window of it. A category
+ * matches the row's *name* first, so the alias the user typed is the better
+ * label: eighteen toll charges read «PASE AMOZOC», «PASE TEHUACAN» in the
+ * bank's words and «COBRO CASETA» in the user's, and only the second groups
+ * them.
  */
 
 /** What a taught label would do: assign this category, apply this name, or
@@ -30,9 +38,6 @@ type Teach =
     | { kind: "transfer" };
 
 type Suggestion = { teach: Teach; label: string; matched: number };
-
-/** How long an armed category waits for another key before it is written. */
-const CATEGORY_COMMIT_MS = 800;
 
 function probeRequest(teach: Teach, label: string, dryRun: boolean) {
     if (teach.kind === "category")
@@ -58,48 +63,34 @@ export function useInlineEdit(
     const [applying, setApplying] = useState(false);
     const probeSeq = useRef(0);
 
-    // A category chosen by key is *armed* first and committed after a pause:
-    // the row shows where it will go, and a second T can walk on to
-    // Transferencias before Transporte was ever written. Refs mirror the
-    // state so the unmount flush and the timer see the latest values.
-    const [pendingCategory, setPendingCategory] = useState<string | null>(null);
-    const pendingRef = useRef<string | null>(null);
-    const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const currentCategory = useRef(t.category_id);
-    currentCategory.current = t.category_id;
-    const patchRef = useRef(onPatch);
-    patchRef.current = onPatch;
-
-    useEffect(() => {
-        // Leaving the row (another row clicked, list re-rendered) must not
-        // drop an armed choice: it is written, without the teach prompt.
-        return () => {
-            if (pendingTimer.current) clearTimeout(pendingTimer.current);
-            const id = pendingRef.current;
-            pendingRef.current = null;
-            if (id !== null && id !== currentCategory.current) {
-                patchRef.current({ category_id: id });
-            }
-        };
-    }, []);
-
-    async function probeSimilar(teach: Teach, label: string) {
+    /**
+     * Dry-run each candidate label in order and keep the first that matches
+     * something. Order is the point: the best label for a category teach is
+     * the name the *user* gave the row, and only if that finds nothing does
+     * the bank's own wording get a turn.
+     */
+    async function probeCandidates(teach: Teach, labels: string[]) {
         const seq = ++probeSeq.current;
-        const trimmed = label.trim();
-        if (trimmed.length < 3) {
-            setSuggestion(null);
-            return;
+        for (const label of labels) {
+            const trimmed = label.trim();
+            if (trimmed.length < 3) continue;
+            try {
+                const res = await probeRequest(teach, trimmed, true);
+                if (seq !== probeSeq.current) return; // a newer probe superseded us
+                if (res.matched > 0) {
+                    setSuggestion({ teach, label: res.label, matched: res.matched });
+                    setLabelDraft(res.label);
+                    return;
+                }
+            } catch {
+                if (seq !== probeSeq.current) return;
+            }
         }
-        try {
-            const res = await probeRequest(teach, trimmed, true);
-            if (seq !== probeSeq.current) return; // a newer probe superseded us
-            setSuggestion(
-                res.matched > 0 ? { teach, label: res.label, matched: res.matched } : null
-            );
-            if (res.matched > 0) setLabelDraft(res.label);
-        } catch {
-            if (seq === probeSeq.current) setSuggestion(null);
-        }
+        if (seq === probeSeq.current) setSuggestion(null);
+    }
+
+    function probeSimilar(teach: Teach, label: string) {
+        return probeCandidates(teach, [label]);
     }
 
     function commitName(next: string) {
@@ -112,32 +103,9 @@ export function useInlineEdit(
     }
 
     function changeCategory(categoryId: string | null) {
-        cancelPendingCategory();
         onPatch({ category_id: categoryId });
         setSuggestion(null);
-        if (categoryId) probeSimilar({ kind: "category", categoryId }, suggestLabel(t));
-    }
-
-    function cancelPendingCategory() {
-        if (pendingTimer.current) clearTimeout(pendingTimer.current);
-        pendingTimer.current = null;
-        pendingRef.current = null;
-        setPendingCategory(null);
-    }
-
-    function commitPendingCategory() {
-        const id = pendingRef.current;
-        cancelPendingCategory();
-        if (id !== null && id !== t.category_id) changeCategory(id);
-    }
-
-    /** Mark a category as the one this row is about to get; it is written
-     *  after `CATEGORY_COMMIT_MS` without another key. */
-    function armCategory(categoryId: string) {
-        if (pendingTimer.current) clearTimeout(pendingTimer.current);
-        pendingRef.current = categoryId;
-        setPendingCategory(categoryId);
-        pendingTimer.current = setTimeout(commitPendingCategory, CATEGORY_COMMIT_MS);
+        if (categoryId) probeCandidates({ kind: "category", categoryId }, categoryLabels(t));
     }
 
     function toggleTransfer(next: boolean) {
@@ -182,10 +150,6 @@ export function useInlineEdit(
     return {
         commitName,
         changeCategory,
-        pendingCategory,
-        armCategory,
-        commitPendingCategory,
-        cancelPendingCategory,
         toggleTransfer,
         suggestion,
         labelDraft,
@@ -207,9 +171,12 @@ export type InlineEdit = ReturnType<typeof useInlineEdit>;
 export function InlineName({
     transaction: t,
     edit,
+    variant = "underline",
 }: {
     transaction: Transaction;
     edit: InlineEdit;
+    /** `plain` is the reclasificación subtitle — no dashed invite. */
+    variant?: "underline" | "plain";
 }) {
     const [draft, setDraft] = useState(t.description ?? "");
     useEffect(() => {
@@ -236,172 +203,35 @@ export function InlineName({
                 }
             }}
             className={cn(
-                "w-full truncate bg-transparent text-body font-medium text-ink outline-none",
-                "border-b border-dashed border-muted pb-px transition-colors duration-100",
-                "focus:border-solid focus:border-signal"
+                "w-full truncate bg-transparent text-ink outline-none",
+                variant === "plain"
+                    ? "text-body-lg font-medium"
+                    : [
+                          "text-body font-medium",
+                          "border-b border-dashed border-muted pb-px transition-colors duration-100",
+                          "focus:border-solid focus:border-signal",
+                      ]
             )}
         />
     );
 }
 
 /**
- * The category, changeable where it is read: the same graphite text the
- * static row shows, now a quiet picker. The "Auto" whisper marks a machine
- * guess without adding a chip to count.
+ * One path, not two fields. The closed state reads
+ * `Transporte / Gasolina`; opening it searches the tree or mints a leaf.
  */
-export function InlineCategory({
+export function ReclassFields({
     transaction: t,
     edit,
 }: {
     transaction: Transaction;
     edit: InlineEdit;
 }) {
-    const categories = useCategories();
-    const options = categories
-        ? Array.from(categories.entries()).map(([id, c]) => ({ value: id, label: c.name }))
-        : [];
-
     return (
-        <span
-            className="mt-0.5 flex items-center justify-end gap-1.5"
-            onClick={(e) => e.stopPropagation()}
-        >
-            {t.category_source === "auto" && (
-                <span
-                    title="Categoría asignada automáticamente"
-                    className="eyebrow"
-                >
-                    auto
-                </span>
-            )}
-            <Select<string>
-                variant="quiet"
-                aria-label="Categoría"
-                value={edit.pendingCategory ?? t.category_id}
-                placeholder="Sin categoría"
-                options={options}
-                onChange={edit.changeCategory}
-            />
-        </span>
-    );
-}
-
-/** A key press meant for the page, not for a field the user is typing in. */
-function isTypingTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
-    if (target.isContentEditable) return true;
-    return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
-}
-
-/**
- * Categorize by initial. While a row is selected, pressing the first letter
- * of a category files the row there — V for Vivienda, C for Comida — and
- * pressing it again walks to the next category with that initial
- * (Transporte, then Transferencias). The chips make the keys visible and
- * are clickable too; the pressed one is the row's current category.
- */
-export function CategoryKeys({
-    transaction: t,
-    edit,
-}: {
-    transaction: Transaction;
-    edit: InlineEdit;
-}) {
-    const categories = useCategories();
-    const hotkeys = categoryHotkeys(categories);
-    const { changeCategory, armCategory, commitPendingCategory, cancelPendingCategory } = edit;
-    const currentId = t.category_id;
-    const pendingId = edit.pendingCategory;
-
-    useEffect(() => {
-        if (hotkeys.length === 0) return;
-        function onKey(e: KeyboardEvent) {
-            if (e.metaKey || e.ctrlKey || e.altKey) return;
-            if (isTypingTarget(e.target)) return;
-            if (pendingId !== null) {
-                // An armed choice: Enter writes it now, Escape lets it go,
-                // and moving to another row writes it on the way out (the
-                // list's own handler moves the selection after this).
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitPendingCategory();
-                    return;
-                }
-                if (e.key === "Escape") {
-                    e.preventDefault();
-                    cancelPendingCategory();
-                    return;
-                }
-                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                    commitPendingCategory();
-                    return;
-                }
-            }
-            if (e.key.length !== 1) return;
-            const key = e.key.toLowerCase();
-            if (!/^[a-z0-9]$/.test(key)) return;
-            const from = pendingId ?? currentId;
-            const next = nextCategoryForKey(hotkeys, key, from);
-            if (!next) return;
-            e.preventDefault();
-            track("movimientos.category_hotkey", { key });
-            if (next.id === currentId) cancelPendingCategory();
-            else armCategory(next.id);
-        }
-        // Capture phase: this runs before the list's own keydown handler no
-        // matter which registered first, so an armed Escape is ours and an
-        // ArrowDown commits before the selection moves.
-        window.addEventListener("keydown", onKey, true);
-        return () => window.removeEventListener("keydown", onKey, true);
-        // `hotkeys` is rebuilt each render; the taxonomy behind it is stable.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [categories, currentId, pendingId, armCategory, commitPendingCategory, cancelPendingCategory]);
-
-    if (hotkeys.length === 0) return null;
-
-    return (
-        <div className="flex flex-wrap items-center gap-1.5" aria-label="Categoría por tecla">
-            {hotkeys.map((h) => {
-                const pressed = h.id === currentId && pendingId === null;
-                const armed = h.id === pendingId;
-                return (
-                    <button
-                        key={h.id}
-                        type="button"
-                        aria-pressed={pressed}
-                        data-armed={armed || undefined}
-                        title={armed ? "Se aplica en un momento · Enter aplica ya · Esc cancela" : `Tecla ${h.key.toUpperCase()}`}
-                        onClick={() => {
-                            if (h.id === currentId) {
-                                cancelPendingCategory();
-                                return;
-                            }
-                            track("movimientos.category_chip");
-                            changeCategory(h.id);
-                        }}
-                        className={cn(
-                            "inline-flex items-center rounded-control border px-2.5 py-1 text-body-sm",
-                            "transition-colors duration-100",
-                            pressed
-                                ? "border-soot bg-soot font-medium text-paper"
-                                : armed
-                                  ? "border-signal bg-paper font-medium text-ink"
-                                  : "border-transparent text-graphite hover:bg-fog hover:text-ink"
-                        )}
-                    >
-                        <span className="underline decoration-signal decoration-2 underline-offset-2">
-                            {h.name.slice(0, 1)}
-                        </span>
-                        {h.name.slice(1)}
-                    </button>
-                );
-            })}
-            {pendingId !== null && (
-                <span className="animate-reveal text-label text-graphite" aria-live="polite">
-                    Enter aplica · Esc cancela
-                </span>
-            )}
-        </div>
+        <label className="block min-w-0">
+            <span className="eyebrow text-ink">Taxonomía</span>
+            <TaxonomyField value={t.category_id} onChange={edit.changeCategory} />
+        </label>
     );
 }
 
@@ -424,7 +254,6 @@ export function EditorStrip({
     const renamed = t.raw_description != null && t.description !== t.raw_description;
     const excluded = t.excluded_from_stats ?? false;
     const isTransfer = t.is_transfer ?? false;
-    const { suggestion } = edit;
 
     return (
         <div className="space-y-2.5 py-3.5" onClick={(e) => e.stopPropagation()}>
@@ -432,7 +261,7 @@ export function EditorStrip({
                 where the paper is. This side only shows what came of it. */}
             <ReceiptStrip transactionId={t.id} />
 
-            <CategoryKeys transaction={t} edit={edit} />
+            <ReclassFields transaction={t} edit={edit} />
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                 <InlineNote transaction={t} onPatch={onPatch} />
@@ -489,63 +318,75 @@ export function EditorStrip({
                 )}
             </div>
 
-            {suggestion && (
-                <div
-                    className={cn(
-                        "animate-reveal flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card",
-                        "border border-dashed border-muted bg-canvas px-3.5 py-2.5"
-                    )}
-                >
-                    <Sparkles size={14} aria-hidden className="shrink-0 text-signal" />
-                    <span className="flex min-w-0 items-center gap-1.5 text-body-sm text-graphite">
-                        <input
-                            type="text"
-                            value={edit.labelDraft}
-                            aria-label="Texto a buscar"
-                            onChange={(e) => edit.setLabelDraft(e.target.value)}
-                            onBlur={() => edit.probeSimilar(suggestion.teach, edit.labelDraft)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    edit.probeSimilar(suggestion.teach, edit.labelDraft);
-                                }
-                            }}
-                            className={cn(
-                                "tabular w-36 bg-transparent text-body-sm text-ink outline-none",
-                                "border-b border-dashed border-muted transition-colors duration-100",
-                                "focus:border-solid focus:border-signal"
-                            )}
-                        />
-                        <span className="whitespace-nowrap">
-                            en {suggestion.matched} movimiento{suggestion.matched === 1 ? "" : "s"}{" "}
-                            más:{" "}
-                            {suggestion.teach.kind === "alias"
-                                ? `renombrar como «${suggestion.teach.alias}»`
-                                : suggestion.teach.kind === "transfer"
-                                  ? "marcar como transferencia entre tus cuentas"
-                                  : "misma categoría"}
-                        </span>
-                    </span>
-                    <span className="ml-auto flex items-center gap-1">
-                        <Button
-                            size="sm"
-                            loading={edit.applying}
-                            onClick={edit.applySimilar}
-                            className="text-ink"
-                        >
-                            Aplicar
-                        </Button>
-                        <button
-                            type="button"
-                            aria-label="Descartar sugerencia"
-                            onClick={edit.dismissSuggestion}
-                            className="rounded-full p-1 text-ash transition-colors duration-100 hover:text-ink"
-                        >
-                            <X size={14} aria-hidden />
-                        </button>
-                    </span>
-                </div>
+            <TeachPrompt edit={edit} />
+        </div>
+    );
+}
+
+export function TeachPrompt({ edit }: { edit: InlineEdit }) {
+    const categories = useCategories();
+    const { suggestion } = edit;
+    if (!suggestion) return null;
+    return (
+        <div
+            className={cn(
+                "animate-reveal flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card",
+                "border border-dashed border-muted bg-canvas px-3.5 py-2.5"
             )}
+        >
+            <Sparkles size={14} aria-hidden className="shrink-0 text-signal" />
+            <span className="flex min-w-0 items-center gap-1.5 text-body-sm text-graphite">
+                <input
+                    type="text"
+                    value={edit.labelDraft}
+                    aria-label="Texto a buscar"
+                    onChange={(e) => edit.setLabelDraft(e.target.value)}
+                    onBlur={() => edit.probeSimilar(suggestion.teach, edit.labelDraft)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            edit.probeSimilar(suggestion.teach, edit.labelDraft);
+                        }
+                    }}
+                    className={cn(
+                        "tabular w-36 bg-transparent text-body-sm text-ink outline-none",
+                        "border-b border-dashed border-muted transition-colors duration-100",
+                        "focus:border-solid focus:border-signal"
+                    )}
+                />
+                <span className="whitespace-nowrap">
+                    en {suggestion.matched} movimiento{suggestion.matched === 1 ? "" : "s"}{" "}
+                    más:{" "}
+                    {suggestion.teach.kind === "alias"
+                        ? `renombrar como «${suggestion.teach.alias}»`
+                        : suggestion.teach.kind === "transfer"
+                          ? "marcar como transferencia entre tus cuentas"
+                          : `asignar ${formatCategoryPath(
+                                categories,
+                                suggestion.teach.kind === "category"
+                                    ? suggestion.teach.categoryId
+                                    : null
+                            )}`}
+                </span>
+            </span>
+            <span className="ml-auto flex items-center gap-1">
+                <Button
+                    size="sm"
+                    loading={edit.applying}
+                    onClick={edit.applySimilar}
+                    className="text-ink"
+                >
+                    Aplicar
+                </Button>
+                <button
+                    type="button"
+                    aria-label="Descartar sugerencia"
+                    onClick={edit.dismissSuggestion}
+                    className="rounded-full p-1 text-ash transition-colors duration-100 hover:text-ink"
+                >
+                    <X size={14} aria-hidden />
+                </button>
+            </span>
         </div>
     );
 }
@@ -676,6 +517,29 @@ function normalizeText(text: string): string {
 function isAnchor(w: string): boolean {
     const digits = (w.match(/\d/g) ?? []).length;
     return w.length >= 3 && digits <= w.length / 2;
+}
+
+/**
+ * Labels to try for a category teach, best first.
+ *
+ * The name the user gave this row comes first: `recategorize` matches
+ * `description or raw_description`, so an alias shared by rows whose bank
+ * text differs is the only thing that groups them. It is taken verbatim —
+ * the whole name, not a window — because the user typed it and the server
+ * normalizes before matching.
+ *
+ * The window of the bank text is kept as the fallback, for the row that
+ * carries no alias and for the alias that is unique to it: «Pago Luz» on one
+ * row should still be able to teach every CFE charge.
+ */
+function categoryLabels(t: Transaction): string[] {
+    const alias = (t.description ?? "").trim();
+    const raw = (t.raw_description ?? "").trim();
+    const fromRaw = suggestLabel(t);
+    const labels: string[] = [];
+    if (alias && normalizeText(alias) !== normalizeText(raw)) labels.push(alias);
+    if (fromRaw && !labels.some((l) => normalizeText(l) === fromRaw)) labels.push(fromRaw);
+    return labels;
 }
 
 function suggestLabel(t: Transaction): string {
