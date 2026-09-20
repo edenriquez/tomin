@@ -10,6 +10,7 @@ from ..adapters.outbound.extraction import (
     SatXmlExtractor,
 )
 from ..adapters.outbound.chat import FallbackChat, NullChat, OpenAiCompatibleChat
+from ..adapters.outbound.decisions import TypeSafeDecisions
 from ..adapters.outbound.metrics import (
     CohortProfileResolver,
     FinancialAdviceResolver,
@@ -24,6 +25,7 @@ from ..adapters.outbound.references import (
     ProfecoPriceReference,
     WebPriceReference,
 )
+from ..application.ports.outbound.decisions import NullDecisions
 from ..application.ports.outbound.references import (
     CompositePriceReference,
     NullPriceReference,
@@ -330,6 +332,24 @@ class Container:
         return NullChat()
 
     @cached_property
+    def decisions(self):
+        """The typed-decision seam, or a null object when no key is set.
+
+        Separate from :meth:`chat` on purpose and not a fallback for it: one
+        streams words for a person to read, the other returns a value for code
+        to switch on. A deployment may have either, both or neither, and every
+        caller is written for all four.
+        """
+        settings = self.settings
+        if settings.typesafe_api_key and settings.typesafe_model:
+            return TypeSafeDecisions(
+                api_key=settings.typesafe_api_key,
+                model=settings.typesafe_model,
+                base_url=settings.typesafe_base_url,
+            )
+        return NullDecisions()
+
+    @cached_property
     def receipt_reader(self):
         """Who turns OCR lines into products.
 
@@ -400,11 +420,14 @@ class Container:
     def resolve_product_terms(self) -> ResolveProductTerms:
         """The association between a ticket's shorthand and the world's word.
 
-        Given the chat port on purpose, not a second model client: when no model
-        is configured it proposes nothing, the screen says "sin asociar", and the
-        user can still type the term themselves.
+        Given both model seams, which do different halves of the job: the typed
+        one chooses among words already in use, the text one invents the ones
+        nobody has needed yet. With neither configured it proposes nothing, the
+        screen says "sin asociar", and the user can still type the term.
         """
-        return ResolveProductTerms(self.product_reference_terms, self.chat)
+        return ResolveProductTerms(
+            self.product_reference_terms, self.chat, self.decisions
+        )
 
     @cached_property
     def listings_reader_fallback(self):

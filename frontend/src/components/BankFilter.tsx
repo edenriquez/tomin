@@ -1,17 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Check, ChevronDown, Landmark } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { BankScope } from "@/lib/banks";
+import {
+    accountIsOn,
+    bankIsOn,
+    toggleAccount,
+    toggleBank,
+    type BankScope,
+} from "@/lib/banks";
 import { track } from "@/lib/telemetry";
 
 /**
  * The global bank scope, in the shell — it travels with the user across every
  * tab, because "which accounts am I looking at" is a property of the session,
- * not of one view. A pill that names its state ("Todos", "Nu", "2 bancos")
+ * not of one view. A pill that names its state ("Todos", "Nu", "2 cuentas")
  * opening a checklist; empty selection = todas, so there is no way to filter
  * yourself into a blank app.
+ *
+ * A bank the user has labelled more than one way — Banamex crédito and
+ * Banamex débito — opens into its accounts, so the scope can be one card
+ * inside one bank. A bank with a single account stays a single row: the
+ * sublist would be furniture.
  */
 export function BankFilter({ scope }: { scope: BankScope }) {
     const [open, setOpen] = useState(false);
@@ -33,20 +45,25 @@ export function BankFilter({ scope }: { scope: BankScope }) {
         };
     }, [open]);
 
-    // One bank total is not a choice; the control would be furniture.
-    if (scope.available.length < 2) return null;
+    // One account in total is not a choice; the control would be furniture.
+    const choices = scope.nodes.reduce((n, node) => n + Math.max(node.accounts.length, 1), 0);
+    if (choices < 2) return null;
 
+    const whole = scope.selected.every((key) => scope.nodes.some((n) => n.bank === key));
     const label =
-        scope.selected.length === 0
+        scope.labels.length === 0
             ? "Todos los bancos"
-            : scope.selected.length === 1
-              ? scope.selected[0]
-              : `${scope.selected.length} bancos`;
+            : scope.labels.length === 1
+              ? scope.labels[0]
+              : `${scope.labels.length} ${whole ? "bancos" : "cuentas"}`;
 
-    function toggle(bank: string) {
-        const next = scope.selected.includes(bank)
-            ? scope.selected.filter((b) => b !== bank)
-            : [...scope.selected, bank];
+    // Every bank still reading as one undivided account: the label is missing,
+    // not the account.
+    const unlabelled = scope.nodes.every(
+        (n) => n.accounts.length === 1 && n.accounts[0].kind === null
+    );
+
+    function commit(next: string[]) {
         track("bank.select", { count: next.length });
         scope.setSelected(next);
     }
@@ -97,8 +114,7 @@ export function BankFilter({ scope }: { scope: BankScope }) {
                         role="option"
                         aria-selected={scope.selected.length === 0}
                         onClick={() => {
-                            track("bank.select", { count: 0 });
-                            scope.setSelected([]);
+                            commit([]);
                         }}
                         className={cn(
                             "flex cursor-pointer items-center justify-between gap-3 px-3.5 py-2",
@@ -111,27 +127,85 @@ export function BankFilter({ scope }: { scope: BankScope }) {
                             <Check size={14} aria-hidden className="text-signal" />
                         )}
                     </li>
-                    {scope.available.map((bank) => {
-                        const on = scope.selected.includes(bank);
+                    {scope.nodes.map((node) => {
+                        const on = bankIsOn(scope.selected, node);
+                        // A bank the user never split has nothing to open:
+                        // its one account *is* the bank.
+                        const split = node.accounts.length > 1;
                         return (
-                            <li
-                                key={bank}
-                                role="option"
-                                aria-selected={on}
-                                onClick={() => toggle(bank)}
-                                className={cn(
-                                    "flex cursor-pointer items-center justify-between gap-3",
-                                    "px-3.5 py-2 text-body-sm hover:bg-fog",
-                                    on ? "text-ink" : "text-graphite"
-                                )}
-                            >
-                                {bank}
-                                {on && <Check size={14} aria-hidden className="text-signal" />}
-                            </li>
+                            <Fragment key={node.bank}>
+                                <Row
+                                    label={node.bank}
+                                    on={on}
+                                    onSelect={() => commit(toggleBank(scope.selected, node))}
+                                />
+                                {split &&
+                                    node.accounts.map((account) => (
+                                        <Row
+                                            key={account.key}
+                                            label={account.label}
+                                            nested
+                                            on={accountIsOn(scope.selected, node, account)}
+                                            onSelect={() =>
+                                                commit(
+                                                    toggleAccount(scope.selected, node, account)
+                                                )
+                                            }
+                                        />
+                                    ))}
+                            </Fragment>
                         );
                     })}
+                    {unlabelled && (
+                        // The split is only as good as the labels: a bank whose
+                        // statements are all unlabelled has one account, and the
+                        // user has no way to guess why it will not open.
+                        <li className="border-t border-mist px-3.5 pb-1 pt-2 text-label text-ash">
+                            Para separar crédito y débito, etiqueta cada estado de
+                            cuenta en{" "}
+                            <Link
+                                href="/documentos"
+                                onClick={() => setOpen(false)}
+                                className="underline decoration-mist underline-offset-2 hover:text-graphite"
+                            >
+                                Documentos
+                            </Link>
+                            .
+                        </li>
+                    )}
                 </ul>
             )}
         </div>
+    );
+}
+
+/** One line of the checklist. Nested lines are the accounts of the bank above
+ *  them: indented, quieter, and checked on their own. */
+function Row({
+    label,
+    on,
+    nested,
+    onSelect,
+}: {
+    label: string;
+    on: boolean;
+    nested?: boolean;
+    onSelect: () => void;
+}) {
+    return (
+        <li
+            role="option"
+            aria-selected={on}
+            onClick={onSelect}
+            className={cn(
+                "flex cursor-pointer items-center justify-between gap-3",
+                "py-2 pr-3.5 text-body-sm hover:bg-fog",
+                nested ? "pl-7 text-body-sm" : "pl-3.5",
+                on ? "text-ink" : "text-graphite"
+            )}
+        >
+            <span className="truncate">{label}</span>
+            {on && <Check size={14} aria-hidden className="shrink-0 text-signal" />}
+        </li>
     );
 }

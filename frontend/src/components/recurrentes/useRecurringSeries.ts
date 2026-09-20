@@ -20,7 +20,7 @@ import { useFijos } from "@/components/fijos/useFijos";
  * what to hide.
  */
 export function useRecurringSeries(dataVersion: number) {
-    const { statementIds, selected: banks } = useBankScope(dataVersion);
+    const { statementIds, labels: banks } = useBankScope(dataVersion);
     const fijos = useFijos();
     const [detected, setDetected] = useState<RecurringItem[] | null>(null);
     const [ledger, setLedger] = useState<Transaction[] | null>(null);

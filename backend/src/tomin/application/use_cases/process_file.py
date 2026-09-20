@@ -8,6 +8,7 @@ from uuid import UUID
 
 from ...domain.entities import Statement, Transaction
 from ...domain.services.aliases import AliasService
+from ...domain.services.credit_summary import read_credit_summary
 from ...domain.services.categorization import CategorizationService
 from ...domain.services.flags import detect_flags
 from ...domain.services.transfers import TransferPartyService, pair_transfers
@@ -106,6 +107,9 @@ class _StatementIngestion:
         template = self._classifier.classify(doc)
         parser = self._parser_factory.get(template)
         parsed = parser.parse(doc)
+        # Bank-agnostic and independent of the movement parse: the card
+        # figures live in the statement's summary, which no parser reads.
+        card = read_credit_summary(doc.text or "")
 
         statement = Statement(
             user_id=user_id,
@@ -117,6 +121,9 @@ class _StatementIngestion:
             period_start=parsed.period_start,
             period_end=parsed.period_end,
             status=StatementStatus.PROCESSING,
+            credit_no_interest_payment=card.no_interest_payment if card else None,
+            credit_minimum_payment=card.minimum_payment if card else None,
+            credit_due_date=card.due_date if card else None,
             file_hash=file_hash,
             source=source,
         )

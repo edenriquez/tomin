@@ -29,7 +29,7 @@ import {
     type Timeline,
 } from "@/components/recurrentes/projection";
 import { rhythmCopy } from "@/components/recurrentes/rhythm";
-import { buildSeriesColors } from "@/components/recurrentes/seriesColors";
+import { buildSeriesColors, sortByWeight } from "@/components/recurrentes/seriesColors";
 import { BackendNotice, Button, EmptyState, Skeleton } from "@/components/ui";
 import { AddFijoSheet } from "./AddFijoSheet";
 import { useFijos } from "./useFijos";
@@ -219,16 +219,15 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
         () => [...detected, ...manuals, ...taughtRest],
         [detected, manuals, taughtRest]
     );
-    const colorOf = useMemo(
-        () => buildSeriesColors(allForColor, categories),
-        [allForColor, categories]
-    );
+    const colorOf = useMemo(() => buildSeriesColors(allForColor), [allForColor]);
 
     const ledgerAsOf = useMemo(() => ledgerEnd(detected.length ? detected : pinned), [detected, pinned]);
     const horizon = state.horizon;
 
+    // Heaviest series first: the stack darkens downward in step with the ramp
+    // the colours come from.
     const timeline = useMemo(
-        () => buildTimeline(pinned, MONTHS_BACK, horizon),
+        () => buildTimeline(sortByWeight(pinned), MONTHS_BACK, horizon),
         [pinned, horizon]
     );
 
@@ -253,7 +252,7 @@ export function FijosView({ onGoToIngresos }: { onGoToIngresos?: () => void } = 
 
     return (
         <div className="space-y-4 sm:space-y-6">
-            {error && <BackendNotice what="tus cargos recurrentes" detail={error} />}
+            {error && <BackendNotice what="Cargos Recurrentes" detail={error} />}
 
             {emptyDetection ? (
                 <EmptyState icon={Pin} title="Tomin aún no ve cobros que se repitan">

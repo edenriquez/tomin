@@ -88,6 +88,11 @@ def statement_json(s: Statement) -> dict:
         "period_end": _iso(s.period_end),
         "status": s.status.value,
         "account_kind": s.account_kind.value if s.account_kind else None,
+        # What the card statement asks to be paid, or null when the text did
+        # not carry it (every debit statement, and any card the reader missed).
+        "credit_no_interest_payment": _money(s.credit_no_interest_payment),
+        "credit_minimum_payment": _money(s.credit_minimum_payment),
+        "credit_due_date": _iso(s.credit_due_date),
         # Custody, published so the UI can say the true thing per statement:
         # "device" means the file never left the phone.
         "source": s.source.value,

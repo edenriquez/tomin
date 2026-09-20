@@ -30,6 +30,7 @@ import { PanelChoice, PanelControls } from "@/components/settings/PanelControls"
 import { PanelSettingsToggle } from "@/components/settings/PanelSettingsToggle";
 import { usePanelSettings } from "@/components/settings/usePanelSettings";
 import { useStatementUpload } from "@/components/StatementDropzone";
+import { UploadQueue } from "@/components/onboarding/UploadQueue";
 import { useReceiptCount } from "@/components/precios/useReceiptCount";
 import { track } from "@/lib/telemetry";
 
@@ -116,7 +117,14 @@ function monogram(bank: string | null): string | null {
     return (words.length > 1 ? words[0][0] + words[1][0] : letters.slice(0, 2)).toUpperCase();
 }
 
-export function DocumentosView() {
+export function DocumentosView({
+    embedded = false,
+}: {
+    /** Inside the Documentos overlay the panel's own header already says what
+     *  this is and holds the upload button, so the page title and its blurb
+     *  would be the same sentence twice, ten pixels apart. */
+    embedded?: boolean;
+} = {}) {
     const { dataVersion } = useAppData();
     // Read-only: the archive deliberately ignores the global bank scope — a
     // filtered-out document would read as data loss on the management screen —
@@ -150,7 +158,8 @@ export function DocumentosView() {
 
     // The empty state's own upload button. Same hook as the header's, so the
     // validation, the toasts and the reload are literally the same behaviour.
-    const { pick, uploading, input } = useStatementUpload(load);
+    const { pick, uploading, queue, retry, dismiss, clearSettled, input } =
+        useStatementUpload(load);
 
     /**
      * The deep link the phone hands out after a device upload:
@@ -246,20 +255,52 @@ export function DocumentosView() {
 
     return (
         <div className="space-y-4 sm:space-y-6">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-                <div className="max-w-prose">
-                    <h1 className="font-display text-title-md font-normal text-ink sm:text-title-lg">
-                        Documentos
-                    </h1>
-                    <p className="mt-1.5 text-body text-graphite">
-                        Cada PDF y XML que Tomin leyó y desechó. Aquí dices de qué cuenta
-                        viene cada uno; si eliminas un documento, sus movimientos se van con él.
-                    </p>
+            {/* One hidden file input for the whole view, always mounted:
+                `pick()` clicks a ref, and a ref on an element inside a branch
+                that is not rendered clicks nothing. */}
+            {input}
+            <div
+                className={cn(
+                    "flex flex-wrap items-end gap-4",
+                    embedded ? "justify-end" : "justify-between"
+                )}
+            >
+                {!embedded && (
+                    <div className="max-w-prose">
+                        <h1 className="font-display text-title-md font-normal text-ink sm:text-title-lg">
+                            Documentos
+                        </h1>
+                        <p className="mt-1.5 text-body text-graphite">
+                            Cada PDF y XML que Tomin leyó y desechó. Aquí dices de qué cuenta
+                            viene cada uno; si eliminas un documento, sus movimientos se van con él.
+                        </p>
+                    </div>
+                )}
+                <div className="flex items-end gap-4">
+                    {summary && <Summary {...summary} />}
+                    {/* Embedded, the overlay's own header holds this button —
+                        there is exactly one "Subir documento" on screen either
+                        way. On the route (the deep link the phone hands out)
+                        this is the only one there is. */}
+                    {!embedded && (
+                        <Button
+                            variant="secondary"
+                            loading={uploading}
+                            onClick={() => {
+                                clearSettled();
+                                pick();
+                            }}
+                            icon={<Upload size={15} />}
+                        >
+                            Subir documentos
+                        </Button>
+                    )}
                 </div>
-                {summary && <Summary {...summary} />}
             </div>
 
             {error && <BackendNotice what="tus documentos" detail={error} />}
+
+            <UploadQueue items={queue} onRetry={retry} onDismiss={dismiss} />
 
             {/* Custody as news, not as status: the chip on the row states the
                 permanent fact, this line only marks the arrival, and only when
@@ -322,17 +363,17 @@ export function DocumentosView() {
                             icon={FileText}
                             title="Tomin no ha leído nada todavía"
                             action={
-                                <>
-                                    <Button
-                                        className="text-ink"
-                                        loading={uploading}
-                                        onClick={pick}
-                                        icon={<Upload size={16} />}
-                                    >
-                                        Subir documento
-                                    </Button>
-                                    {input}
-                                </>
+                                <Button
+                                    className="text-ink"
+                                    loading={uploading}
+                                    onClick={() => {
+                                        clearSettled();
+                                        pick();
+                                    }}
+                                    icon={<Upload size={16} />}
+                                >
+                                    Subir documentos
+                                </Button>
                             }
                         >
                             Sube un estado de cuenta en PDF o una factura del SAT y Tomin
@@ -437,7 +478,7 @@ function TicketsNote() {
                     {count} ticket{count === 1 ? "" : "s"} leído{count === 1 ? "" : "s"} desde
                     tu celular.
                     <Link
-                        href="/precios"
+                        href="/?cara=precios"
                         onClick={() => track("nav.view", { to: "/precios", source: "documentos" })}
                         className="underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
                     >

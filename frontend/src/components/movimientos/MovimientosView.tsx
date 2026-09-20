@@ -13,6 +13,7 @@ import {
     EMPTY_QUERY,
     UNCATEGORIZED,
     applyQuery,
+    categoryLens,
     queryIsActive,
 } from "@/lib/movimientosQuery";
 import { useMovimientosSearch } from "./MovimientosSearchProvider";
@@ -38,7 +39,7 @@ import {
     type ChartMode,
     type ColorMode,
 } from "@/components/charts/TransactionsChart";
-import { categoryFamily, categoryName, useCategories } from "@/lib/categories";
+import { categoryName, useCategories } from "@/lib/categories";
 import { useBankScope } from "@/lib/banks";
 import { dayLabel, mxn, mxn2 } from "@/lib/format";
 import {
@@ -133,7 +134,7 @@ export function MovimientosView() {
 
     const filtered = useMemo(() => {
         if (items === null) return null;
-        return applyQuery(items, query, (id) => categoryFamily(categories, id));
+        return applyQuery(items, query, categoryLens(categories));
     }, [items, query, categories]);
 
     // Lecturas for the scatter: one chip per kind, each a tour of its

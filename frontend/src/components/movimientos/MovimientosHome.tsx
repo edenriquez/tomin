@@ -5,22 +5,32 @@ import { cn } from "@/lib/cn";
 import { track } from "@/lib/telemetry";
 import { useFace } from "@/lib/useFace";
 import { RecurrentesView } from "@/components/recurrentes/RecurrentesView";
+import { PreciosView } from "@/components/precios/PreciosView";
+import { useReceiptCount } from "@/components/precios/useReceiptCount";
 import { PorCategoriaView } from "./PorCategoriaView";
+import { PorMesView } from "./PorMesView";
 
-export const FACES = ["categoria", "recurrentes"] as const;
+export const FACES = ["mes", "categoria", "recurrentes", "precios"] as const;
 export type MovimientosFace = (typeof FACES)[number];
 
 const FACE_LABELS: Record<MovimientosFace, string> = {
+    mes: "Por mes",
     categoria: "Por categoría",
     recurrentes: "Cargos recurrentes",
+    precios: "Precios",
 };
 
+/** The first face is the address without a parameter: `/` is the run of the
+ *  months, and every other face says its name. */
 export function faceFromParam(value: string | null): MovimientosFace {
-    return value === "recurrentes" ? "recurrentes" : "categoria";
+    if (value === "categoria") return "categoria";
+    if (value === "recurrentes") return "recurrentes";
+    if (value === "precios") return "precios";
+    return "mes";
 }
 
 export function movimientosHref(face: MovimientosFace): string {
-    return face === "categoria" ? "/" : "/?cara=recurrentes";
+    return face === "mes" ? "/" : `/?cara=${face}`;
 }
 
 /**
@@ -57,8 +67,10 @@ export function MovimientosHome() {
     const [held, setHeld] = useState<number | null>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const settled = useRef<Record<MovimientosFace, boolean>>({
+        mes: false,
         categoria: false,
         recurrentes: false,
+        precios: false,
     });
     const faceRef = useRef(face);
     faceRef.current = face;
@@ -94,8 +106,10 @@ export function MovimientosHome() {
         setShown(of);
         setHeld(null);
     }, []);
+    const reportMes = useCallback((l: boolean) => report("mes", l), [report]);
     const reportCategoria = useCallback((l: boolean) => report("categoria", l), [report]);
     const reportRecurrentes = useCallback((l: boolean) => report("recurrentes", l), [report]);
+    const reportPrecios = useCallback((l: boolean) => report("precios", l), [report]);
 
     function pick(next: MovimientosFace) {
         if (next === face) return;
@@ -103,13 +117,22 @@ export function MovimientosHome() {
         setFace(next);
     }
 
+    // Precios earns its tab only once there is a ticket to read. A third tab
+    // pointing at an empty room is noise for the many users who never open the
+    // phone app — but a direct link to it still works, and still shows the face
+    // with its own empty state, so a URL never lands on a missing tab.
+    const tickets = useReceiptCount(0);
+    const faces = FACES.filter(
+        (f) => f !== "precios" || (tickets ?? 0) > 0 || face === "precios"
+    );
+
     const tabs = (
         <div
             role="tablist"
             aria-label="Cara de movimientos"
             className="inline-flex rounded-control border border-mist bg-fog p-0.5"
         >
-            {FACES.map((f) => {
+            {faces.map((f) => {
                 const selected = f === face;
                 return (
                     <button
@@ -143,10 +166,14 @@ export function MovimientosHome() {
         >
             {mounted.map((f) => (
                 <div key={f} hidden={f !== shown}>
-                    {f === "categoria" ? (
+                    {f === "mes" ? (
+                        <PorMesView tabs={tabs} onLoadingChange={reportMes} />
+                    ) : f === "categoria" ? (
                         <PorCategoriaView tabs={tabs} onLoadingChange={reportCategoria} />
-                    ) : (
+                    ) : f === "recurrentes" ? (
                         <RecurrentesView tabs={tabs} onLoadingChange={reportRecurrentes} />
+                    ) : (
+                        <PreciosView tabs={tabs} onLoadingChange={reportPrecios} />
                     )}
                 </div>
             ))}

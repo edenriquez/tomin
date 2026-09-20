@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -12,11 +10,21 @@ import { useRecurringSeries } from "@/components/recurrentes/useRecurringSeries"
 /**
  * The header's way into Pagos. The badge counts charges projected to land in
  * the next seven days; its tone follows the closest one, like the calendar.
+ *
+ * It opens the calendar over the page instead of navigating to it — see
+ * `PagosModal` for why that matters.
  */
-export function PagosBell({ dataVersion }: { dataVersion: number }) {
-    const pathname = usePathname();
+export function PagosBell({
+    dataVersion,
+    active,
+    onOpen,
+}: {
+    dataVersion: number;
+    /** The modal is up: the control reads as pressed, like a nav item did. */
+    active: boolean;
+    onOpen: () => void;
+}) {
     const { dated: items, loading } = useRecurringSeries(dataVersion);
-    const active = pathname.startsWith("/pagos");
 
     const badge = useMemo(() => {
         if (loading) return null;
@@ -25,10 +33,7 @@ export function PagosBell({ dataVersion }: { dataVersion: number }) {
             (l) => l.status === "due" && (l.urgency === "urgent" || l.urgency === "soon")
         );
         if (due.length === 0) return null;
-        return {
-            count: due.length,
-            urgent: due.some((l) => l.urgency === "urgent"),
-        };
+        return { count: due.length };
     }, [items, loading]);
 
     const title = badge
@@ -36,10 +41,14 @@ export function PagosBell({ dataVersion }: { dataVersion: number }) {
         : "Pagos";
 
     return (
-        <Link
-            href="/pagos"
-            onClick={() => track("nav.view", { to: "/pagos", source: "header" })}
-            aria-current={active ? "page" : undefined}
+        <button
+            type="button"
+            onClick={() => {
+                track("pagos.open", { source: "header" });
+                onOpen();
+            }}
+            aria-haspopup="dialog"
+            aria-expanded={active}
             aria-label={title}
             title={title}
             className={cn(
@@ -58,12 +67,12 @@ export function PagosBell({ dataVersion }: { dataVersion: number }) {
                     className={cn(
                         "tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5",
                         "text-caption font-medium leading-none text-paper",
-                        badge.urgent ? "bg-negative due-pulse-soon" : "bg-soot"
+                        "bg-soot"
                     )}
                 >
                     {badge.count}
                 </span>
             )}
-        </Link>
+        </button>
     );
 }

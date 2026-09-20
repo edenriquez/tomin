@@ -1,19 +1,18 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Plus, Repeat, Trash2, X } from "lucide-react";
+import { List, Plus, Repeat, Trash2, X } from "lucide-react";
 import type { RecurringItem } from "@/lib/api";
 import { categoryName, useCategories } from "@/lib/categories";
 import { cn } from "@/lib/cn";
 import { HORIZONS, isRestKey, type Horizon, type RestMark } from "@/lib/fijos";
-import { dayLabel, mxn } from "@/lib/format";
+import { mxn } from "@/lib/format";
 import { matchMerchant } from "@/lib/merchants";
-import { parsePeriodKey } from "@/lib/metrics";
 import {
     chargedInBounds,
     seriesMatchesQuery,
 } from "@/lib/recurrentesQuery";
+import { categoryLens } from "@/lib/movimientosQuery";
 import {
     EMPTY_QUERY,
     periodChipLabel,
@@ -27,7 +26,7 @@ import { useMovimientosSearch } from "@/components/movimientos/MovimientosSearch
 import { BackendNotice, Button, EmptyState, Skeleton } from "@/components/ui";
 import { LoadTimelineChart } from "./LoadTimelineChart";
 import { buildTimeline } from "./projection";
-import { buildSeriesColors } from "./seriesColors";
+import { buildSeriesColors, sortByWeight } from "./seriesColors";
 import { typicalDayOfMonth } from "./rhythm";
 import { useRecurringSeries } from "./useRecurringSeries";
 
@@ -40,12 +39,18 @@ const FREQUENCY_LABELS: Record<RecurringItem["frequency"], string> = {
 };
 
 const CHART_MONTHS = 6;
-const RECENT = 3;
 
 /**
- * Act on the set: confirm the charges that repeat. History is always 12
- * months; the period only marks which series landed in the window. Criterios
- * hide rows — they do not recompute the rhythm.
+ * Act on the set: one list, the charges you have said are fixed. History is
+ * always 12 months; the period only marks which series landed in the window.
+ * Criterios hide rows — they do not recompute the rhythm.
+ *
+ * There used to be a second list, "Pendientes de confirmación", holding what
+ * detection suspected until it was promoted. It was a waiting room in front of
+ * a move that is reversible anyway: adding is direct, and a charge that turns
+ * out not to be what you thought is deleted from the row it created. What
+ * detection found is now reached through "Añadir un cargo", which searches
+ * the whole ledger rather than only the series with a rhythm.
  *
  * The set is the same one Plan reads (`useRecurringSeries`): detection, the
  * manuals, and the merchants taught as frequent. A pin made in either place
@@ -65,7 +70,6 @@ export function RecurrentesView({
     const { query, openModal } = useMovimientosSearch();
     const { detected, manuals, taughtRest, fijos, banks, loading, error } =
         useRecurringSeries(dataVersion);
-    const [openKey, setOpenKey] = useState<string | null>(null);
     const [adding, setAdding] = useState(false);
 
     const waiting = loading && !error;
@@ -87,30 +91,33 @@ export function RecurrentesView({
     // Detection, then the manuals it has not caught up with, then the
     // merchants taught as frequent. Criterios hide rows from all three.
     const visible = useMemo(() => {
-        const fromDetected = detected.filter((i) => seriesMatchesQuery(i, query));
+        const lens = categoryLens(categories);
+        const fromDetected = detected.filter((i) => seriesMatchesQuery(i, query, lens));
         const detectedKeys = new Set(detected.map((i) => i.key));
         const extra = manuals.filter(
-            (m) => !detectedKeys.has(m.key) && seriesMatchesQuery(m, query)
+            (m) => !detectedKeys.has(m.key) && seriesMatchesQuery(m, query, lens)
         );
-        const rest = taughtRest.filter((i) => seriesMatchesQuery(i, query));
+        const rest = taughtRest.filter((i) => seriesMatchesQuery(i, query, lens));
         return [...fromDetected, ...extra, ...rest];
-    }, [detected, manuals, taughtRest, query]);
+        // `categories` belongs here: the lens reads the taxonomy, and until it
+        // has loaded every id looks uncategorized. Without it a category
+        // criterio would keep answering from the empty map after the fetch
+        // landed.
+    }, [detected, manuals, taughtRest, query, categories]);
 
     const pinned = useMemo(
         () => visible.filter((i) => pinnedSet.has(i.key)),
         [visible, pinnedSet]
     );
+    // What detection found and the user has not fixed. No longer a list of its
+    // own — it was a waiting room in front of a move that is now direct — but
+    // still worth a count: it says the drawing is not the whole story.
     const pending = useMemo(
-        () =>
-            visible
-                .filter((i) => !pinnedSet.has(i.key))
-                .slice()
-                .sort((a, b) => b.monthly_equivalent - a.monthly_equivalent),
+        () => visible.filter((i) => !pinnedSet.has(i.key)),
         [visible, pinnedSet]
     );
 
     const fijosNeed = pinned.reduce((s, i) => s + i.monthly_equivalent, 0);
-    const pendingNeed = pending.reduce((s, i) => s + i.monthly_equivalent, 0);
 
     /**
      * The chart is the fijos and nothing else. A series detection merely
@@ -122,17 +129,19 @@ export function RecurrentesView({
      * because it is the same question asked from two rooms.
      */
     const horizon = fijos.state.horizon;
+    // Heaviest series first, so the stack darkens downward in step with the
+    // ramp the colours come from.
     const fijosTimeline = useMemo(
-        () => buildTimeline(pinned, CHART_MONTHS, horizon),
+        () => buildTimeline(sortByWeight(pinned), CHART_MONTHS, horizon),
         [pinned, horizon]
     );
 
-    // Colour by series, from the category taxonomy, built over every series in
-    // play — not the filtered selection, or hiding one row would repaint the
-    // rest (see `buildSeriesColors`).
+    // Colour by weight along the stone ramp, built over every series in play —
+    // not the filtered selection, or hiding one row would repaint the rest
+    // (see `buildSeriesColors`).
     const colorOf = useMemo(
-        () => buildSeriesColors([...detected, ...manuals, ...taughtRest], categories),
-        [detected, manuals, taughtRest, categories]
+        () => buildSeriesColors([...detected, ...manuals, ...taughtRest]),
+        [detected, manuals, taughtRest]
     );
 
     function setHorizon(h: Horizon) {
@@ -150,7 +159,6 @@ export function RecurrentesView({
     function pin(item: RecurringItem) {
         track("movimientos.recurrente_confirm", { frequency: item.frequency });
         fijos.pin(item.key);
-        setOpenKey(null);
     }
 
     /**
@@ -160,7 +168,6 @@ export function RecurrentesView({
     function unpin(item: RecurringItem) {
         track("movimientos.recurrente_unpin", { kind: kindOf(item) });
         fijos.unpin(item.key);
-        setOpenKey(null);
     }
 
     /**
@@ -172,7 +179,6 @@ export function RecurrentesView({
         track("movimientos.recurrente_remove", { kind: kindOf(item) });
         if (isRestKey(item.key)) fijos.removeRest(item.key);
         fijos.unpin(item.key);
-        setOpenKey(null);
     }
 
     /**
@@ -208,93 +214,71 @@ export function RecurrentesView({
         !error;
     const emptyFilter = !loading && !emptyDetection && visible.length === 0;
 
+    /** Which period is being read, and the switch between the two faces. It
+     *  rides inside the reading itself — a card holding only a caption and a
+     *  pair of tabs is furniture — and gets a card of its own only in the
+     *  empty states, where there is no reading for it to head. */
+    const head = (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+            <p className="eyebrow">
+                Periodo · {period}
+                {bankBit}
+            </p>
+            {tabs}
+        </div>
+    );
+
     return (
         <div className="space-y-5">
-            <section className="card space-y-5">
-                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-mist pb-4">
-                    <p className="eyebrow">
-                        Periodo · {period}
-                        {bankBit}
-                    </p>
-                    {tabs}
-                </div>
-
-                {loading ? (
-                    <Skeleton className="h-8 w-96" />
-                ) : (
-                    <p className="flex flex-wrap items-baseline gap-x-2.5 text-title-sm text-ink">
-                        <span className="tabular">
-                            {mxn(fijosNeed)} al mes en cargos fijos
-                        </span>
-                        {pendingNeed > 0 && (
-                            <>
-                                <span aria-hidden className="text-mist">
-                                    ·
-                                </span>
-                                <span className="tabular text-graphite">
-                                    ~{mxn(pendingNeed)} al mes pendientes de confirmación
-                                </span>
-                            </>
-                        )}
-                    </p>
-                )}
-
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-                    <p className="text-label text-graphite">
-                        La recurrencia se calcula con 12 meses de historial. El periodo
-                        indica cuáles se registraron en {period === "Todo" ? "todo el historial" : `estos ${period.toLowerCase()}`}.
-                    </p>
-                    <Link
-                        href="/pagos"
-                        onClick={() => track("nav.view", { to: "/pagos", source: "recurrentes" })}
-                        className="text-body-sm text-graphite underline decoration-mist underline-offset-4 hover:text-ink"
-                    >
-                        Ver calendario de pagos →
-                    </Link>
-                </div>
-            </section>
-
-            {error && <BackendNotice what="tus cargos recurrentes" detail={error} />}
+            {error && <BackendNotice what="Cargos Recurrentes" detail={error} />}
 
             {emptyDetection ? (
-                <EmptyState
-                    icon={Repeat}
-                    title="Tomin aún no ve cobros que se repitan"
-                    action={
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<Plus size={14} />}
-                            onClick={() => setAdding(true)}
-                        >
-                            Añadir un cargo
-                        </Button>
-                    }
-                >
-                    Hacen falta al menos tres cobros del mismo lugar con un ritmo
-                    reconocible. Sube más estados de cuenta, o añade el cargo a mano.
-                </EmptyState>
+                <>
+                    <section className="card">{head}</section>
+                    <EmptyState
+                        icon={Repeat}
+                        title="Tomin aún no ve cobros que se repitan"
+                        action={
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<Plus size={14} />}
+                                onClick={() => setAdding(true)}
+                            >
+                                Añadir un cargo
+                            </Button>
+                        }
+                    >
+                        Hacen falta al menos tres cobros del mismo lugar con un ritmo
+                        reconocible. Sube más estados de cuenta, o añade el cargo a
+                        mano.
+                    </EmptyState>
+                </>
             ) : emptyFilter ? (
-                <EmptyState icon={Repeat} title="Ninguna serie coincide">
-                    Un criterio no cambia el cálculo: solo esconde filas. Quita
-                    categoría o comercio para verlas todas.
-                </EmptyState>
+                <>
+                    <section className="card">{head}</section>
+                    <EmptyState icon={Repeat} title="Ninguna serie coincide">
+                        Un criterio no cambia el cálculo: solo esconde filas. Quita
+                        categoría o comercio para verlas todas.
+                    </EmptyState>
+                </>
             ) : (
                 <>
                     <section className="card space-y-5">
+                        {head}
                         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
                             <div className="min-w-0">
                                 <h2 className="text-title-sm font-normal text-ink">
-                                    Mes a mes, y lo que viene
+                                    Cargos Recurrentes
                                 </h2>
                                 <p className="mt-1 text-body-sm text-graphite">
                                     {loading ? (
                                         "Cargando la carga mensual…"
                                     ) : pinned.length === 0 ? (
                                         <>
-                                            Solo se dibuja lo confirmado
+                                            Solo se dibuja lo que fijas
                                             {pending.length > 0 &&
-                                                `: fija abajo alguno de los ${pending.length} cobros que se repiten`}
+                                                `: detección ya encontró ${pending.length} cobros que se repiten`}
                                             .
                                         </>
                                     ) : (
@@ -307,8 +291,13 @@ export function RecurrentesView({
                                                 <>
                                                     {" · "}
                                                     {pending.length} cobro
-                                                    {pending.length === 1 ? "" : "s"} sin
-                                                    confirmar {pending.length === 1 ? "queda" : "quedan"} fuera
+                                                    {pending.length === 1 ? "" : "s"}{" "}
+                                                    detectado
+                                                    {pending.length === 1 ? "" : "s"}{" "}
+                                                    {pending.length === 1
+                                                        ? "queda"
+                                                        : "quedan"}{" "}
+                                                    fuera
                                                 </>
                                             )}
                                         </>
@@ -357,34 +346,10 @@ export function RecurrentesView({
                     </section>
 
                     <SeriesCard
-                        title="Cargos fijos"
-                        count={pinned.length}
+                        title="Transacciones"
                         monthly={fijosNeed}
-                        aside="Impactan directamente en Plan"
                         loading={loading}
-                        empty="Fija abajo los que sí o sí se cobran."
-                    >
-                        {pinned.map((item) => (
-                            <FijoRow
-                                key={item.key}
-                                item={item}
-                                category={categoryName(categories, item.category_id)}
-                                inPeriod={chargedInBounds(item, bounds)}
-                                deletable={deletable(item, manualKeys)}
-                                onUnpin={() => unpin(item)}
-                                onRemove={() => remove(item)}
-                            />
-                        ))}
-                    </SeriesCard>
-
-                    <SeriesCard
-                        title="Pendientes de confirmación"
-                        count={pending.length}
-                        monthly={pendingNeed}
-                        approx
-                        aside="Fijar las incorpora a la gráfica y a Plan"
-                        loading={loading}
-                        empty="Todos los cobros que se repiten ya están fijados."
+                        empty="Añade el primer cobro que sí o sí llega."
                         action={
                             <Button
                                 variant="ghost"
@@ -395,30 +360,25 @@ export function RecurrentesView({
                                 Añadir un cargo
                             </Button>
                         }
-                        note="¿Falta un cobro? Detección necesita tres cargos con ritmo; los demás se añaden a mano."
+                        note="Añadir busca en todo el historial: detección propone las series con ritmo, y cualquier otro cobro se fija a mano. Si el cargo no era lo que creías, elimínalo aquí."
                     >
-                        {pending.map((item) => (
-                            <PendingRow
+                        {pinned.map((item) => (
+                            <FijoRow
                                 key={item.key}
                                 item={item}
-                                open={openKey === item.key}
+                                category={categoryName(categories, item.category_id)}
                                 inPeriod={chargedInBounds(item, bounds)}
-                                onToggle={() => {
-                                    setOpenKey((cur) => (cur === item.key ? null : item.key));
-                                    track("movimientos.recurrente_expand", {
-                                        open: openKey !== item.key,
-                                    });
-                                }}
                                 deletable={deletable(item, manualKeys)}
-                                onConfirm={() => pin(item)}
-                                onRemove={() => remove(item)}
                                 onOpenList={() => {
                                     track("movimientos.recurrente_open_list");
                                     openCharges(item);
                                 }}
+                                onUnpin={() => unpin(item)}
+                                onRemove={() => remove(item)}
                             />
                         ))}
                     </SeriesCard>
+
                 </>
             )}
 
@@ -439,8 +399,6 @@ function SeriesCard({
     title,
     count,
     monthly,
-    approx,
-    aside,
     loading,
     empty,
     action,
@@ -448,10 +406,8 @@ function SeriesCard({
     children,
 }: {
     title: string;
-    count: number;
+    count?: number;
     monthly: number;
-    approx?: boolean;
-    aside: string;
     loading: boolean;
     empty: string;
     /** A control at the end of the header row. */
@@ -468,17 +424,8 @@ function SeriesCard({
                     <span className="text-mist">·</span>
                     <span className="tabular font-sans text-body-sm text-graphite">{count}</span>
                     <span className="text-mist">·</span>
-                    <span className="tabular font-sans text-body-sm text-ink">
-                        {approx ? "~" : ""}
-                        {mxn(monthly)} al mes
-                    </span>
                 </h2>
-                <div className="flex items-center gap-3">
-                    {/* The aside is a hint, the action is work: on a phone the
-                        two fight for the same line, and the hint yields. */}
-                    <p className="hidden text-label text-ash sm:block">{aside}</p>
-                    {action}
-                </div>
+                <div className="flex items-center gap-3">{action}</div>
             </header>
             {loading ? (
                 <div className="space-y-2 px-5 py-4 sm:px-6">
@@ -505,6 +452,7 @@ function FijoRow({
     category,
     inPeriod,
     deletable,
+    onOpenList,
     onUnpin,
     onRemove,
 }: {
@@ -513,6 +461,11 @@ function FijoRow({
     inPeriod: boolean;
     /** Taught by hand, so it can be forgotten rather than just unpinned. */
     deletable: boolean;
+    /** The charges behind the series, in Movimientos. Fixing a charge is now
+     *  a direct move, so checking what it actually caught has to be one too —
+     *  that is the half of "add it, delete it if it does not match" that the
+     *  delete alone cannot do. */
+    onOpenList: () => void;
     onUnpin: () => void;
     onRemove: () => void;
 }) {
@@ -535,6 +488,12 @@ function FijoRow({
                 <span className="rounded-full border border-mist bg-fog px-2.5 py-0.5 text-label text-graphite">
                     {isRestKey(item.key) ? "Frecuente" : "Fijo"}
                 </span>
+                <RowAction
+                    icon={<List size={14} aria-hidden />}
+                    label={`Ver los cobros de ${item.label}`}
+                    title="Ver movimientos"
+                    onClick={onOpenList}
+                />
                 <RowAction
                     icon={<X size={14} aria-hidden />}
                     label={`Quitar ${item.label} de fijos`}
@@ -592,111 +551,6 @@ function deletable(item: RecurringItem, manualKeys: Set<string>): boolean {
 
 function kindOf(item: RecurringItem): string {
     return isRestKey(item.key) ? "rest" : "series";
-}
-
-function PendingRow({
-    item,
-    open,
-    inPeriod,
-    deletable,
-    onToggle,
-    onConfirm,
-    onRemove,
-    onOpenList,
-}: {
-    item: RecurringItem;
-    open: boolean;
-    inPeriod: boolean;
-    deletable: boolean;
-    onToggle: () => void;
-    onConfirm: () => void;
-    onRemove: () => void;
-    onOpenList: () => void;
-}) {
-    const recent = [...(item.charges ?? [])]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, RECENT);
-
-    return (
-        <li>
-            <div
-                className={cn(
-                    "rounded-xl px-3 py-2.5",
-                    open && "border border-signal/70 bg-wash/40"
-                )}
-            >
-                <div className="flex min-h-10 items-center justify-between gap-3">
-                    <button
-                        type="button"
-                        aria-expanded={open}
-                        onClick={onToggle}
-                        className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
-                    >
-                        <Initial label={item.label} active={open} />
-                        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <span className="text-body font-medium text-ink">{item.label}</span>
-                            <Meta>
-                                {item.occurrences.toLocaleString("es-MX")} registro
-                                {item.occurrences === 1 ? "" : "s"}
-                                {item.occurrences >= 12 ? " en 12 meses" : ""}
-                            </Meta>
-                            <Meta>{cadence(item)}</Meta>
-                            {inPeriod && <InPeriod active={open} />}
-                        </span>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-3">
-                        <span className="tabular text-body font-medium text-ink">
-                            {item.amount_stable ? "" : "~"}
-                            {mxn(item.monthly_equivalent)}/mes
-                        </span>
-                        <Button size="sm" variant="secondary" onClick={onConfirm}>
-                            Fijar
-                        </Button>
-                        {deletable && (
-                            <RowAction
-                                icon={<Trash2 size={14} aria-hidden />}
-                                label={`Eliminar ${item.label}`}
-                                title="Eliminar de Tomin"
-                                danger
-                                onClick={onRemove}
-                            />
-                        )}
-                    </div>
-                </div>
-
-                {open && recent.length > 0 && (
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-wash pt-2.5 pl-11">
-                        <p className="flex flex-wrap items-center gap-x-2 text-label text-graphite">
-                            <span className="text-ash">Últimos cobros:</span>
-                            {recent.map((c, i) => {
-                                const d = parsePeriodKey(c.date);
-                                return (
-                                    <span key={c.date}>
-                                        {i > 0 && <span className="text-mist"> · </span>}
-                                        <span className="tabular text-ink">
-                                            {d ? dayLabel(d) : c.date} {mxn(Math.abs(c.amount))}
-                                        </span>
-                                    </span>
-                                );
-                            })}
-                        </p>
-                        <button
-                            type="button"
-                            onClick={onOpenList}
-                            className="text-label font-medium text-edge hover:underline"
-                        >
-                            Ver movimientos →
-                        </button>
-                    </div>
-                )}
-                {open && recent.length === 0 && (
-                    <p className="mt-2 pl-11 text-label text-graphite">
-                        Sin fechas guardadas todavía.
-                    </p>
-                )}
-            </div>
-        </li>
-    );
 }
 
 function Initial({ label, active }: { label: string; active?: boolean }) {

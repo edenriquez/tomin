@@ -1,19 +1,17 @@
 "use client";
 
-import { AppChrome } from "@/components/AppChrome";
-import { PreciosView } from "@/components/precios/PreciosView";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 /**
- * The Precios route — what the tickets you photographed say things cost.
- *
- * No window pills, for the same reason Plan has none: a price history
- * is about the *same product over time*, and a window that hid last quarter's
- * cheaper purchase would remove exactly the comparison the page exists for.
+ * Retired: Precios is a face of Movimientos. The next.config redirect handles
+ * bookmarks and the link the phone hands out after a ticket; this covers client
+ * navigations that still carry the old path.
  */
-export default function PreciosPage() {
-    return (
-        <AppChrome>
-            <PreciosView />
-        </AppChrome>
-    );
+export default function PreciosRedirect() {
+    const router = useRouter();
+    useEffect(() => {
+        router.replace("/?cara=precios");
+    }, [router]);
+    return null;
 }

@@ -78,6 +78,12 @@ class StatementModel(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")
     # AccountKind value, user-declared via PATCH; NULL until they label it.
     account_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # The card figures printed on the statement, when the text carried them.
+    credit_no_interest_payment: Mapped[Numeric | None] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
+    credit_minimum_payment: Mapped[Numeric | None] = mapped_column(Numeric(14, 2), nullable=True)
+    credit_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     file_hash: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     # StatementSource value: how the contents reached the server ("web" upload
     # vs "device" on-phone extraction). NOT NULL with a 'web' default, because

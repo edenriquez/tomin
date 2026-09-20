@@ -8,6 +8,7 @@
  */
 
 import type { Transaction } from "./api";
+import { categoryFamily, isUncategorizedId, type CategoryInfo } from "./categories";
 import { dayLabel } from "./format";
 import { matchMerchant, merchantBySlug } from "./merchants";
 
@@ -59,8 +60,43 @@ export function merchantSlugOf(t: Transaction): string {
     return matchMerchant(t.description) ?? OTHER_MERCHANT;
 }
 
-export function categoryKeyOf(t: Transaction): string {
-    return t.category_id ?? UNCATEGORIZED;
+/**
+ * The taxonomy, as the two questions a filter actually asks of it.
+ *
+ * `family` is why checking Transporte also lists Gasolina. `isNone` exists
+ * because "uncategorized" has two shapes in the data and only one of them is
+ * `category_id === null`: a row the classifier could not place is filed under
+ * the taxonomy's own «Sin Categoría» row, with a perfectly real id. Keying off
+ * null alone meant `UNCATEGORIZED` matched nothing in a ledger where every row
+ * has an id — which is exactly what happened.
+ */
+export type CategoryLens = {
+    family: (id: string) => Iterable<string>;
+    isNone: (id: string | null) => boolean;
+};
+
+export function categoryLens(map: Map<string, CategoryInfo> | null): CategoryLens {
+    return {
+        // The sentinel is not in the taxonomy, so it has no descendants to
+        // walk — and asking for them would return it wrapped in an array
+        // anyway. `isNone` is what makes it match.
+        family: (id) => (id === UNCATEGORIZED ? [UNCATEGORIZED] : categoryFamily(map, id)),
+        isNone: (id) => isUncategorizedId(map, id),
+    };
+}
+
+/**
+ * How a transaction's category is keyed, for filtering and for facet counts.
+ *
+ * Both shapes of "no category" collapse onto `UNCATEGORIZED`, so the concept
+ * has exactly one key across the app: the row the accordion pins at the top,
+ * the id `verMas` puts in the query, and the option the rail draws are all the
+ * same string. Without the lens it falls back to the null check, which is only
+ * correct for a ledger that has never been through the classifier.
+ */
+export function categoryKeyOf(t: Transaction, lens?: CategoryLens): string {
+    if (lens ? lens.isNone(t.category_id) : !t.category_id) return UNCATEGORIZED;
+    return t.category_id!;
 }
 
 function inBucket(amount: number, id: AmountBucketId): boolean {
@@ -70,18 +106,18 @@ function inBucket(amount: number, id: AmountBucketId): boolean {
 }
 
 /** Every criterion except date. Date has already been applied by the fetch.
- *  `familyOf` expands a parent id to its descendants so checking Transporte
- *  also lists Gasolina. */
+ *  Pass the lens so a parent id matches its leaves and «Sin categoría»
+ *  matches rows filed under it. */
 export function applyQuery(
     items: Transaction[],
     q: MovimientosQuery,
-    familyOf?: (id: string) => Iterable<string>
+    lens?: CategoryLens
 ): Transaction[] {
     const needle = q.needle.trim().toLowerCase();
     const allowed =
         q.categoryIds.length > 0
             ? new Set(
-                  q.categoryIds.flatMap((id) => (familyOf ? [...familyOf(id)] : [id]))
+                  q.categoryIds.flatMap((id) => (lens ? [...lens.family(id)] : [id]))
               )
             : null;
     return items.filter((t) => {
@@ -90,7 +126,7 @@ export function applyQuery(
         if (q.merchantSlugs.length > 0 && !q.merchantSlugs.includes(merchantSlugOf(t))) {
             return false;
         }
-        if (allowed && !allowed.has(categoryKeyOf(t))) {
+        if (allowed && !allowed.has(categoryKeyOf(t, lens))) {
             return false;
         }
         if (needle) {
@@ -110,7 +146,7 @@ export function facetCounts(
     items: Transaction[],
     q: MovimientosQuery,
     ignore: "merchants" | "categories" | "amount" | "kind" | "none" = "none",
-    familyOf?: (id: string) => Iterable<string>
+    lens?: CategoryLens
 ): Transaction[] {
     return applyQuery(
         items,
@@ -121,7 +157,7 @@ export function facetCounts(
             amountBucket: ignore === "amount" ? null : q.amountBucket,
             kind: ignore === "kind" ? "all" : q.kind,
         },
-        familyOf
+        lens
     );
 }
 

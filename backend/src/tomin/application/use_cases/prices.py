@@ -28,6 +28,12 @@ from ...domain.services.prices import (
 )
 from ..ports.outbound import ReceiptRepository
 from ..ports.outbound.chat import ChatMessage, ChatOptions, ChatPort
+from ..ports.outbound.decisions import (
+    Choice,
+    ChoiceAnswer,
+    DecisionPort,
+    NullDecisions,
+)
 from ..ports.outbound.references import (
     NullPriceReference,
     PriceQuote,
@@ -122,6 +128,52 @@ No expliques. No agregues nada."""
 MAX_TERM_WORDS = 2
 MAX_TERM_CHARS = 40
 
+#: What a typed decision may answer when none of the words fit. The same escape
+#: hatch as rule 3 of TERM_SYSTEM, except here it is an option the model must
+#: pick rather than a string it must spell.
+UNKNOWN_TERM = "desconocido"
+
+#: Below this, a Choice is the model saying it cannot tell the words apart, and
+#: the decision is handed on rather than stored. Not 0.9: the stakes are one
+#: query to a price survey, the screen shows the term it used, and an ``auto``
+#: proposal can never overwrite a ``user`` correction. But above the floor where
+#: a flat distribution means nothing was decided at all.
+TERM_CONFIDENCE = 0.6
+
+#: How many words one Choice may be asked over. The state and the questions
+#: share a budget of roughly 32k tokens; a hundred short generics is nowhere
+#: near it, and a list longer than this is a catalogue nobody curates.
+MAX_TERM_OPTIONS = 140
+
+#: The vocabulary a fresh account starts with: the generics a Mexican basket is
+#: actually filed under in a price survey. It is a seed, not a ceiling -- the
+#: user's own stored terms join it, so a word the text model proposes once is a
+#: word the typed model can choose from ever after.
+SEED_TERMS = (
+    "aceite", "agua", "aguacate", "ajo", "arroz", "atun", "avena", "azucar",
+    "bistec", "bolillo", "cafe", "caldo", "camaron", "carbon", "cebolla",
+    "cereal", "cerveza", "chile", "chocolate", "cloro", "crema", "desodorante",
+    "detergente", "durazno", "elote", "epazote", "frijol", "fruta", "galletas",
+    "gelatina", "harina", "huevo", "jabon", "jamon", "jitomate", "jugo",
+    "leche", "lechuga", "lenteja", "limon", "maiz", "mantequilla", "manzana",
+    "margarina", "mayonesa", "melon", "mermelada", "miel", "mole", "mostaza",
+    "naranja", "nopal", "nuez", "pan", "papa", "papel", "pasta", "pepino",
+    "pescado", "pina", "platano", "pollo", "puerco", "queso", "refresco",
+    "res", "sal", "salchicha", "salsa", "sardina", "servilletas", "shampoo",
+    "sopa", "suavizante", "te", "tomate", "tortilla", "tostadas", "toalla",
+    "tuna", "uva", "verdura", "vinagre", "yogurt", "zanahoria",
+)
+
+#: What the typed model is asked. The equivalent of TERM_SYSTEM, except the
+#: rules about shape ("one or two words", "lowercase", "no brand") are gone:
+#: the option set enforces them, which is the entire reason to ask this way.
+TERM_INSTRUCTIONS = (
+    "Esta es una linea abreviada de un ticket mexicano. "
+    "Elige el nombre generico bajo el que ese producto se buscaria en una "
+    f"encuesta de precios. Si ninguna opcion nombra el producto, elige "
+    f"'{UNKNOWN_TERM}'."
+)
+
 
 class ResolveProductTerms:
     """What a ticket's shorthand is called out in the world.
@@ -134,11 +186,29 @@ class ResolveProductTerms:
     A model proposes; a person decides. The repository refuses to let an
     ``auto`` proposal overwrite a ``user`` correction, which is what makes
     correcting one worth the user's time.
+
+    Two models propose, in the order of what each is actually good at. The
+    typed one **chooses** among words this account already uses plus a seed
+    vocabulary, so its answer cannot be a sentence, a size or an apology -- the
+    shape rules that :func:`_clean_term` exists to enforce are enforced by the
+    option set instead. The text one is asked only about the lines the first
+    could not place, which is how the vocabulary grows: a word written once
+    becomes a word choosable ever after.
+
+    Both are optional and in every combination. Neither configured is the
+    normal state of a fresh clone: nothing is proposed, the screen says "sin
+    asociar", and the user types the term themselves.
     """
 
-    def __init__(self, terms: ProductTermRepository, chat: ChatPort) -> None:
+    def __init__(
+        self,
+        terms: ProductTermRepository,
+        chat: ChatPort,
+        decisions: DecisionPort | None = None,
+    ) -> None:
         self._terms = terms
         self._chat = chat
+        self._decisions = decisions or NullDecisions()
 
     def all_for_user(self, *, user_id: UUID) -> list[ReferenceTerm]:
         return self._terms.all_for_user(user_id)
@@ -166,13 +236,73 @@ class ResolveProductTerms:
         stored = self._terms.get(user_id, product_key)
         if stored:
             return stored.term
-        proposed = self._propose(description or product_key)
+        proposed = self._propose(user_id, description or product_key)
         if not proposed:
             return None
         self._terms.upsert(user_id, product_key, proposed, "auto")
         return proposed
 
-    def _propose(self, description: str) -> str | None:
+    def _propose(self, user_id: UUID, description: str) -> str | None:
+        """The typed model first, the text model for what it could not place."""
+        chosen = self._choose(user_id, description)
+        if chosen:
+            return chosen
+        return self._write(description)
+
+    def _choose(self, user_id: UUID, description: str) -> str | None:
+        """One word out of a closed set, or nothing.
+
+        Nothing covers both ways the model declines -- picking
+        ``desconocido``, and picking something without enough confidence to
+        act on -- because both mean the same thing here: this line is not one
+        of the words we already have, so ask the model that can invent one.
+        """
+        if not self._decisions.available:
+            return None
+        vocabulary = self._vocabulary(user_id)
+        if not vocabulary:
+            return None
+        criteria: dict[str, str | None] = dict.fromkeys(vocabulary, None)
+        criteria[UNKNOWN_TERM] = "Ninguna de las otras opciones nombra este producto."
+        try:
+            answers = self._decisions.evaluate(
+                state=description,
+                questions={"term": Choice(instructions=TERM_INSTRUCTIONS, criteria=criteria)},
+            )
+        except Exception:  # pragma: no cover - a proposal is never load-bearing
+            logger.warning("could not choose a reference term for %r", description)
+            return None
+        answer = answers.get("term")
+        if not isinstance(answer, ChoiceAnswer):
+            return None
+        if answer.choice == UNKNOWN_TERM or answer.confidence < TERM_CONFIDENCE:
+            logger.info(
+                "term for %r left to the text model (%s at %.2f)",
+                description, answer.choice, answer.confidence,
+            )
+            return None
+        return answer.choice
+
+    def _vocabulary(self, user_id: UUID) -> list[str]:
+        """The words this Choice may answer with: the user's own, then the seed.
+
+        The user's come first because the cap has to cut somewhere, and a word
+        this account has already used is worth more than one nobody here has
+        needed. Read fresh rather than cached: this runs only on a miss -- the
+        same path that is about to write a row -- so the cost is one indexed
+        read per *new* product, not per lookup, and a cache here would go stale
+        the moment somebody corrected a term.
+        """
+        seen: dict[str, None] = {}
+        for stored in self._terms.all_for_user(user_id):
+            term = stored.term.strip().lower()
+            if term and term != UNKNOWN_TERM:
+                seen[term] = None
+        for term in SEED_TERMS:
+            seen.setdefault(term, None)
+        return list(seen)[:MAX_TERM_OPTIONS]
+
+    def _write(self, description: str) -> str | None:
         if not self._chat.available:
             return None
         try:

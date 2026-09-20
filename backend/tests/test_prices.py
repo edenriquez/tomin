@@ -446,6 +446,133 @@ def test_a_proposal_that_is_not_a_term_is_refused(app):
     assert _clean_term("No estoy seguro, pero podría ser detergente") is None
 
 
+class _Decisions:
+    """A typed model that answers one Choice with a scripted value."""
+
+    available = True
+    model_label = "jev-test"
+
+    def __init__(self, choice: str, confidence: float = 0.9) -> None:
+        self._choice = choice
+        self._confidence = confidence
+        self.asked: list = []
+
+    def evaluate(self, *, state, questions):
+        from tomin.application.ports.outbound.decisions import ChoiceAnswer
+
+        self.asked.append((state, questions))
+        options = list(questions["term"].criteria)
+        return {
+            "term": ChoiceAnswer(
+                choice=self._choice,
+                probabilities={o: 1.0 if o == self._choice else 0.0 for o in options},
+                confidence=self._confidence,
+            )
+        }
+
+
+class _Writer:
+    """A text model that always writes the same term, and counts being asked."""
+
+    available = True
+    model_label = "texto-test"
+
+    def __init__(self, answer: str = "detergente") -> None:
+        self._answer = answer
+        self.calls = 0
+
+    def stream(self, *, system, messages, options=None):
+        self.calls += 1
+        yield self._answer
+
+
+def _resolver(app, decisions=None, chat=None):
+    from tomin.application.use_cases.prices import ResolveProductTerms
+    from tomin.application.ports.outbound.decisions import NullDecisions
+
+    container = app.extensions["container"]
+    return ResolveProductTerms(
+        container.product_reference_terms, chat or _Writer(), decisions or NullDecisions()
+    )
+
+
+def test_a_confident_choice_is_stored_and_the_text_model_is_never_asked(app):
+    """The typed model answers out of a closed set, so there is nothing to
+    clean up afterwards and no second round trip to pay for."""
+    decisions, writer = _Decisions("leche", confidence=0.95), _Writer()
+    resolver = _resolver(app, decisions, writer)
+
+    assert resolver.resolve(
+        user_id=DEV_USER, product_key="leche lala ent", description="LECHE LALA ENT 1L"
+    ) == "leche"
+
+    assert writer.calls == 0
+    stored = resolver.stored(user_id=DEV_USER, product_key="leche lala ent")
+    assert (stored.term, stored.source) == ("leche", "auto")
+    # The line itself is the state; the shape rules live in the option set.
+    state, questions = decisions.asked[0]
+    assert state == "LECHE LALA ENT 1L"
+    assert "leche" in questions["term"].criteria
+
+
+def test_declining_hands_the_line_to_the_text_model(app):
+    """Both ways of declining mean the same thing here: this line is not one of
+    the words we have, so ask the model that can invent one."""
+    from tomin.application.use_cases.prices import UNKNOWN_TERM
+
+    for decisions in (_Decisions(UNKNOWN_TERM, 0.99), _Decisions("jabon", 0.31)):
+        writer = _Writer("detergente")
+        resolver = _resolver(app, decisions, writer)
+        key = f"gv dete {decisions._choice}"
+
+        assert resolver.resolve(user_id=DEV_USER, product_key=key, description="GV DETE 7L") == (
+            "detergente"
+        )
+        assert writer.calls == 1
+
+
+def test_a_word_written_once_becomes_a_word_choosable_after(app):
+    """How the vocabulary grows. The text model is asked about a product no seed
+    covers; the next line of the same kind is a Choice, not a sentence."""
+    from tomin.application.use_cases.prices import SEED_TERMS, UNKNOWN_TERM
+
+    assert "michelada" not in SEED_TERMS
+    writer = _Writer("michelada")
+    _resolver(app, _Decisions(UNKNOWN_TERM), writer).resolve(
+        user_id=DEV_USER, product_key="mich prep", description="MICH PREPARADA 473"
+    )
+    assert writer.calls == 1
+
+    decisions = _Decisions("michelada", 0.88)
+    later = _resolver(app, decisions, _Writer())
+    assert later.resolve(
+        user_id=DEV_USER, product_key="mich prep lata", description="MICHELADA LATA"
+    ) == "michelada"
+    assert "michelada" in decisions.asked[0][1]["term"].criteria
+
+
+def test_the_vocabulary_puts_the_users_own_words_first_and_is_capped(app):
+    """The cap has to cut somewhere, and a word this account already uses is
+    worth more than one nobody here has needed."""
+    from tomin.application.use_cases.prices import (
+        MAX_TERM_OPTIONS,
+        SEED_TERMS,
+        UNKNOWN_TERM,
+    )
+
+    resolver = _resolver(app)
+    for i in range(MAX_TERM_OPTIONS + 20):
+        resolver.set(user_id=DEV_USER, product_key=f"p{i}", term=f"propio{i}")
+
+    vocabulary = resolver._vocabulary(DEV_USER)
+    assert len(vocabulary) == MAX_TERM_OPTIONS
+    assert all(v.startswith("propio") for v in vocabulary)
+    assert UNKNOWN_TERM not in vocabulary
+    # And with room to spare, the seed is there too.
+    fresh = _resolver(app)._vocabulary(uuid4())
+    assert set(SEED_TERMS) <= set(fresh)
+
+
 def test_without_a_model_nothing_is_proposed_and_the_user_can_still_say_it(app):
     """A clone with no key still gets the feature, by typing."""
     resolver = app.extensions["container"].resolve_product_terms

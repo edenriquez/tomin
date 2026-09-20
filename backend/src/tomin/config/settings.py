@@ -40,6 +40,19 @@ class Settings(BaseSettings):
     # Same gateway and key, used when the primary refuses (rate limit, outage).
     llm_fallback_model: str = ""
 
+    # --- Typed decisions (optional, independent of the chat above) ----------
+    # A System One model: state in, a typed value out with the probability
+    # distribution it came from. Not a chat model and not a substitute for one
+    # -- it answers "which of these words names this product", never "explain
+    # my spending". Used where the code today asks a text model for a decision
+    # at temperature 0 and then validates the string with a regex.
+    #
+    # Empty key is the normal state of a fresh clone: every caller keeps the
+    # path it had before this existed.
+    typesafe_api_key: str = ""
+    typesafe_model: str = "jev-latest"
+    typesafe_base_url: str = "https://api.typesafe.ai/v1"
+
     # External reference prices (Profeco's public price survey). On by default
     # and harmless when unreachable: the lookup fails to an empty section and
     # the chat answers from the user's own tickets exactly as it did before.

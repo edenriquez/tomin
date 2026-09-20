@@ -89,6 +89,15 @@ export type Statement = {
     status: string;
     /** User-declared; null until they label the document. */
     account_kind: AccountKind | null;
+    /**
+     * What a card statement asks to be paid, read off its text at ingest.
+     * Null on every debit statement, on a card statement whose figures the
+     * reader could not find, and on rows ingested before the fields existed.
+     * Optional because older backends do not send them at all.
+     */
+    credit_no_interest_payment?: number | null;
+    credit_minimum_payment?: number | null;
+    credit_due_date?: string | null;
     uploaded_at: string | null;
     /**
      * Where the reading happened: "web" (the file was uploaded here and
@@ -222,8 +231,10 @@ export class UploadError extends Error {
     }
 }
 
-async function uploadError(res: Response): Promise<UploadError> {
-    const text = await res.text();
+/** The backend's error body, as an UploadError. Split from the Response so
+ *  the XHR path below — which has text, not a Response — parses it the same
+ *  way, and a `pdf_password_required` keeps its code on both routes. */
+function parseUploadError(text: string): UploadError {
     try {
         const body = JSON.parse(text) as { error?: string; code?: string };
         return new UploadError(body.error ?? text, body.code);
@@ -324,14 +335,53 @@ export const api = {
             `/api/statements/${id}`,
             { method: "DELETE" }
         ),
-    uploadStatement: async (file: File, password?: string): Promise<UploadResult> => {
-        const form = new FormData();
-        form.append("file", file);
-        // Only for encrypted PDFs: the backend uses it once to open the file
-        // and drops it with the rest of the request.
-        if (password) form.append("password", password);
-        const res = await fetch(`${API_URL}/api/statements`, { method: "POST", body: form });
-        if (!res.ok) throw await uploadError(res);
-        return res.json() as Promise<UploadResult>;
-    },
+    /**
+     * XHR rather than fetch, for one reason: `fetch` cannot report upload
+     * progress. A statement is a few hundred KB and the parse is the slow
+     * half, so the fraction this reports covers only the bytes going out —
+     * which is exactly what the queue draws as a determinate bar before it
+     * switches to "leyendo", where the honest answer is "no idea how long".
+     */
+    uploadStatement: (
+        file: File,
+        password?: string,
+        onProgress?: (fraction: number) => void
+    ): Promise<UploadResult> =>
+        new Promise<UploadResult>((resolve, reject) => {
+            const form = new FormData();
+            form.append("file", file);
+            // Only for encrypted PDFs: the backend uses it once to open the
+            // file and drops it with the rest of the request.
+            if (password) form.append("password", password);
+
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", `${API_URL}/api/statements`);
+            if (onProgress) {
+                xhr.upload.addEventListener("progress", (e) => {
+                    if (e.lengthComputable) onProgress(e.loaded / e.total);
+                });
+                // A browser that never fires a computable event would leave
+                // the bar at zero through the whole send; loadend means the
+                // bytes are gone whatever it reported on the way.
+                xhr.upload.addEventListener("loadend", () => onProgress(1));
+            }
+            xhr.addEventListener("load", () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        resolve(JSON.parse(xhr.responseText) as UploadResult);
+                    } catch {
+                        reject(new UploadError("El servidor respondió algo ilegible."));
+                    }
+                    return;
+                }
+                reject(parseUploadError(xhr.responseText));
+            });
+            xhr.addEventListener("error", () =>
+                reject(new UploadError("No se pudo conectar con el servidor."))
+            );
+            xhr.addEventListener("abort", () =>
+                reject(new UploadError("Subida cancelada.", "aborted"))
+            );
+            xhr.send(form);
+        }),
 };

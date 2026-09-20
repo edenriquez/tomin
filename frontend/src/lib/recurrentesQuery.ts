@@ -11,6 +11,7 @@ import {
     OTHER_MERCHANT,
     UNCATEGORIZED,
     type AmountBucketId,
+    type CategoryLens,
     type MovimientosQuery,
 } from "./movimientosQuery";
 import type { WindowBounds } from "./window";
@@ -21,11 +22,18 @@ function inBucket(amount: number, id: AmountBucketId): boolean {
     return amount > 300;
 }
 
-export function seriesMatchesQuery(item: RecurringItem, q: MovimientosQuery): boolean {
+export function seriesMatchesQuery(
+    item: RecurringItem,
+    q: MovimientosQuery,
+    lens?: CategoryLens
+): boolean {
     if (q.kind === "income") return false;
     if (q.amountBucket && !inBucket(item.typical_amount, q.amountBucket)) return false;
     if (q.categoryIds.length > 0) {
-        const key = item.category_id ?? UNCATEGORIZED;
+        // Same keying as the ledger: a series filed under the taxonomy's own
+        // «Sin Categoría» is uncategorized, not a category called that.
+        const none = lens ? lens.isNone(item.category_id) : !item.category_id;
+        const key = none ? UNCATEGORIZED : item.category_id!;
         if (!q.categoryIds.includes(key)) return false;
     }
     if (q.merchantSlugs.length > 0) {

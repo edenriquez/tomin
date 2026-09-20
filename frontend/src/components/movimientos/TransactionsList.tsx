@@ -1,19 +1,11 @@
 "use client";
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import {
-    Banknote,
-    Bus,
-    Clapperboard,
-    Home,
-    Receipt,
-    ShoppingCart,
-    type LucideIcon,
-} from "lucide-react";
 import type { AttentionKind, Transaction, TransactionPatch } from "@/lib/api";
 import { LENS_KIND_LABELS } from "@/components/charts/lens/types";
 import { cn } from "@/lib/cn";
 import { categoryColor, useCategories, type CategoryInfo } from "@/lib/categories";
+import { categoryIcon } from "@/lib/categoryIcons";
 import { matchMerchant, merchantLogoUrl } from "@/lib/merchants";
 import { dayLabel, mxn2 } from "@/lib/format";
 import { parsePeriodKey } from "@/lib/metrics";
@@ -307,16 +299,6 @@ const Row = forwardRef<HTMLLIElement, {
     );
 });
 
-/** Seed taxonomy icon names → lucide glyphs. Anything unknown reads as a
- *  generic receipt — a wrong guess at a merchant would be worse than none. */
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
-    home: Home,
-    shopping_cart: ShoppingCart,
-    commute: Bus,
-    movie: Clapperboard,
-    payments: Banknote,
-};
-
 /**
  * The row's mark. A recognized merchant shows its actual logo (served from
  * /public/logos — local, no third-party request per row) on a Paper disc
@@ -359,8 +341,7 @@ function RowAvatar({
     }
 
     const color = categoryColor(categories, t.category_id);
-    const iconName = (t.category_id && categories?.get(t.category_id)?.icon) || "";
-    const Icon = CATEGORY_ICONS[iconName] ?? Receipt;
+    const Icon = categoryIcon(categories, t.category_id);
     return (
         <span
             aria-hidden

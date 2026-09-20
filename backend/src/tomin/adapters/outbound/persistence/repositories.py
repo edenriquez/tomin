@@ -414,6 +414,9 @@ class SqlStatementRepository:
                 m.account_kind = (
                     statement.account_kind.value if statement.account_kind else None
                 )
+                m.credit_no_interest_payment = statement.credit_no_interest_payment
+                m.credit_minimum_payment = statement.credit_minimum_payment
+                m.credit_due_date = statement.credit_due_date
 
     def get(self, statement_id: UUID) -> Statement | None:
         with self._db.session() as s:
@@ -455,6 +458,9 @@ class SqlStatementRepository:
             period_end=st.period_end,
             status=st.status.value,
             account_kind=st.account_kind.value if st.account_kind else None,
+            credit_no_interest_payment=st.credit_no_interest_payment,
+            credit_minimum_payment=st.credit_minimum_payment,
+            credit_due_date=st.credit_due_date,
             file_hash=st.file_hash,
             source=st.source.value,
             uploaded_at=st.uploaded_at,
@@ -472,6 +478,9 @@ class SqlStatementRepository:
             period_end=m.period_end,
             status=StatementStatus(m.status),
             account_kind=AccountKind(m.account_kind) if m.account_kind else None,
+            credit_no_interest_payment=_dec(m.credit_no_interest_payment),
+            credit_minimum_payment=_dec(m.credit_minimum_payment),
+            credit_due_date=m.credit_due_date,
             file_hash=m.file_hash,
             # `source` is set once at ingest and never edited, so `update()`
             # deliberately leaves it alone.
@@ -1487,3 +1496,11 @@ class SqlReceiptRepository:
         ).all():
             items.setdefault(row.receipt_id, []).append(_to_receipt_item(row))
         return [_to_receipt(m, items.get(m.id, [])) for m in models]
+
+
+def _dec(value) -> Decimal | None:
+    """SQLite hands Numeric back as float on some drivers; the entity wants
+    money as Decimal or nothing."""
+    if value is None:
+        return None
+    return value if isinstance(value, Decimal) else Decimal(str(value))

@@ -1,112 +1,91 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Camera, ChevronRight, MessageSquarePlus, Trash2 } from "lucide-react";
+import { ChevronRight, MessageSquarePlus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { fullDayLabel, mxn2 } from "@/lib/format";
-import {
-    receiptsApi,
-    termsApi,
-    type Receipt,
-    type ReceiptItem,
-    type ReferenceTerm,
-} from "@/lib/prices";
-import { BackendNotice, Button, EmptyState, Skeleton } from "@/components/ui";
-import { useAppData } from "@/components/AppChrome";
+import { dayLabel, mxn2 } from "@/lib/format";
+import type { Receipt, ReceiptItem, ReferenceTerm } from "@/lib/prices";
+import { Button } from "@/components/ui";
 import { track } from "@/lib/telemetry";
-import { PriceChat, type Attachment, type Turn } from "./PriceChat";
-
-/** What a ticket's own chat offers before anyone has asked it anything. */
-const EXAMPLES = [
-    "¿Qué me salió más caro de este ticket?",
-    "¿Pagué de más en algo?",
-    "¿Qué cambió desde la última vez?",
-];
+import type { Attachment } from "./PriceChat";
+import { fold } from "./basket";
 
 /**
  * Your purchases, grouped the way they were made: one ticket at a time.
  *
  * A basket is a decision made once, and the lines in it explain each other —
- * the $1,412 at Soriana is 24 choices, and the one that moved the total is
- * visible only next to the other 23. So the ticket is the unit: collapsed by
- * default, because a wall of open baskets is the same undifferentiated list
- * this view exists to replace, and opened one at a time when a trip is worth
- * looking at.
+ * the $936 at Bodega Aurrerá is 16 choices, and the one that moved the total
+ * is visible only next to the other 15. So the ticket is the unit: collapsed
+ * by default, opened one at a time when a trip is worth looking at.
  *
  * Several can be open at once, deliberately. The comparison people actually
  * make here is between two trips to the same store, and an accordion that
  * closes one when you open the next makes exactly that comparison impossible.
  *
- * **Each ticket owns its conversation.** The chat lives inside the basket and
- * its transcript is held here, keyed by receipt — so collapsing a ticket and
- * reopening it finds the thread where it was, and a question about last
- * Tuesday's trip never lands in the middle of a thread about this one. The
- * server scopes its brief to the same ticket, so the separation is real on both
- * ends rather than cosmetic on this one.
+ * The rows are the category accordion's rows — chevron, mark, name, meta,
+ * amount — so Precios reads as the same list the other faces draw, one level
+ * further down. The data is the face's, not this list's: the basket bar above
+ * and the product book below read the same tickets, so the tickets are handed
+ * in rather than fetched here.
+ *
+ * A line's question is asked from the face's one chat, not from a thread per
+ * ticket: pointing at a line hands it to that chat as a chip. One place to
+ * ask keeps the transcript in one place too.
  */
-export function ReceiptGroups({ query }: { query: string }) {
-    const { dataVersion } = useAppData();
-    const [receipts, setReceipts] = useState<Receipt[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
+export function ReceiptGroups({
+    receipts,
+    terms,
+    query,
+    onAssociate,
+    onDelete,
+    onAsk,
+    onVerCargo,
+    focus,
+}: {
+    receipts: Receipt[];
+    terms: Record<string, ReferenceTerm>;
+    query: string;
+    onAssociate: (productKey: string, term: string) => Promise<void>;
+    onDelete: (id: string) => Promise<void>;
+    /** A line handed to the face's chat as the subject of the next question. */
+    onAsk: (item: Attachment) => void;
+    /** The charge this ticket was matched to, in the movimientos modal. */
+    onVerCargo: (receipt: Receipt) => void;
+    /** A ticket another card asked to see: opened and scrolled to. `gen`
+     *  bumps so the same ticket can be asked for twice. */
+    focus: { id: string; gen: number } | null;
+}) {
     const [open, setOpen] = useState<Set<string>>(new Set());
-    const [threads, setThreads] = useState<Record<string, Turn[]>>({});
-    // One fetch for every ticket on screen: the association belongs to the
-    // product, so the same row serves every basket that ever printed it.
-    const [terms, setTerms] = useState<Record<string, ReferenceTerm>>({});
-    // Per ticket, the lines pinned to its question. Kept next to the thread
-    // because they are part of it: the subject of a conversation.
-    const [attached, setAttached] = useState<Record<string, Attachment[]>>({});
 
     useEffect(() => {
-        let stale = false;
-        receiptsApi
-            .list()
-            .then((res) => {
-                if (stale) return;
-                setReceipts(res.items);
-                setError(null);
-            })
-            .catch((e) => !stale && setError((e as Error).message));
-        return () => {
-            stale = true;
-        };
-    }, [dataVersion]);
-
-    useEffect(() => {
-        let stale = false;
-        termsApi
-            .list()
-            .then((res) => {
-                if (stale) return;
-                setTerms(Object.fromEntries(res.items.map((t) => [t.product_key, t])));
-            })
-            // Silent: an association nobody has made yet is the normal state,
-            // and the lines render as "sin asociar" either way.
-            .catch(() => undefined);
-        return () => {
-            stale = true;
-        };
-    }, [dataVersion]);
-
-    async function associate(productKey: string, term: string) {
-        track("precios.term_set");
-        const saved = await termsApi.set(productKey, term);
-        setTerms((current) => ({ ...current, [productKey]: saved }));
-    }
+        if (!focus) return;
+        setOpen((current) => new Set(current).add(focus.id));
+        // After the row has rendered open, so the scroll lands on its top.
+        const t = window.setTimeout(() => {
+            document
+                .getElementById(ticketDomId(focus.id))
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 60);
+        return () => window.clearTimeout(t);
+    }, [focus]);
 
     // Unlike the product book, this search is local: the ticket list is one
     // page of baskets the user already has, and a round-trip per keystroke to
     // re-filter what is already on screen would be slower and no more correct.
     const shown = useMemo(() => {
-        const q = fold(query.trim());
-        const all = [...(receipts ?? [])].sort(byNewest);
+        const q = fold(query);
+        const all = [...receipts].sort(byNewest);
         if (!q) return all;
         return all.filter(
             (r) =>
                 fold(r.store ?? "").includes(q) ||
-                r.items.some((i) => fold(i.description).includes(q))
+                r.items.some(
+                    (i) =>
+                        fold(i.description).includes(q) ||
+                        fold(terms[i.product_key]?.term ?? "").includes(q)
+                )
         );
-    }, [receipts, query]);
+    }, [receipts, query, terms]);
 
     function toggle(id: string) {
         if (!open.has(id)) track("precios.ticket_open", { open_before: open.size });
@@ -119,112 +98,76 @@ export function ReceiptGroups({ query }: { query: string }) {
     }
 
     async function remove(id: string) {
-        track("precios.ticket_delete");
-        await receiptsApi.remove(id);
-        // Dropped from the list here rather than by refetching: the answer is
-        // already known, and a refetch would blink the whole list to remove one
-        // row from it.
-        setReceipts((current) => (current ?? []).filter((r) => r.id !== id));
+        await onDelete(id);
         setOpen((current) => {
             const next = new Set(current);
             next.delete(id);
             return next;
         });
-        // Its conversation goes with it. A thread about a basket that no longer
-        // exists has nothing left to be about.
-        setThreads(({ [id]: _gone, ...rest }) => rest);
-        setAttached(({ [id]: _gone, ...rest }) => rest);
     }
 
-    function attach(receiptId: string, item: Attachment) {
-        setAttached((cur) => {
-            const list = cur[receiptId] ?? [];
-            if (list.some((a) => a.key === item.key)) return cur;
-            return { ...cur, [receiptId]: [...list, item] };
-        });
-    }
-
-    function clearAttached(receiptId: string) {
-        setAttached((cur) => ({ ...cur, [receiptId]: [] }));
-    }
-
-    function detach(receiptId: string, key: string) {
-        setAttached((cur) => ({
-            ...cur,
-            [receiptId]: (cur[receiptId] ?? []).filter((a) => a.key !== key),
-        }));
-    }
-
-    if (error) return <BackendNotice what="tus tickets" detail={error} />;
-
-    if (receipts === null) {
-        return (
-            <div className="mt-4 space-y-2">
-                {[0, 1, 2].map((i) => (
-                    <Skeleton key={i} className="h-14" />
-                ))}
-            </div>
-        );
-    }
-
-    if (shown.length === 0) {
-        return (
-            <EmptyState
-                icon={Camera}
-                title={query ? "Ningún ticket coincide" : "Todavía no hay tickets"}
-                className="mt-4"
-            >
-                {query
-                    ? "Busca por tienda o por algo que hayas comprado."
-                    : "Los tickets llegan desde la app de Tomin en tu celular (aún no está en tiendas). La foto se queda ahí y solo viaja el texto; aquí verás el precio de cada producto."}
-            </EmptyState>
-        );
-    }
+    // What the baskets on screen add up to. The lines' own sum, not the printed
+    // total: a ticket whose OCR dropped a line would otherwise inflate a figure
+    // the rows underneath cannot account for.
+    const basket = shown.reduce((sum, r) => sum + r.items_total, 0);
 
     return (
-        <>
-            <div className="mt-4 flex items-baseline justify-between gap-3">
-                <span className="text-body-sm text-graphite">
-                    {shown.length} ticket{shown.length === 1 ? "" : "s"}
-                </span>
-                {open.size > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => setOpen(new Set())}
-                        className="text-body-sm text-graphite underline-offset-4 hover:text-ink hover:underline"
-                    >
-                        Colapsar todo
-                    </button>
-                )}
-            </div>
+        <section className="min-w-0 overflow-hidden rounded-card border border-mist bg-paper shadow-card">
+            <header className="flex items-center justify-between gap-3 border-b border-mist px-5 py-4 sm:px-6">
+                <h2 className="flex items-baseline gap-2 text-title-sm font-normal text-ink">
+                    Tickets
+                    <span className="tabular font-sans text-body-sm text-graphite">
+                        {shown.length.toLocaleString("es-MX")}
+                    </span>
+                </h2>
+                <div className="flex shrink-0 items-center gap-4">
+                    {open.size > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setOpen(new Set())}
+                            className="text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+                        >
+                            Colapsar todo
+                        </button>
+                    )}
+                    <span className="tabular text-body-sm text-graphite">
+                        {mxn2(basket)} en canasta
+                    </span>
+                </div>
+            </header>
 
-            <ul className="mt-2 space-y-2">
-                {shown.map((receipt) => (
-                    <li key={receipt.id}>
-                        <ReceiptGroup
-                            receipt={receipt}
-                            open={open.has(receipt.id)}
-                            onToggle={() => toggle(receipt.id)}
-                            onDelete={() => remove(receipt.id)}
-                            terms={terms}
-                            onAssociate={associate}
-                            attachments={attached[receipt.id] ?? []}
-                            onAttach={(item) => attach(receipt.id, item)}
-                            onDetach={(key) => detach(receipt.id, key)}
-                            onAnswered={() => clearAttached(receipt.id)}
-                            turns={threads[receipt.id] ?? []}
-                            onTurns={(update) =>
-                                setThreads((cur) => ({
-                                    ...cur,
-                                    [receipt.id]: update(cur[receipt.id] ?? []),
-                                }))
-                            }
-                        />
-                    </li>
-                ))}
-            </ul>
-        </>
+            {shown.length === 0 ? (
+                <p className="px-5 py-6 text-body text-graphite sm:px-6">
+                    Ningún ticket coincide. Busca por tienda o por algo que hayas comprado.
+                </p>
+            ) : (
+                <ul className="divide-y divide-mist">
+                    {shown.map((receipt) => (
+                        <li
+                            key={receipt.id}
+                            id={ticketDomId(receipt.id)}
+                            className={cn(open.has(receipt.id) && "bg-fog/60")}
+                        >
+                            <ReceiptGroup
+                                receipt={receipt}
+                                open={open.has(receipt.id)}
+                                onToggle={() => toggle(receipt.id)}
+                                onDelete={() => remove(receipt.id)}
+                                terms={terms}
+                                onAssociate={onAssociate}
+                                onAsk={onAsk}
+                                onVerCargo={() => onVerCargo(receipt)}
+                            />
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </section>
     );
+}
+
+export function ticketDomId(id: string): string {
+    return `ticket-${id}`;
 }
 
 function ReceiptGroup({
@@ -234,12 +177,8 @@ function ReceiptGroup({
     onDelete,
     terms,
     onAssociate,
-    attachments,
-    onAttach,
-    onDetach,
-    onAnswered,
-    turns,
-    onTurns,
+    onAsk,
+    onVerCargo,
 }: {
     receipt: Receipt;
     open: boolean;
@@ -247,19 +186,21 @@ function ReceiptGroup({
     onDelete: () => Promise<void>;
     terms: Record<string, ReferenceTerm>;
     onAssociate: (productKey: string, term: string) => Promise<void>;
-    attachments: Attachment[];
-    onAttach: (item: Attachment) => void;
-    onDetach: (key: string) => void;
-    onAnswered: () => void;
-    turns: Turn[];
-    onTurns: (update: (current: Turn[]) => Turn[]) => void;
+    onAsk: (item: Attachment) => void;
+    onVerCargo: () => void;
 }) {
     const count = receipt.items.length;
+    const store = receipt.store ?? "tienda ilegible";
     return (
-        <div className={cn("rounded-card border border-mist", open && "bg-fog/40")}>
+        <>
             {/* A row, not one big button: the delete control lives in it, and a
                 button inside a button is neither valid nor operable. */}
-            <div className="flex items-center gap-3 px-4 py-3">
+            <div
+                className={cn(
+                    "flex min-h-14 items-center gap-3 px-5 py-2.5 transition-colors duration-100 sm:px-6",
+                    open ? "border-b border-muted/70 bg-fog" : "hover:bg-fog/50"
+                )}
+            >
                 <button
                     type="button"
                     aria-expanded={open}
@@ -267,21 +208,38 @@ function ReceiptGroup({
                     className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
                     <ChevronRight
+                        size={16}
+                        aria-hidden
                         className={cn(
-                            "size-4 shrink-0 text-ash transition-transform",
-                            open && "rotate-90"
+                            "shrink-0 transition-transform duration-150",
+                            open ? "rotate-90 text-graphite" : "text-ash"
                         )}
                     />
-                    <span className="min-w-0 flex-1 truncate text-body-sm font-medium text-ink">
-                        {receipt.store ?? "tienda ilegible"}
+                    <StoreMark store={store} />
+                    <span className="min-w-0 flex-1">
+                        <span className="block truncate text-body font-medium text-ink">
+                            {store}
+                        </span>
+                        <span className="tabular block text-label text-ash">
+                            {dateLabel(receipt)} · {count}{" "}
+                            {count === 1 ? "producto" : "productos"}
+                        </span>
                     </span>
-                    <span className="hidden shrink-0 text-label text-ash sm:inline">
-                        {dateLabel(receipt)}
+                    {/* Whether this basket found its charge. Stated, not
+                        offered: linking one is a choice about which movement it
+                        belongs to, and there is nothing on this row that could
+                        answer that question. */}
+                    <span
+                        className={cn(
+                            "hidden shrink-0 rounded-tag px-2.5 py-0.5 text-label md:inline",
+                            receipt.transaction_id !== null
+                                ? "bg-fog text-graphite"
+                                : "border border-mist text-ash"
+                        )}
+                    >
+                        {receipt.transaction_id !== null ? "Ligado a un cargo" : "Sin cargo ligado"}
                     </span>
-                    <span className="hidden shrink-0 text-label text-ash sm:inline">
-                        {count} {count === 1 ? "artículo" : "artículos"}
-                    </span>
-                    <span className="tabular-nums shrink-0 text-body-sm text-ink">
+                    <span className="tabular w-24 shrink-0 text-right text-body font-medium text-ink sm:w-28">
                         {receipt.total !== null ? mxn2(receipt.total) : "—"}
                     </span>
                 </button>
@@ -289,19 +247,40 @@ function ReceiptGroup({
             </div>
 
             {open && (
-                <ReceiptLines
-                    receipt={receipt}
-                    terms={terms}
-                    onAssociate={onAssociate}
-                    attachments={attachments}
-                    onAttach={onAttach}
-                    onDetach={onDetach}
-                    onAnswered={onAnswered}
-                    turns={turns}
-                    onTurns={onTurns}
-                />
+                <>
+                    <ReceiptLines
+                        receipt={receipt}
+                        terms={terms}
+                        onAssociate={onAssociate}
+                        onAsk={onAsk}
+                    />
+                    {receipt.transaction_id !== null && (
+                        <div className="flex justify-end border-t border-muted/70 px-5 py-2 sm:px-6">
+                            <button
+                                type="button"
+                                onClick={onVerCargo}
+                                className="rounded-control px-2 py-1 text-body-sm text-graphite underline decoration-mist underline-offset-4 transition-colors duration-100 hover:text-ink"
+                            >
+                                Ver el cargo
+                            </button>
+                        </div>
+                    )}
+                </>
             )}
-        </div>
+        </>
+    );
+}
+
+/** The store's initial, so a column of totals keeps a left edge. */
+function StoreMark({ store }: { store: string }) {
+    const letter = (store.match(/\p{L}|\p{N}/u)?.[0] ?? "?").toUpperCase();
+    return (
+        <span
+            aria-hidden
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fog text-label font-medium text-graphite"
+        >
+            {letter}
+        </span>
     );
 }
 
@@ -369,28 +348,17 @@ function DeleteReceipt({
     );
 }
 
-/** One basket, line by line, what the lines do and do not account for, and its
- *  own conversation. */
+/** One basket, line by line, and what the lines do and do not account for. */
 function ReceiptLines({
     receipt,
     terms,
     onAssociate,
-    attachments,
-    onAttach,
-    onDetach,
-    onAnswered,
-    turns,
-    onTurns,
+    onAsk,
 }: {
     receipt: Receipt;
     terms: Record<string, ReferenceTerm>;
     onAssociate: (productKey: string, term: string) => Promise<void>;
-    attachments: Attachment[];
-    onAttach: (item: Attachment) => void;
-    onDetach: (key: string) => void;
-    onAnswered: () => void;
-    turns: Turn[];
-    onTurns: (update: (current: Turn[]) => Turn[]) => void;
+    onAsk: (item: Attachment) => void;
 }) {
     const gap = receipt.total === null ? null : receipt.total - receipt.items_total;
     // A centavo of rounding is not a missing line. Anything above it is, and
@@ -398,23 +366,33 @@ function ReceiptLines({
     const short = gap !== null && Math.abs(gap) > 0.5;
 
     return (
-        <div className="border-t border-mist px-4 pb-4 pt-3">
+        <div className="px-5 pb-4 pt-3 sm:pl-16 sm:pr-6">
+            {/* The reading's own account of itself, above the lines it is about:
+                how much of the basket was legible, and — when OCR dropped a
+                line — how much of the printed total is unaccounted for. Said
+                first because it is the caveat every figure below inherits. */}
+            <p className="tabular border-b border-muted/70 pb-2 text-label text-graphite">
+                {receipt.items.length}{" "}
+                {receipt.items.length === 1 ? "producto leído" : "productos leídos"}
+                {short ? (
+                    <>
+                        {" · "}
+                        <span className="text-negative">
+                            faltan {mxn2(Math.abs(gap as number))} del total impreso
+                        </span>
+                    </>
+                ) : (
+                    receipt.total !== null && <> · cuadran con el total impreso</>
+                )}
+            </p>
+
             {receipt.items.length === 0 ? (
-                <p className="text-body-sm text-graphite">
+                <p className="pt-3 text-body-sm text-graphite">
                     Este ticket no dejó ninguna línea legible.
                 </p>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-body-sm">
-                        <thead>
-                            <tr className="border-b border-mist text-left text-label text-graphite">
-                                <th className="py-1.5 pr-4 font-medium">Producto</th>
-                                <th className="py-1.5 pr-4 text-right font-medium">Cantidad</th>
-                                <th className="py-1.5 pr-4 text-right font-medium">Precio</th>
-                                <th className="py-1.5 text-right font-medium">Importe</th>
-                                <th className="py-1.5 pl-3" aria-label="Preguntar" />
-                            </tr>
-                        </thead>
                         <tbody>
                             {[...receipt.items]
                                 .sort((a, b) => a.line_no - b.line_no)
@@ -424,9 +402,8 @@ function ReceiptLines({
                                         item={item}
                                         term={terms[item.product_key]}
                                         onAssociate={onAssociate}
-                                        attached={attachments.some((a) => a.key === item.product_key)}
-                                        onAttach={() =>
-                                            onAttach({ key: item.product_key, label: item.description })
+                                        onAsk={() =>
+                                            onAsk({ key: item.product_key, label: item.description })
                                         }
                                     />
                                 ))}
@@ -435,49 +412,16 @@ function ReceiptLines({
                 </div>
             )}
 
-            <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-mist pt-2">
-                <span className="text-label text-ash">
-                    Las líneas suman{" "}
-                    <span className="tabular-nums text-graphite">{mxn2(receipt.items_total)}</span>
-                    {receipt.total !== null && (
-                        <>
-                            {" · "}el ticket dice{" "}
-                            <span className="tabular-nums text-graphite">
-                                {mxn2(receipt.total)}
-                            </span>
-                        </>
-                    )}
-                </span>
-                {short && (
-                    // Said out loud rather than reconciled silently: the number
-                    // the user can check is the one printed on the paper, and a
-                    // basket that does not add up to it is a basket with a line
-                    // missing.
-                    <span className="text-label text-negative">
-                        Faltan {mxn2(Math.abs(gap as number))} por leer
-                    </span>
+            <p className="mt-2 border-t border-mist pt-2 text-label text-ash">
+                Las líneas suman{" "}
+                <span className="tabular text-graphite">{mxn2(receipt.items_total)}</span>
+                {receipt.total !== null && (
+                    <>
+                        {" · "}el ticket dice{" "}
+                        <span className="tabular text-graphite">{mxn2(receipt.total)}</span>
+                    </>
                 )}
-            </div>
-
-            <p className="mt-2 text-label text-ash">
-                Leído por {receipt.extractor} · {receipt.reader}
-                {receipt.transaction_id === null && " · sin movimiento asociado"}
             </p>
-
-            <div className="mt-4 border-t border-mist pt-4">
-                <PriceChat
-                    receiptId={receipt.id}
-                    attachments={attachments}
-                    onDetach={onDetach}
-                    onAnswered={onAnswered}
-                    turns={turns}
-                    onTurns={onTurns}
-                    variant="bare"
-                    title="Pregunta por este ticket"
-                    examples={EXAMPLES}
-                    placeholder="¿Qué me salió más caro?"
-                />
-            </div>
         </div>
     );
 }
@@ -486,52 +430,53 @@ function Line({
     item,
     term,
     onAssociate,
-    attached,
-    onAttach,
+    onAsk,
 }: {
     item: ReceiptItem;
     term?: ReferenceTerm;
     onAssociate: (productKey: string, term: string) => Promise<void>;
-    attached: boolean;
-    onAttach: () => void;
+    onAsk: () => void;
 }) {
+    // The OCR line is the evidence for everything to the right. When the
+    // reading of it is the same text there is nothing to show twice.
+    const sameAsRaw = fold(item.raw_text) === fold(item.description);
     return (
-        <tr className="border-b border-mist/60 last:border-0">
-            {/* The OCR line behind the row, on hover: it is the evidence for
-                everything to the right of it. */}
-            <td className="max-w-0 py-1.5 pr-4" title={item.raw_text}>
+        <tr className="border-b border-mist last:border-0">
+            <td className="max-w-0 py-2 pr-4">
                 <span className="block truncate text-ink">{item.description}</span>
-                <TermTag
-                    term={term}
-                    onSave={(value) => onAssociate(item.product_key, value)}
-                />
-            </td>
-            <td className="tabular-nums py-1.5 pr-4 text-right text-graphite">
-                {item.quantity !== null ? trimZeros(item.quantity) : "—"}
-                {item.size !== null && item.size_unit && (
-                    <span className="ml-1 text-ash">
-                        × {trimZeros(item.size)} {item.size_unit}
+                {!sameAsRaw && (
+                    <span className="block truncate text-label text-ash" title={item.raw_text}>
+                        {item.raw_text}
                     </span>
                 )}
             </td>
-            <td className="tabular-nums py-1.5 pr-4 text-right text-graphite">
-                {item.unit_price !== null ? mxn2(item.unit_price) : "—"}
+            <td className="w-44 py-2 pr-4 align-top">
+                <TermTag term={term} onSave={(value) => onAssociate(item.product_key, value)} />
             </td>
-            <td className="tabular-nums py-1.5 text-right text-ink">{mxn2(item.amount)}</td>
-            <td className="py-1.5 pl-3 text-right">
+            <td className="tabular w-32 py-2 pr-4 text-right align-top text-graphite">
+                {item.unit_price !== null ? mxn2(item.unit_price) : "—"}
+                {item.quantity !== null && (
+                    <span className="ml-1 text-ash">× {trimZeros(item.quantity)}</span>
+                )}
+                {item.size !== null && item.size_unit && (
+                    <span className="block text-label text-ash">
+                        {trimZeros(item.size)} {item.size_unit}
+                    </span>
+                )}
+            </td>
+            <td className="tabular w-24 py-2 text-right align-top text-ink">
+                {mxn2(item.amount)}
+            </td>
+            <td className="py-2 pl-3 text-right align-top">
                 {/* Pointing, not wording: this is how a line becomes the subject
                     of the question below, and the only thing that triggers a
                     reference lookup. */}
                 <button
                     type="button"
-                    onClick={onAttach}
-                    disabled={attached}
+                    onClick={onAsk}
                     aria-label={`Preguntar por ${item.description}`}
                     title="Preguntar por esta línea"
-                    className={cn(
-                        "rounded-control p-1 text-ash hover:bg-fog hover:text-ink",
-                        attached && "text-ink opacity-50"
-                    )}
+                    className="rounded-control p-1 text-ash hover:bg-fog hover:text-ink"
                 >
                     <MessageSquarePlus size={15} aria-hidden />
                 </button>
@@ -546,10 +491,10 @@ function Line({
  * A ticket prints `GV DETE 7L`; a price survey files it under `detergente`.
  * Nothing derives one from the other, so it is shown here as what it is — an
  * association, editable, with the model's proposal marked as a proposal. That
- * mark matters: "sugerido" invites a correction where a bare word would be read
- * as a fact the app already knows.
+ * mark matters: "~" invites a correction where a bare word would be read as a
+ * fact the app already knows.
  */
-function TermTag({
+export function TermTag({
     term,
     onSave,
 }: {
@@ -559,7 +504,6 @@ function TermTag({
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(term?.term ?? "");
     const [saving, setSaving] = useState(false);
-
     if (editing) {
         return (
             <form
@@ -592,7 +536,6 @@ function TermTag({
             </form>
         );
     }
-
     return (
         <button
             type="button"
@@ -600,25 +543,34 @@ function TermTag({
                 setDraft(term?.term ?? "");
                 setEditing(true);
             }}
-            className="mt-0.5 block text-label text-ash underline-offset-4 hover:text-graphite hover:underline"
-        >
-            {term ? (
-                <>
-                    busca como: <span className="text-graphite">{term.term}</span>
-                    {term.source === "auto" && " · sugerido"}
-                </>
-            ) : (
-                "sin asociar"
+            title={
+                term?.source === "auto"
+                    ? "Propuesto por la lectura — corrígelo si no es eso"
+                    : "Cómo se busca este producto fuera de tu cocina"
+            }
+            className={cn(
+                "inline-flex max-w-full items-center gap-1 truncate rounded-tag px-2 py-0.5 text-label transition-colors duration-100",
+                term
+                    ? term.source === "auto"
+                        ? // A proposal wears the accent as a dashed edge: the
+                          // dashes are what invite the correction that a solid
+                          // chip would read as already settled.
+                          "border border-dashed border-signal text-ink hover:bg-wash/30"
+                        : "bg-fog text-graphite hover:text-ink"
+                    : "border border-mist text-ash hover:text-graphite"
             )}
+        >
+            {term ? `${term.source === "auto" ? "~ " : ""}${term.term}` : "sin asociar"}
         </button>
     );
 }
 
-function dateLabel(receipt: Receipt): string {
+/** "25 ago", the same shape every other row in the app uses for a date. */
+export function dateLabel(receipt: { purchased_at: string | null; captured_at: string | null }): string {
     const iso = receipt.purchased_at ?? receipt.captured_at;
     if (!iso) return "fecha ilegible";
     const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? iso : fullDayLabel(date);
+    return Number.isNaN(date.getTime()) ? iso : dayLabel(date);
 }
 
 /** Newest purchase first; a ticket whose date OCR could not read goes last
@@ -629,10 +581,6 @@ function byNewest(a: Receipt, b: Receipt): number {
     if (!left) return 1;
     if (!right) return -1;
     return right.localeCompare(left);
-}
-
-function fold(text: string): string {
-    return text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
 /** "1.00" -> "1", "0.750" -> "0.75". A trailing zero is noise in a quantity. */

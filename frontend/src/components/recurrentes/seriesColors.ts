@@ -1,123 +1,80 @@
 /**
- * A colour per recurring series, drawn from the category taxonomy.
+ * A colour per recurring series: the stone ramp, darkest to lightest, ordered
+ * by what the series costs.
  *
- * The rule is coherence: a series is the same colour here as it is in every
- * chart in the app, because those all colour by category. A private palette
- * would make Netflix teal on the calendar and purple in the stacked columns,
- * and the user would have to learn two legends for one fact.
+ * Hue is not the categorical channel in this system — the brand permits one
+ * accent, and `chart.neutral` exists precisely for "nominal categories ordered
+ * by value". So the biggest charge takes the darkest stone and each smaller
+ * one steps lighter. Two things fall out of that for free: the stack reads as
+ * one gradient instead of a bag of hues, and weight is legible before a single
+ * number is read — the dark mass at the bottom of the column *is* the rent.
  *
- * The catch is that several series can share a category — three subscriptions
- * are all "Entretenimiento" — and identical fills would merge them into one
- * unreadable block. So the first series in a category gets the taxonomy colour
- * exactly, and its siblings get the same hue at stepped lightness: still
- * legibly "Entretenimiento", still separable from each other.
+ * This replaced colouring by category. The taxonomy's hues were coherent with
+ * the rest of the app but said nothing here: three teal subscriptions next to
+ * one teal rent made the column's own shape unreadable, and the siblings had
+ * to be pulled apart by lightness anyway.
+ *
+ * Assignment is by rank, so pass ALL series in play rather than the current
+ * selection — building it from a filtered list would repaint everything left
+ * whenever one row is hidden. Order the chart's input with `sortByWeight` so
+ * the stack climbs in the same direction the ramp does.
  */
 
+import { chart } from "@/design/tokens";
 import type { RecurringItem } from "@/lib/api";
-import { categoryColor, type CategoryInfo } from "@/lib/categories";
 
-/** Past these bounds a hue stops being itself: too dark reads black, too
- *  light disappears into Paper. */
-const MIN_L = 26;
-const MAX_L = 72;
-/** Below this separation two siblings are the same colour to the eye, so the
- *  extras are pushed apart by hue instead. */
-const MIN_GAP = 7;
+/** The ramp's stops, dark to light. Sampled, never indexed into directly: a
+ *  set of three series should span the whole ramp, not crowd its dark end. */
+const STOPS = chart.neutral;
 
-function hexToHsl(hex: string): [number, number, number] | null {
-    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-    if (!m) return null;
-    const int = parseInt(m[1], 16);
-    const r = ((int >> 16) & 255) / 255;
-    const g = ((int >> 8) & 255) / 255;
-    const b = (int & 255) / 255;
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const l = (max + min) / 2;
-    if (max === min) return [0, 0, l * 100];
-    const d = max - min;
-    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    let h: number;
-    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-    else if (max === g) h = ((b - r) / d + 2) / 6;
-    else h = ((r - g) / d + 4) / 6;
-    return [h * 360, s * 100, l * 100];
+function hexToRgb(hex: string): [number, number, number] {
+    const int = parseInt(hex.slice(1), 16);
+    return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
 }
 
-function hslToHex(h: number, s: number, l: number): string {
-    const sn = s / 100;
-    const ln = l / 100;
-    const k = (n: number) => (n + h / 30) % 12;
-    const a = sn * Math.min(ln, 1 - ln);
-    const f = (n: number) =>
-        Math.round(255 * (ln - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
-    return `#${[f(0), f(8), f(4)].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+function mix(a: string, b: string, t: number): string {
+    const [ar, ag, ab] = hexToRgb(a);
+    const [br, bg, bb] = hexToRgb(b);
+    const ch = (x: number, y: number) =>
+        Math.round(x + (y - x) * t)
+            .toString(16)
+            .padStart(2, "0");
+    return `#${ch(ar, br)}${ch(ag, bg)}${ch(ab, bb)}`;
 }
 
 /**
- * Lightness values for `count` siblings of one category, first one exactly the
- * taxonomy's.
- *
- * Fixed deltas plus clamping was the obvious version and it was wrong: for a
- * light base like #ec4899, +14 and +26 both hit the ceiling and two different
- * series came out the identical hex. Instead the siblings share out the room
- * that actually exists on each side of the base, so every value is distinct by
- * construction and none needs clamping.
+ * `count` colours spanning the ramp end to end, darkest first. One series
+ * takes the darkest stone; the stops themselves come back exactly when the
+ * count matches them.
  */
-function lightnessRamp(base: number, count: number): number[] {
-    if (count <= 1) return [base];
-    const out = [base];
-    const down = Math.ceil((count - 1) / 2);
-    const up = count - 1 - down;
-    const downRoom = Math.max(0, base - MIN_L);
-    const upRoom = Math.max(0, MAX_L - base);
-    for (let j = 1; j <= Math.max(down, up); j++) {
-        if (j <= down) out.push(base - (downRoom * j) / (down + 1));
-        if (j <= up) out.push(base + (upRoom * j) / (up + 1));
-    }
-    return out.slice(0, count);
+export function rampColors(count: number): string[] {
+    if (count <= 1) return [STOPS[0]];
+    return Array.from({ length: count }, (_, i) => {
+        const pos = (i / (count - 1)) * (STOPS.length - 1);
+        const lo = Math.floor(pos);
+        const hi = Math.min(lo + 1, STOPS.length - 1);
+        return mix(STOPS[lo], STOPS[hi], pos - lo);
+    });
 }
 
-/**
- * Build the label -> colour resolver for a set of series.
- *
- * Pass ALL series, not the current selection: assignment is by position within
- * a category, so building it from a filtered list would repaint everything
- * whenever one series is toggled off.
- */
-export function buildSeriesColors(
-    items: RecurringItem[],
-    categories: Map<string, CategoryInfo> | null
-): (label: string) => string {
-    // Group first: how many siblings a category has decides how far apart
-    // they can be spread, so nothing can be assigned until they are counted.
-    const groups = new Map<string, string[]>();
-    for (const item of items) {
-        const key = item.category_id ?? "none";
-        const labels = groups.get(key) ?? [];
+/** Heaviest first — the order the ramp is handed out in, and the order the
+ *  stack should be built in so its gradient runs the same way. */
+export function sortByWeight<T extends RecurringItem>(items: T[]): T[] {
+    return items
+        .slice()
+        .sort(
+            (a, b) =>
+                b.monthly_equivalent - a.monthly_equivalent || a.label.localeCompare(b.label, "es")
+        );
+}
+
+/** Build the label -> colour resolver for a set of series. */
+export function buildSeriesColors(items: RecurringItem[]): (label: string) => string {
+    const labels: string[] = [];
+    for (const item of sortByWeight(items)) {
         if (!labels.includes(item.label)) labels.push(item.label);
-        groups.set(key, labels);
     }
-
-    const byLabel = new Map<string, string>();
-    for (const [key, labels] of Array.from(groups.entries())) {
-        const base = categoryColor(categories, key === "none" ? null : key);
-        const hsl = hexToHsl(base);
-        if (!hsl) {
-            labels.forEach((label) => byLabel.set(label, base));
-            continue;
-        }
-        const [h, s, l] = hsl;
-        const ramp = lightnessRamp(l, labels.length);
-        // If the family is so crowded that lightness alone stops separating
-        // them, lean on hue for the extras — a small rotation still reads as
-        // the same category, two identical fills read as one series.
-        const crowded = labels.length > 1 && Math.abs(ramp[1] - ramp[0]) < MIN_GAP;
-        labels.forEach((label, i) => {
-            const hue = crowded ? (h + i * 14) % 360 : h;
-            byLabel.set(label, hslToHex(hue, s, ramp[i]));
-        });
-    }
-
-    return (label: string) => byLabel.get(label) ?? categoryColor(categories, null);
+    const ramp = rampColors(labels.length);
+    const byLabel = new Map(labels.map((label, i) => [label, ramp[i]]));
+    return (label: string) => byLabel.get(label) ?? STOPS[STOPS.length - 1];
 }

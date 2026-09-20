@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from ..value_objects.enums import (
@@ -23,6 +24,12 @@ class Statement:
     status: StatementStatus = StatementStatus.PENDING
     # User-declared account kind (see AccountKind). None = not yet labelled.
     account_kind: AccountKind | None = None
+    # What a card statement asks to be paid, read off its text at ingest
+    # (see domain/services/credit_summary.py). All None for a debit statement,
+    # and for a card statement whose figures the reader could not find.
+    credit_no_interest_payment: Decimal | None = None
+    credit_minimum_payment: Decimal | None = None
+    credit_due_date: date | None = None
     file_hash: str | None = None
     # How the contents got here. Defaults to WEB because that is the path that
     # existed first and every stored row predates the device one.

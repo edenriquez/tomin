@@ -20,6 +20,24 @@ export type DueLine = {
     iso: string;
     urgency: Urgency | null;
     status: "registered" | "due";
+    /** The series' rhythm, for the row's meta. Absent on a card payment. */
+    frequency?: RecurringItem["frequency"];
+    /** False when the series recurs but the amount moves (a utility bill):
+     *  the projected figure is then an estimate and is written as one. */
+    stable?: boolean;
+};
+
+/**
+ * The payment a card statement asks for: one dated line that is not a
+ * series. Read off the statement itself, so it lands on the calendar with
+ * the same standing as a projected charge but none of its guesswork.
+ */
+export type CardPayment = {
+    key: string;
+    label: string;
+    amount: number;
+    date: Date;
+    iso: string;
 };
 
 export type DuePair = {
@@ -132,6 +150,8 @@ export function buildDueMonth(
                 iso,
                 urgency: null,
                 status: "registered",
+                frequency: item.frequency,
+                stable: item.amount_stable,
             };
             registeredByIso.set(iso, [...(registeredByIso.get(iso) ?? []), line]);
         }
@@ -149,6 +169,8 @@ export function buildDueMonth(
                 iso,
                 urgency: urgencyOf(landing.date, now),
                 status: "due",
+                frequency: item.frequency,
+                stable: item.amount_stable,
             };
             dueByIso.set(iso, [...(dueByIso.get(iso) ?? []), line]);
         }
@@ -226,6 +248,67 @@ export function buildDueMonth(
 }
 
 /**
+ * The same month with the card payment on it, when there is one to place.
+ *
+ * Only a payment still ahead is drawn: a due date that already passed is
+ * either paid (and then it is a movement, read where movements are) or
+ * missed, and a calendar of projections is not where that gets said. Beyond
+ * the month after this one it is out of frame, like every other landing.
+ */
+export function withCardPayment(
+    month: DueMonth,
+    card: CardPayment | null,
+    asOf: Date = today()
+): DueMonth {
+    if (!card) return month;
+    const now = new Date(asOf.getFullYear(), asOf.getMonth(), asOf.getDate());
+    if (card.date < now) return month;
+    const monthEnd = endOfMonth(month.month);
+    const horizon = endOfMonth(shiftMonth(month.month, 1));
+    if (card.date > horizon) return month;
+
+    const line: DueLine = {
+        key: card.key,
+        label: card.label,
+        amount: card.amount,
+        date: card.date,
+        iso: card.iso,
+        urgency: urgencyOf(card.date, now),
+        status: "due",
+        stable: true,
+    };
+    const byDate = (a: DueLine, b: DueLine) => a.date.getTime() - b.date.getTime();
+
+    if (card.date > monthEnd) {
+        const upcoming = [...month.upcoming, line].sort(byDate);
+        return {
+            ...month,
+            upcoming,
+            upcomingTotal: month.upcomingTotal + line.amount,
+        };
+    }
+
+    const cells = month.cells.map((week) =>
+        week.map((cell) =>
+            cell.iso === card.iso
+                ? {
+                      ...cell,
+                      due: cell.due + line.amount,
+                      dueLabels: [...cell.dueLabels, line.label],
+                      urgency: cell.urgency ?? line.urgency,
+                  }
+                : cell
+        )
+    );
+    return {
+        ...month,
+        cells,
+        dueThisMonth: [...month.dueThisMonth, line].sort(byDate),
+        dueTotal: month.dueTotal + line.amount,
+    };
+}
+
+/**
  * Current month + the next one. The calendar always shows this pair; the
  * tables read the same lines so a selected day cannot disagree with a row.
  */
@@ -261,7 +344,14 @@ function groupByIso(lines: DueLine[]): Map<string, DueLine[]> {
     return map;
 }
 
-/** Sunday-first month, same skeleton as FechaMiniCalendario. */
+/**
+ * Sunday-first month grid for the Pagos calendar.
+ *
+ * It used to say "same skeleton as FechaMiniCalendario"; that file is gone —
+ * the date criterion now uses `react-day-picker`. This grid still starts on
+ * Sunday, which is wrong for a Mexican product the same way that one was, and
+ * is a separate change: the name `sundayGrid` is load-bearing for its callers.
+ */
 export function sundayGrid(
     month: Date,
     registeredByIso: Map<string, DueLine[]>,

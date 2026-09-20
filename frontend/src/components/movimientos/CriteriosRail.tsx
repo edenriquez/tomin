@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { PanelLeftClose, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { Transaction } from "@/lib/api";
 import {
@@ -9,25 +10,31 @@ import {
     OTHER_MERCHANT,
     UNCATEGORIZED,
     categoryKeyOf,
+    categoryLens,
     countBy,
     facetCounts,
     merchantSlugOf,
+    queryChips,
     toggleId,
     type AmountBucketId,
     type MovimientosKind,
     type MovimientosQuery,
 } from "@/lib/movimientosQuery";
 import { merchantBySlug, merchantLogoUrl } from "@/lib/merchants";
-import {
-    categoryFamily,
-    categoryName,
-    type CategoryInfo,
-} from "@/lib/categories";
+import { categoryName, type CategoryInfo } from "@/lib/categories";
 import { FechaCriterio } from "./FechaCriterio";
+
+export const RAIL_ID = "movimientos-criterios";
 
 /**
  * Left rail of the movimientos modal. Fecha first — it is the bound every
  * other criterion counts inside. The rest are checklists over that set.
+ *
+ * It collapses, because the rail and the list compete for the same screen:
+ * once the criteria are chosen, what the user wants is the movements, and on
+ * a laptop the rail was taking a quarter of the width to show checkboxes
+ * nobody was going to touch again. Collapsed it keeps a spine — the word, and
+ * how many criteria are still on — so a filtered list never looks unfiltered.
  */
 export function CriteriosRail({
     items,
@@ -39,6 +46,8 @@ export function CriteriosRail({
     categories,
     calendarResetKey,
     dateAnchor,
+    open,
+    onToggle,
 }: {
     items: Transaction[] | null;
     query: MovimientosQuery;
@@ -50,28 +59,53 @@ export function CriteriosRail({
     calendarResetKey?: string | number | boolean;
     /** Newest ledger day — "este mes" is that month. */
     dateAnchor: string;
+    open: boolean;
+    onToggle: () => void;
 }) {
+    const activeCount = queryChips(query, (id) => categoryName(categories, id)).length;
+    if (!open) {
+        return <RailSpine activeCount={activeCount} onToggle={onToggle} />;
+    }
+
     const dated = items ?? [];
-    const familyOf = (id: string) => categoryFamily(categories, id);
+    const lens = categoryLens(categories);
     const merchants = ranked(
-        countBy(facetCounts(dated, query, "merchants", familyOf), merchantSlugOf),
+        countBy(facetCounts(dated, query, "merchants", lens), merchantSlugOf),
         (slug) => (slug === OTHER_MERCHANT ? "Otros" : (merchantBySlug(slug)?.name ?? slug))
     );
     const cats = nestCategoryFacets(
         ranked(
-            countBy(facetCounts(dated, query, "categories", familyOf), categoryKeyOf),
+            countBy(facetCounts(dated, query, "categories", lens), (t) =>
+                categoryKeyOf(t, lens)
+            ),
             (id) => (id === UNCATEGORIZED ? "Sin categoría" : categoryName(categories, id))
         ),
         categories
     );
-    const amountPool = facetCounts(dated, query, "amount", familyOf);
-    const kindPool = facetCounts(dated, query, "kind", familyOf);
+    const amountPool = facetCounts(dated, query, "amount", lens);
+    const kindPool = facetCounts(dated, query, "kind", lens);
 
     return (
-        <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto px-4 py-4 lg:w-[252px] lg:shrink-0 lg:border-r lg:border-mist">
-            <header className="flex items-baseline justify-between gap-2">
+        <aside
+            id={RAIL_ID}
+            className="flex min-h-0 flex-col gap-5 overflow-y-auto px-4 py-4 lg:w-[252px] lg:shrink-0 lg:border-r lg:border-mist"
+        >
+            <header className="flex items-center justify-between gap-2">
                 <p className="text-body-sm font-medium text-ink">Criterios</p>
-                <p className="text-label text-ash">Filtros activos</p>
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    aria-expanded
+                    aria-controls={RAIL_ID}
+                    title="Ocultar criterios"
+                    className={cn(
+                        "-mr-1 inline-flex h-7 w-7 items-center justify-center rounded-control",
+                        "text-graphite transition-colors duration-100 hover:bg-fog hover:text-ink"
+                    )}
+                >
+                    <PanelLeftClose size={15} aria-hidden />
+                    <span className="sr-only">Ocultar criterios</span>
+                </button>
             </header>
 
             <FechaCriterio
@@ -213,6 +247,55 @@ export function CriteriosRail({
                 </div>
             </Facet>
         </aside>
+    );
+}
+
+/**
+ * The rail, folded. On a phone it is a row above the list; on a laptop a
+ * 40px spine down the left edge with the word running vertically — the same
+ * gesture as a drawer, and it keeps the count of active criteria visible so
+ * the collapse never hides *that* the list is filtered.
+ */
+function RailSpine({
+    activeCount,
+    onToggle,
+}: {
+    activeCount: number;
+    onToggle: () => void;
+}) {
+    const label = activeCount > 0
+        ? `Mostrar criterios · ${activeCount} activo${activeCount === 1 ? "" : "s"}`
+        : "Mostrar criterios";
+
+    return (
+        <div className="lg:h-full lg:w-10 lg:shrink-0 lg:border-r lg:border-mist">
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded={false}
+                aria-controls={RAIL_ID}
+                title={label}
+                className={cn(
+                    "flex w-full items-center gap-2 px-4 py-2.5 text-body-sm text-graphite",
+                    "transition-colors duration-100 hover:bg-fog hover:text-ink",
+                    "lg:h-full lg:flex-col lg:justify-start lg:gap-3 lg:px-0 lg:py-4"
+                )}
+            >
+                <SlidersHorizontal size={15} aria-hidden className="shrink-0" />
+                <span className="lg:[writing-mode:vertical-rl]">Criterios</span>
+                {activeCount > 0 && (
+                    <span
+                        className={cn(
+                            "tabular inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5",
+                            "bg-soot text-caption font-medium text-paper"
+                        )}
+                    >
+                        {activeCount}
+                    </span>
+                )}
+                <span className="sr-only">{label}</span>
+            </button>
+        </div>
     );
 }
 

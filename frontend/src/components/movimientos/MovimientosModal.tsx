@@ -5,8 +5,11 @@ import { createPortal } from "react-dom";
 import { Inbox, Search, SearchX, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useTimeWindow } from "@/components/TimeWindowProvider";
+import { useSettings } from "@/components/settings/SettingsProvider";
+import { resolveWindow } from "@/lib/window";
+import { parseAnchor } from "@/lib/fechaCriterio";
 import { useBankScope } from "@/lib/banks";
-import { categoryFamily, categoryName, useCategories } from "@/lib/categories";
+import { categoryName, useCategories } from "@/lib/categories";
 import { track } from "@/lib/telemetry";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { useOverlay } from "@/components/ui/useOverlay";
@@ -14,6 +17,7 @@ import { usePortal } from "@/components/ui/usePortal";
 import {
     EMPTY_QUERY,
     applyQuery,
+    categoryLens,
     clearChip,
     periodChipLabel,
     queryChips,
@@ -30,6 +34,21 @@ const PAGE = 50;
 type Phase = "enter" | "open" | "leave";
 
 /**
+ * Whether the criterios rail is folded. Per browser, not per session: someone
+ * who works with it closed should not have to close it again tomorrow.
+ */
+const RAIL_KEY = "tomin.criterios.abierto";
+
+function storedRailOpen(): boolean {
+    try {
+        return localStorage.getItem(RAIL_KEY) !== "0";
+    } catch {
+        // Storage blocked: open, which is the state that shows everything.
+        return true;
+    }
+}
+
+/**
  * The list, as a dialog. Grows from the header field; Escape commits and
  * collapses. Date is edited here and written to the TimeWindow only on close,
  * so the face underneath does not refetch while the user is still choosing.
@@ -43,7 +62,15 @@ export function MovimientosModal({
 }) {
     const { open, closeModal, query, setQuery, seedGen, openingSeed, searchInputRef } =
         useMovimientosSearch();
-    const { bounds: windowBounds, selectCustom, selectPreset, anchor } = useTimeWindow();
+    const {
+        bounds: windowBounds,
+        window: timeWindow,
+        selectCustom,
+        selectPreset,
+        clearCustom,
+        anchor,
+    } = useTimeWindow();
+    const { settings } = useSettings();
     const { statementIds } = useBankScope(dataVersion);
     const categories = useCategories();
     const mounted = usePortal();
@@ -55,9 +82,23 @@ export function MovimientosModal({
     const [end, setEnd] = useState(windowBounds.end ?? "");
     const [datesDirty, setDatesDirty] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [railOpen, setRailOpen] = useState(storedRailOpen);
     const [visibleCount, setVisibleCount] = useState(PAGE);
     const patched = useRef(false);
     const panelRef = useRef<HTMLDivElement>(null);
+
+    const toggleRail = useCallback(() => {
+        setRailOpen((cur) => {
+            const next = !cur;
+            try {
+                localStorage.setItem(RAIL_KEY, next ? "1" : "0");
+            } catch {
+                // Nothing to remember it with; the session still honours it.
+            }
+            track("movimientos.criterios_rail", { open: next });
+            return next;
+        });
+    }, []);
     const appliedGen = useRef(-1);
 
     if (open && !render) {
@@ -109,11 +150,42 @@ export function MovimientosModal({
         statementIds
     );
 
-    const listed = useMemo(
-        () =>
-            items === null ? null : applyQuery(items, draft, (id) => categoryFamily(categories, id)),
-        [items, draft, categories]
-    );
+    /**
+     * The rows the criterios select — plus the one whose panel is open.
+     *
+     * Reclassifying from inside the modal moves a row out of its own criterio:
+     * filter by «Sin categoría», file a charge under Comida, and it stops
+     * matching the instant the patch lands. Left to itself the list dropped it
+     * mid-edit and the panel it was being edited in unmounted with it, so the
+     * answer to "what did I just do" was an empty space where the row had been.
+     *
+     * So while a row is open it keeps its place, in its original position —
+     * rebuilt off `items` rather than by appending, so the list does not
+     * reshuffle under the cursor. Closing the panel is what lets it go, which
+     * is also the moment the user has said they are done with it.
+     */
+    const view = useMemo(() => {
+        if (items === null) return null;
+        const matched = new Set(
+            applyQuery(items, draft, categoryLens(categories)).map((t) => t.id)
+        );
+        // `held` is the open row surviving its own edit. Kept as a flag rather
+        // than inferred later, because every count on this screen has to be
+        // about the criterios — the row is on screen, but it is no longer one
+        // of the answers, and a total that quietly included it would be wrong.
+        // ...as long as it is still a row we have. A selection left over from
+        // before a reload points at nothing, and holding a ghost would take a
+        // row off the count for a row that is not drawn.
+        const held =
+            selectedId !== null &&
+            !matched.has(selectedId) &&
+            items.some((t) => t.id === selectedId);
+        if (held) matched.add(selectedId!);
+        return { rows: items.filter((t) => matched.has(t.id)), held };
+    }, [items, draft, categories, selectedId]);
+
+    const listed = view?.rows ?? null;
+    const held = view?.held ?? false;
 
     useEffect(() => {
         setSelectedId(null);
@@ -143,6 +215,25 @@ export function MovimientosModal({
         closeModal();
     }, [draft, datesDirty, start, end, setQuery, selectCustom, selectPreset, refresh, closeModal]);
 
+    /**
+     * «Quitar criterios» quits *every* criterio, the date included. The date
+     * is the one the modal writes into the app's window on close, so clearing
+     * only the draft left a custom range standing — and the faces outside kept
+     * reading one month while the header said the criterios were gone. The
+     * window goes back to the preset the user was on before the range, and
+     * the modal's own dates follow it, so closing afterwards writes nothing.
+     */
+    const clearAll = useCallback(() => {
+        const dateCleared = datesDirty || timeWindow.kind === "custom";
+        setDraft(EMPTY_QUERY);
+        if (timeWindow.kind === "custom") clearCustom();
+        const fallback = resolveWindow(settings.lastWindow, parseAnchor(anchor));
+        setStart(fallback.start ?? "");
+        setEnd(fallback.end ?? "");
+        setDatesDirty(false);
+        track("movimientos.clear_criterios", { date_cleared: dateCleared });
+    }, [datesDirty, timeWindow.kind, clearCustom, settings.lastWindow, anchor]);
+
     const selectedIdRef = useRef(selectedId);
     selectedIdRef.current = selectedId;
     const onEscape = useCallback(() => {
@@ -159,12 +250,17 @@ export function MovimientosModal({
 
     const chips = queryChips(draft, (id) => categoryName(categories, id));
     const extra = queryIsActive(draft);
+    // The date counts as a criterio to quit, even though it is not one the
+    // empty state names: a range narrows the list exactly as a chip does.
+    const clearable = extra || datesDirty || timeWindow.kind === "custom";
     const periodLabel = periodChipLabel(fetchBounds.start, fetchBounds.end);
     const shortcut = isApple() ? "⌘K" : "Ctrl K";
 
     if (!mounted || !render) return null;
 
-    const count = listed?.length ?? 0;
+    // What the criterios answer, which is one less than what is drawn while
+    // a reclassified row is being held open.
+    const count = (listed?.length ?? 0) - (held ? 1 : 0);
 
     return createPortal(
         <div className="fixed inset-0 z-modal flex items-center justify-center p-0 sm:p-6">
@@ -242,10 +338,10 @@ export function MovimientosModal({
                                 ? "Leyendo el periodo…"
                                 : `${count.toLocaleString("es-MX")} movimiento${count === 1 ? "" : "s"} en el periodo`}
                         </span>
-                        {extra && (
+                        {clearable && (
                             <button
                                 type="button"
-                                onClick={() => setDraft(EMPTY_QUERY)}
+                                onClick={clearAll}
                                 className="ml-auto underline decoration-mist underline-offset-4 hover:text-ink"
                             >
                                 Quitar criterios
@@ -270,6 +366,8 @@ export function MovimientosModal({
                             categories={categories}
                             calendarResetKey={open}
                             dateAnchor={anchor}
+                            open={railOpen}
+                            onToggle={toggleRail}
                         />
                     </div>
 
@@ -301,12 +399,13 @@ export function MovimientosModal({
                                 Movimientos
                                 {listed && (
                                     <span className="tabular font-sans text-body-sm text-graphite">
-                                        {listed.length.toLocaleString("es-MX")}
+                                        {count.toLocaleString("es-MX")}
                                     </span>
                                 )}
                                 {selectedId && (
                                     <span className="font-sans text-body-sm text-ash">
                                         · 1 en edición
+                                        {held && ", ya fuera de estos criterios"}
                                     </span>
                                 )}
                             </h2>
@@ -340,11 +439,11 @@ export function MovimientosModal({
                                             : "Sin movimientos en este periodo"
                                     }
                                     action={
-                                        extra ? (
+                                        clearable ? (
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => setDraft(EMPTY_QUERY)}
+                                                onClick={clearAll}
                                             >
                                                 Quitar criterios
                                             </Button>

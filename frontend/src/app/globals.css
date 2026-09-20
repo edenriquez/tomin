@@ -168,6 +168,32 @@
         .movimientos-modal-panel.modal-leave {
             animation: movimientos-modal-out 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
         }
+
+        .pagos-modal-scrim.modal-enter {
+            animation: tomin-scrim-in 220ms linear both;
+        }
+        .pagos-modal-scrim.modal-leave {
+            animation: tomin-scrim-out 180ms linear both;
+        }
+        .pagos-modal-panel.modal-enter {
+            animation: pagos-modal-in 300ms cubic-bezier(0.32, 0.72, 0, 1) both;
+        }
+        .pagos-modal-panel.modal-leave {
+            animation: pagos-modal-out 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
+        }
+        /* The cards inside arrive a beat after the panel, in reading order.
+           The stagger is what separates "a dialog appeared" from "the calendar
+           was brought to you"; it is small on purpose — 60ms apart, and over
+           before the panel has finished settling. */
+        .pagos-modal-panel.modal-enter .pagos-stack > * {
+            animation: pagos-card-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+        }
+        .pagos-modal-panel.modal-enter .pagos-stack > *:nth-child(1) {
+            animation-delay: 90ms;
+        }
+        .pagos-modal-panel.modal-enter .pagos-stack > *:nth-child(2) {
+            animation-delay: 150ms;
+        }
     }
 
     @keyframes reveal {
@@ -235,6 +261,58 @@
         transform: none;
     }
 
+    /* Pagos: the bell is in the top-right corner, so the calendar grows out of
+       it and collapses back into it. An overlay that appears from where the
+       finger landed reads as the same object opening, not a new one arriving. */
+    .pagos-modal-scrim {
+        opacity: 0;
+    }
+    .pagos-modal-scrim.is-open {
+        opacity: 1;
+    }
+    .pagos-modal-panel {
+        opacity: 0;
+        transform: translate3d(12px, -14px, 0) scale(0.965);
+        transform-origin: top right;
+    }
+    .pagos-modal-panel.is-open {
+        opacity: 1;
+        transform: none;
+    }
+
+    @keyframes pagos-modal-in {
+        from {
+            opacity: 0;
+            transform: translate3d(12px, -14px, 0) scale(0.965);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @keyframes pagos-modal-out {
+        from {
+            opacity: 1;
+            transform: none;
+        }
+        to {
+            opacity: 0;
+            transform: translate3d(10px, -10px, 0) scale(0.975);
+        }
+    }
+
+    @keyframes pagos-card-in {
+        from {
+            opacity: 0;
+            transform: translate3d(0, 10px, 0);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
     .reclasificacion-panel {
         animation: reclasificacion-in 180ms ease-out;
     }
@@ -271,55 +349,6 @@
         }
     }
 
-    /* Recurring dues: closer days pulse faster and redder. Off when the
-       OS asked for reduced motion — the fill still carries the urgency. */
-    @keyframes due-pulse {
-        0%,
-        100% {
-            box-shadow: 0 0 0 0 rgba(168, 50, 42, 0.55);
-        }
-        70% {
-            box-shadow: 0 0 0 7px rgba(168, 50, 42, 0);
-        }
-    }
-
-    @keyframes due-pulse-soft {
-        0%,
-        100% {
-            box-shadow: 0 0 0 0 rgba(168, 50, 42, 0.28);
-        }
-        70% {
-            box-shadow: 0 0 0 6px rgba(168, 50, 42, 0);
-        }
-    }
-
-    @keyframes due-pulse-later {
-        0%,
-        100% {
-            box-shadow: 0 0 0 0 rgba(59, 166, 241, 0.35);
-        }
-        70% {
-            box-shadow: 0 0 0 5px rgba(59, 166, 241, 0);
-        }
-    }
-
-    .due-pulse-urgent {
-        animation: due-pulse 1.05s ease-out infinite;
-    }
-    .due-pulse-soon {
-        animation: due-pulse-soft 1.85s ease-out infinite;
-    }
-    .due-pulse-later {
-        animation: due-pulse-later 2.6s ease-out infinite;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .due-pulse-urgent,
-        .due-pulse-soon,
-        .due-pulse-later {
-            animation: none;
-        }
-    }
 }
 
 /* -------------------------------------------------------------------------
@@ -546,4 +575,157 @@
         transparent 4px,
         transparent 8px
     );
+}
+
+/* Documentos opens from the same top-right cluster as the Pagos bell, so it
+   reuses that motion exactly — two overlays that grow out of neighbouring
+   buttons should not travel differently. */
+.documentos-modal-scrim {
+    opacity: 0;
+}
+.documentos-modal-scrim.is-open {
+    opacity: 1;
+}
+.documentos-modal-panel {
+    opacity: 0;
+    transform: translate3d(12px, -14px, 0) scale(0.965);
+    transform-origin: top right;
+}
+.documentos-modal-panel.is-open {
+    opacity: 1;
+    transform: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .documentos-modal-scrim.modal-enter {
+        animation: tomin-scrim-in 220ms linear both;
+    }
+    .documentos-modal-scrim.modal-leave {
+        animation: tomin-scrim-out 180ms linear both;
+    }
+    .documentos-modal-panel.modal-enter {
+        animation: pagos-modal-in 300ms cubic-bezier(0.32, 0.72, 0, 1) both;
+    }
+    .documentos-modal-panel.modal-leave {
+        animation: pagos-modal-out 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
+    }
+}
+
+/* -------------------------------------------------------------------------
+   The dropzone mark: one 6s loop of files arriving.
+
+   Same technique as the upload story above — every element is on the SAME
+   duration and stages itself by keyframe percentage, so the pulse on the
+   plate cannot drift away from the chip that caused it. Three chips at 0s,
+   2s and 4s land at 28%, 61% and 95% of the cycle, which is where the three
+   pulses sit.
+
+   The non-animated state is the composed mark: a still plate with a still
+   arrow and the chips at rest beside it. That is what reduced-motion users
+   see, and it is a finished drawing, not a frozen frame.
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+    .upload-mark-arrow {
+        animation: upload-mark-arrow 2.4s ease-in-out infinite;
+    }
+    .upload-mark-pulse {
+        animation: upload-mark-pulse 6s ease-out infinite;
+    }
+    .upload-chip {
+        animation: upload-chip 6s ease-in-out infinite both;
+    }
+}
+
+@keyframes upload-mark-arrow {
+    0%,
+    100% {
+        transform: translateY(1px);
+    }
+    50% {
+        transform: translateY(-2px);
+    }
+}
+
+@keyframes upload-mark-pulse {
+    0%,
+    22% {
+        opacity: 0;
+        transform: scale(1);
+    }
+    28% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    38%,
+    55% {
+        opacity: 0;
+        transform: scale(1.18);
+    }
+    56% {
+        opacity: 0;
+        transform: scale(1);
+    }
+    61% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    71%,
+    89% {
+        opacity: 0;
+        transform: scale(1.18);
+    }
+    90% {
+        opacity: 0;
+        transform: scale(1);
+    }
+    95% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.18);
+    }
+}
+
+@keyframes upload-chip {
+    0% {
+        opacity: 0;
+        transform: translate3d(30px, 8px, 0) scale(0.94);
+    }
+    6% {
+        opacity: 1;
+        transform: translate3d(16px, 4px, 0) scale(1);
+    }
+    22% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    30% {
+        opacity: 0;
+        transform: translate3d(-12px, -5px, 0) scale(0.9);
+    }
+    100% {
+        opacity: 0;
+        transform: translate3d(-12px, -5px, 0) scale(0.9);
+    }
+}
+
+/* The upload queue's indeterminate bar: the phase where the bytes are already
+   delivered and the backend is parsing. There is no fraction to report there,
+   so the bar sweeps instead of filling — a number would be invented, and the
+   parse is the half that actually takes the time. */
+@media (prefers-reduced-motion: no-preference) {
+    .upload-bar-sweep {
+        animation: upload-bar-sweep 1.3s ease-in-out infinite;
+    }
+}
+
+@keyframes upload-bar-sweep {
+    0% {
+        transform: translateX(-110%);
+    }
+    100% {
+        transform: translateX(340%);
+    }
 }

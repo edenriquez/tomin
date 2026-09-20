@@ -1,12 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { track } from "@/lib/telemetry";
 import { AppShell } from "@/components/AppShell";
 import { LecturaHost } from "@/components/lectura/LecturaHost";
+import { DocumentosModal } from "@/components/documentos/DocumentosModal";
 import { MovimientosModal } from "@/components/movimientos/MovimientosModal";
+import { PagosModal } from "@/components/pagos/PagosModal";
 import {
     MovimientosQueryChips,
     MovimientosSearchTrigger,
@@ -59,9 +61,19 @@ export function AppChrome({
     onDataChanged?: () => void;
 }) {
     const [dataVersion, setDataVersion] = useState(0);
+    const [pagosOpen, setPagosOpen] = useState(false);
+    const [documentosOpen, setDocumentosOpen] = useState(false);
     const refresh = useCallback(() => setDataVersion((v) => v + 1), []);
     const tw = useTimeWindow();
     const pathname = usePathname();
+    // Held in a ref so the callback the archive modal keeps does not change
+    // identity on every render of the page above it.
+    const onDataChangedRef = useRef(onDataChanged);
+    onDataChangedRef.current = onDataChanged;
+    const uploaded = useCallback(() => {
+        setDataVersion((v) => v + 1);
+        onDataChangedRef.current?.();
+    }, []);
 
     // Every view, on arrival, with the context it is read under. `nav.view`
     // records the click; this records the landing — direct loads, redirects
@@ -106,15 +118,23 @@ export function AppChrome({
     return (
         <AppShell
             instrument={<MovimientosSearchTrigger />}
-            onUploaded={() => {
-                setDataVersion((v) => v + 1);
-                onDataChanged?.();
+            dataVersion={dataVersion}
+            pagos={{ open: pagosOpen, onOpen: () => setPagosOpen(true) }}
+            documentos={{
+                open: documentosOpen,
+                onOpen: () => setDocumentosOpen(true),
             }}
         >
             <AppDataContext.Provider value={value}>
                 {pathname === "/" && <MovimientosQueryChips />}
                 {children}
                 <MovimientosModal dataVersion={dataVersion} refresh={refresh} />
+                <PagosModal open={pagosOpen} onClose={() => setPagosOpen(false)} />
+                <DocumentosModal
+                    open={documentosOpen}
+                    onClose={() => setDocumentosOpen(false)}
+                    onUploaded={uploaded}
+                />
                 <LecturaHost />
             </AppDataContext.Provider>
         </AppShell>

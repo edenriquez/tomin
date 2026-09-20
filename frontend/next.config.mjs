@@ -15,6 +15,7 @@ const nextConfig = {
             { source: "/pronostico", destination: "/plan?cara=ingresos", permanent: false },
             { source: "/recurrentes", destination: "/?cara=recurrentes", permanent: false },
             { source: "/categorias", destination: "/", permanent: false },
+            { source: "/precios", destination: "/?cara=precios", permanent: false },
             ...[
             "/dashboard",
             "/transactions",

@@ -295,6 +295,26 @@ function median(values: number[]): number {
 }
 
 /** Typical monthly spend of a taught rest cluster — median of months, not a cadence. */
+/**
+ * What a taught merchant costs, as a rate and as a typical charge.
+ *
+ * `monthly` is total spend over **elapsed** months, not the median of the
+ * months that happen to contain a charge. That distinction is the whole
+ * function: the old median silently dropped the empty months in between, so
+ * anything that does not land every month was counted at the rate of the
+ * months it did land in. A bimonthly CFE bill came out at 2× its real cost, a
+ * quarterly one at 3× — and because Plan smears this figure across every
+ * future month, the error went straight into "esto se va fijo cada mes" and
+ * into the yearly total.
+ *
+ * The span is inclusive and counted in calendar months, which is the unit the
+ * answer is expressed in. One charge spans one month, and one charge is all we
+ * can say from one charge.
+ *
+ * `typical` stays the median charge: the rate answers "how much does this cost
+ * me a month", the typical answers "how big is one of these", and a utility
+ * with a hot-summer spike wants the median for the second question.
+ */
 export function restMonthlyFromTransactions(txs: Transaction[]): {
     charges: { date: string; amount: number }[];
     typical: number;
@@ -302,16 +322,25 @@ export function restMonthlyFromTransactions(txs: Transaction[]): {
 } {
     const charges = txs.map((t) => ({ date: t.date, amount: Math.abs(t.amount) }));
     const amounts = charges.map((c) => c.amount);
-    const byMonth = new Map<string, number>();
-    for (const c of charges) {
-        const month = c.date.slice(0, 7);
-        byMonth.set(month, (byMonth.get(month) ?? 0) + c.amount);
-    }
+    const total = amounts.reduce((sum, a) => sum + a, 0);
     return {
         charges,
         typical: median(amounts),
-        monthly: median([...byMonth.values()]),
+        monthly: charges.length === 0 ? 0 : total / spanInMonths(charges),
     };
+}
+
+/** Calendar months from the first charge to the last, inclusive — empty months
+ *  included, which is exactly what the old per-month median left out. */
+function spanInMonths(charges: { date: string }[]): number {
+    let first = charges[0]!.date;
+    let last = first;
+    for (const c of charges) {
+        if (c.date < first) first = c.date;
+        if (c.date > last) last = c.date;
+    }
+    const months = (iso: string) => Number(iso.slice(0, 4)) * 12 + Number(iso.slice(5, 7));
+    return Math.max(1, months(last) - months(first) + 1);
 }
 
 export function itemFromRestMark(mark: RestMark, ledger: Transaction[]): RecurringItem | null {
@@ -328,6 +357,9 @@ export function itemFromRestMark(mark: RestMark, ledger: Transaction[]): Recurri
         key: mark.key,
         label: mark.label,
         occurrences: charges.length,
+        // Not a claim about a rhythm — a taught merchant has none, which is why
+        // Plan smears it and Pagos leaves it off the calendar entirely. It says
+        // only which unit `monthly_equivalent` is expressed in.
         frequency: "monthly",
         typical_amount: typical,
         monthly_equivalent: monthly,

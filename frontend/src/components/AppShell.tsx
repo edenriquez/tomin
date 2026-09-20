@@ -1,41 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Flame, Upload } from "lucide-react";
-import { FileText } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Flame, FileText } from "lucide-react";
+import { type ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui";
-import { useStatementUpload } from "@/components/StatementDropzone";
 import { useBankScope } from "@/lib/banks";
 import { BankFilter } from "@/components/BankFilter";
 import { PagosBell } from "@/components/pagos/PagosBell";
 import { track } from "@/lib/telemetry";
 
 /**
- * Wordmark, the one action that opens the ledger, the payments bell, archive
- * and upload. Readings (por categoría, cargos recurrentes) live in the page,
- * not here.
+ * Wordmark, the one action that opens the ledger, and two overlays: the
+ * payments bell and the archive.
+ *
+ * Nothing here navigates any more. Readings (por categoría, cargos
+ * recurrentes) live in the page; Pagos and Documentos open on top of whatever
+ * is being read instead of taking the user somewhere with no way back but the
+ * browser. "Subir documento" used to sit here too — the loudest control in the
+ * app, on every screen, for something done a handful of times a year. It now
+ * lives inside Documentos, next to the list of what uploading produces.
  */
 export function AppShell({
     children,
-    onUploaded,
     instrument,
+    pagos,
+    documentos,
+    dataVersion = 0,
 }: {
     children: ReactNode;
     /** The commit that opens the ledger (⌘K). */
     instrument?: ReactNode;
-    /** Fired after a successful upload — each view refreshes what it shows. */
-    onUploaded?: () => void;
+    /** The bell's state and its opener. The modal itself is mounted by the
+     *  chrome, inside the data context the calendar reads through. */
+    pagos: { open: boolean; onOpen: () => void };
+    /** The archive's state and its opener — same arrangement as the bell. */
+    documentos: { open: boolean; onOpen: () => void };
+    /** Bumped on every upload; the bank filter rereads its accounts on it. */
+    dataVersion?: number;
 }) {
-    const pathname = usePathname();
-    const [uploadBump, setUploadBump] = useState(0);
-    const scope = useBankScope(uploadBump);
-    const { pick, uploading, input } = useStatementUpload(() => {
-        setUploadBump((v) => v + 1);
-        onUploaded?.();
-    });
+    const scope = useBankScope(dataVersion);
 
     return (
         <main className="mx-auto min-h-dvh w-full max-w-page px-5 pb-16 sm:px-8">
@@ -52,34 +55,32 @@ export function AppShell({
                 {instrument}
 
                 <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-                    <PagosBell dataVersion={uploadBump} />
-                    <Link
-                        href="/documentos"
-                        onClick={() => track("nav.view", { to: "/documentos", source: "header" })}
-                        aria-current={pathname.startsWith("/documentos") ? "page" : undefined}
+                    <PagosBell
+                        dataVersion={dataVersion}
+                        active={pagos.open}
+                        onOpen={pagos.onOpen}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => {
+                            track("nav.view", { to: "/documentos", source: "header" });
+                            documentos.onOpen();
+                        }}
+                        aria-haspopup="dialog"
+                        aria-expanded={documentos.open}
                         title="Documentos"
                         className={cn(
                             "inline-flex h-9 items-center gap-2 rounded-control px-3 text-body",
                             "transition-colors duration-100",
-                            pathname.startsWith("/documentos")
+                            documentos.open
                                 ? "bg-fog font-medium text-ink ring-1 ring-inset ring-mist"
                                 : "text-graphite hover:text-ink"
                         )}
                     >
                         <FileText size={15} aria-hidden />
                         <span className="hidden sm:inline">Documentos</span>
-                    </Link>
-                    <Button
-                        variant="secondary"
-                        loading={uploading}
-                        onClick={pick}
-                        icon={<Upload size={15} />}
-                    >
-                        <span className="hidden sm:inline">Subir documento</span>
-                        <span className="sm:hidden">Subir</span>
-                    </Button>
+                    </button>
                 </div>
-                {input}
             </header>
 
             <div className="-mt-2 flex flex-wrap items-center gap-2 pb-6">
