@@ -9,28 +9,31 @@ import { PreciosView } from "@/components/precios/PreciosView";
 import { useReceiptCount } from "@/components/precios/useReceiptCount";
 import { PorCategoriaView } from "./PorCategoriaView";
 import { PorMesView } from "./PorMesView";
+import { EstadoView } from "@/components/estado/EstadoView";
 
-export const FACES = ["mes", "categoria", "recurrentes", "precios"] as const;
+export const FACES = ["lectura", "mes", "categoria", "recurrentes", "precios"] as const;
 export type MovimientosFace = (typeof FACES)[number];
 
 const FACE_LABELS: Record<MovimientosFace, string> = {
+    lectura: "Lectura",
     mes: "Por mes",
     categoria: "Por categoría",
     recurrentes: "Cargos recurrentes",
     precios: "Precios",
 };
 
-/** The first face is the address without a parameter: `/` is the run of the
- *  months, and every other face says its name. */
+/** The first face is the address without a parameter: `/` is the Lectura,
+ *  and every other face says its name. */
 export function faceFromParam(value: string | null): MovimientosFace {
+    if (value === "mes") return "mes";
     if (value === "categoria") return "categoria";
     if (value === "recurrentes") return "recurrentes";
     if (value === "precios") return "precios";
-    return "mes";
+    return "lectura";
 }
 
 export function movimientosHref(face: MovimientosFace): string {
-    return face === "mes" ? "/" : `/?cara=${face}`;
+    return face === "lectura" ? "/" : `/?cara=${face}`;
 }
 
 /**
@@ -67,6 +70,7 @@ export function MovimientosHome() {
     const [held, setHeld] = useState<number | null>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const settled = useRef<Record<MovimientosFace, boolean>>({
+        lectura: false,
         mes: false,
         categoria: false,
         recurrentes: false,
@@ -106,6 +110,7 @@ export function MovimientosHome() {
         setShown(of);
         setHeld(null);
     }, []);
+    const reportLectura = useCallback((l: boolean) => report("lectura", l), [report]);
     const reportMes = useCallback((l: boolean) => report("mes", l), [report]);
     const reportCategoria = useCallback((l: boolean) => report("categoria", l), [report]);
     const reportRecurrentes = useCallback((l: boolean) => report("recurrentes", l), [report]);
@@ -166,7 +171,9 @@ export function MovimientosHome() {
         >
             {mounted.map((f) => (
                 <div key={f} hidden={f !== shown}>
-                    {f === "mes" ? (
+                    {f === "lectura" ? (
+                        <EstadoView tabs={tabs} onLoadingChange={reportLectura} />
+                    ) : f === "mes" ? (
                         <PorMesView tabs={tabs} onLoadingChange={reportMes} />
                     ) : f === "categoria" ? (
                         <PorCategoriaView tabs={tabs} onLoadingChange={reportCategoria} />

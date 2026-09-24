@@ -729,3 +729,60 @@
         transform: translateX(340%);
     }
 }
+
+/* Lectura: every chart plays once, when its card scrolls into view. The
+   resting state is the final state, so reduced-motion users (and anything
+   the observer never reaches) see the finished chart, not an empty one. */
+@media (prefers-reduced-motion: no-preference) {
+    .lx-grow,
+    .lx-growx {
+        transform-box: fill-box;
+        transition: transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    .lx-grow {
+        transform-origin: bottom;
+    }
+    .lx-growx {
+        transform-origin: left;
+    }
+    .lx-fade {
+        transition: opacity 500ms ease;
+    }
+    .lx-slide {
+        transition: transform 1100ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    .lx-draw {
+        transition: stroke-dashoffset 1400ms ease-out;
+    }
+    [data-play="false"] .lx-grow {
+        transform: scaleY(0);
+    }
+    [data-play="false"] .lx-growx {
+        transform: scaleX(0);
+    }
+    [data-play="false"] .lx-fade {
+        opacity: 0;
+    }
+    [data-play="false"] .lx-draw {
+        stroke-dashoffset: 1;
+    }
+    [data-play="false"] .lx-slide {
+        transform: translateX(var(--lx-from, 0px));
+    }
+    .lx-pulse {
+        animation: lx-pulse 1.8s ease-out infinite;
+        transform-box: fill-box;
+        transform-origin: center;
+    }
+}
+
+@keyframes lx-pulse {
+    0% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(2.6);
+    }
+}
